@@ -729,21 +729,51 @@ def build_mam_json(
     # Media type - always Audiobook (1)
     mam_json["mediaType"] = 1
 
-    # Tags - build from genres
-    if genres:
-        tag_names = [g.get("name", "") for g in genres if g.get("type") == "tag"]
-        if tag_names:
-            mam_json["tags"] = ", ".join(tag_names)
+    # Tags - build audio info string
+    # Format: Length: Xh Xm | Release date: MM-DD-YY | Format: M4B, codec | Chapterized |
+    tag_parts = []
+
+    # Get audio info from mediainfo
+    if mediainfo:
+        audio_info = _extract_audio_info(mediainfo)
+        chapters = _parse_chapters_from_mediainfo(mediainfo)
+
+        # Length
+        duration = audio_info.get("duration_human", "")
+        if duration and duration != "Unknown":
+            tag_parts.append(f"Length: {duration}")
+
+        # Release date from Audnex
+        release_date = audnex.get("releaseDate", "")
+        if release_date:
+            # Convert 2025-11-25 to 11-25-25
+            try:
+                parts = release_date[:10].split("-")
+                if len(parts) == 3:
+                    tag_parts.append(f"Release date: {parts[1]}-{parts[2]}-{parts[0][2:]}")
+            except (IndexError, ValueError):
+                pass
+
+        # Format
+        container = audio_info.get("container", "M4B")
+        codec = audio_info.get("codec", "AAC LC")
+        tag_parts.append(f"Format: {container}, {codec}")
+
+        # Chapterized
+        if chapters:
+            tag_parts.append("Chapterized")
+
+    mam_json["tags"] = " | ".join(tag_parts) + " |" if tag_parts else ""
 
     # MediaInfo - as JSON string
     mediainfo_str = _get_mediainfo_string(mediainfo)
     if mediainfo_str:
         mam_json["mediaInfo"] = mediainfo_str
 
-    # ISBN (if available)
-    isbn = audnex.get("isbn")
-    if isbn:
-        mam_json["isbn"] = isbn
+    # ISBN - use ASIN format for audiobooks: ASIN:<asin>
+    asin = release.asin or audnex.get("asin", "")
+    if asin:
+        mam_json["isbn"] = f"ASIN:{asin}"
 
     # Flags
     flags = []
