@@ -145,3 +145,189 @@ class TestUploadTorrent:
 
         assert result is True
         mock_client.torrents_add.assert_called_once()
+
+    def test_upload_torrent_unexpected_result(self, tmp_path: Path):
+        """Test upload with unexpected result from qBittorrent."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_client = MagicMock()
+        mock_client.torrents_add.return_value = "Fail."
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "audiobooks"
+        mock_settings.qbittorrent.tags = ["mam"]
+        mock_settings.qbittorrent.auto_start = True
+
+        with (
+            patch("mamfast.qbittorrent.get_client", return_value=mock_client),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            result = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+            )
+
+        assert result is False
+
+    def test_upload_torrent_login_failed(self, tmp_path: Path):
+        """Test upload when login fails."""
+        import qbittorrentapi
+
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "audiobooks"
+        mock_settings.qbittorrent.tags = ["mam"]
+        mock_settings.qbittorrent.auto_start = True
+
+        with (
+            patch(
+                "mamfast.qbittorrent.get_client",
+                side_effect=qbittorrentapi.LoginFailed("Bad credentials"),
+            ),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            result = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+            )
+
+        assert result is False
+
+    def test_upload_torrent_connection_error(self, tmp_path: Path):
+        """Test upload when connection fails."""
+        import qbittorrentapi
+
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "audiobooks"
+        mock_settings.qbittorrent.tags = ["mam"]
+        mock_settings.qbittorrent.auto_start = True
+
+        with (
+            patch(
+                "mamfast.qbittorrent.get_client",
+                side_effect=qbittorrentapi.APIConnectionError("No connection"),
+            ),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            result = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+            )
+
+        assert result is False
+
+    def test_upload_torrent_with_custom_options(self, tmp_path: Path):
+        """Test upload with custom category, tags, and paused state."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_client = MagicMock()
+        mock_client.torrents_add.return_value = "Ok."
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "default"
+        mock_settings.qbittorrent.tags = ["default"]
+        mock_settings.qbittorrent.auto_start = True
+
+        with (
+            patch("mamfast.qbittorrent.get_client", return_value=mock_client),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            result = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+                category="audiobooks",
+                tags=["mam", "audiobook"],
+                paused=True,
+            )
+
+        assert result is True
+        call_kwargs = mock_client.torrents_add.call_args[1]
+        assert call_kwargs["category"] == "audiobooks"
+        assert call_kwargs["tags"] == "mam,audiobook"
+        assert call_kwargs["is_paused"] is True
+
+    def test_upload_torrent_with_empty_tags(self, tmp_path: Path):
+        """Test upload with empty tags list."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_client = MagicMock()
+        mock_client.torrents_add.return_value = "Ok."
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "audiobooks"
+        mock_settings.qbittorrent.tags = []
+        mock_settings.qbittorrent.auto_start = False
+
+        with (
+            patch("mamfast.qbittorrent.get_client", return_value=mock_client),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            result = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+            )
+
+        assert result is True
+        call_kwargs = mock_client.torrents_add.call_args[1]
+        assert call_kwargs["tags"] is None
+
+
+class TestCheckTorrentExistsErrors:
+    """Tests for check_torrent_exists error handling."""
+
+    def test_torrent_exists_login_failed(self):
+        """Test when login fails."""
+        import qbittorrentapi
+
+        with patch(
+            "mamfast.qbittorrent.get_client",
+            side_effect=qbittorrentapi.LoginFailed("Bad credentials"),
+        ):
+            result = check_torrent_exists("abc123")
+
+        assert result is False
+
+    def test_torrent_exists_connection_error(self):
+        """Test when connection fails."""
+        import qbittorrentapi
+
+        with patch(
+            "mamfast.qbittorrent.get_client",
+            side_effect=qbittorrentapi.APIConnectionError("No connection"),
+        ):
+            result = check_torrent_exists("abc123")
+
+        assert result is False
+
+
+class TestGetTorrentInfoErrors:
+    """Tests for get_torrent_info error handling."""
+
+    def test_get_info_login_failed(self):
+        """Test when login fails."""
+        import qbittorrentapi
+
+        with patch(
+            "mamfast.qbittorrent.get_client",
+            side_effect=qbittorrentapi.LoginFailed("Bad credentials"),
+        ):
+            result = get_torrent_info("abc123")
+
+        assert result is None
+
+    def test_get_info_connection_error(self):
+        """Test when connection fails."""
+        import qbittorrentapi
+
+        with patch(
+            "mamfast.qbittorrent.get_client",
+            side_effect=qbittorrentapi.APIConnectionError("No connection"),
+        ):
+            result = get_torrent_info("abc123")
+
+        assert result is None

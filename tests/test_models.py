@@ -5,7 +5,13 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from mamfast.models import AudiobookRelease, ReleaseStatus
+from mamfast.models import (
+    AudiobookRelease,
+    ProcessedState,
+    ProcessingResult,
+    ReleaseStatus,
+    sanitize_for_filename,
+)
 
 
 class TestReleaseStatus:
@@ -120,3 +126,125 @@ class TestAudiobookRelease:
         )
         assert release.discovered_at == now
         assert release.processed_at is None
+
+
+class TestSafeDirname:
+    """Tests for safe_dirname property."""
+
+    def test_author_and_title(self):
+        """Test safe_dirname with author and title."""
+        release = AudiobookRelease(author="John Smith", title="Great Book")
+        assert release.safe_dirname == "John Smith - Great Book"
+
+    def test_with_year(self):
+        """Test safe_dirname includes year."""
+        release = AudiobookRelease(author="Jane Doe", title="Another Book", year="2023")
+        assert release.safe_dirname == "Jane Doe - Another Book (2023)"
+
+    def test_title_only(self):
+        """Test safe_dirname with only title."""
+        release = AudiobookRelease(title="Just Title")
+        assert release.safe_dirname == "Just Title"
+
+    def test_sanitizes_special_chars(self):
+        """Test safe_dirname sanitizes special characters."""
+        release = AudiobookRelease(author="Author/Name", title="Book: Subtitle")
+        result = release.safe_dirname
+        assert "/" not in result
+        assert ":" not in result
+
+    def test_fallback_to_source_dir(self):
+        """Test safe_dirname falls back to source_dir name."""
+        release = AudiobookRelease(source_dir=Path("/path/to/Book Name"))
+        assert release.safe_dirname == "Book Name"
+
+    def test_unknown_fallback(self):
+        """Test safe_dirname falls back to unknown_release."""
+        release = AudiobookRelease()
+        assert release.safe_dirname == "unknown_release"
+
+
+class TestProcessingResult:
+    """Tests for ProcessingResult dataclass."""
+
+    def test_success_result(self):
+        """Test successful processing result."""
+        release = AudiobookRelease(title="Test Book")
+        result = ProcessingResult(
+            release=release,
+            success=True,
+            torrent_path=Path("/tmp/test.torrent"),
+            duration_seconds=5.5,
+        )
+        assert result.success is True
+        assert result.error is None
+        assert result.status_emoji == "✅"
+        assert result.duration_seconds == 5.5
+
+    def test_failure_result(self):
+        """Test failed processing result."""
+        release = AudiobookRelease(title="Failed Book")
+        result = ProcessingResult(
+            release=release,
+            success=False,
+            error="Connection failed",
+        )
+        assert result.success is False
+        assert result.error == "Connection failed"
+        assert result.status_emoji == "❌"
+
+
+class TestProcessedState:
+    """Tests for ProcessedState dataclass."""
+
+    def test_creation(self):
+        """Test creating ProcessedState."""
+        state = ProcessedState(
+            asin="B09TEST123",
+            title="Test Book",
+            author="Test Author",
+            processed_at="2024-01-15T10:30:00",
+            staging_dir="/tmp/staging/Test",
+            torrent_path="/tmp/torrents/test.torrent",
+            status="COMPLETE",
+        )
+        assert state.asin == "B09TEST123"
+        assert state.title == "Test Book"
+        assert state.status == "COMPLETE"
+
+
+class TestSanitizeForFilename:
+    """Tests for sanitize_for_filename function."""
+
+    def test_removes_illegal_chars(self):
+        """Test removal of illegal filename characters."""
+        assert sanitize_for_filename("Book: Subtitle") == "Book - Subtitle"
+        assert sanitize_for_filename("File/Name") == "File-Name"
+        assert sanitize_for_filename("What?") == "What"
+        assert sanitize_for_filename("Star*") == "Star"
+        assert sanitize_for_filename("<Tag>") == "Tag"
+        assert sanitize_for_filename('Say "Hello"') == "Say 'Hello'"
+        assert sanitize_for_filename("One|Two") == "One-Two"
+        assert sanitize_for_filename("Path\\Name") == "Path-Name"
+
+    def test_collapses_spaces(self):
+        """Test multiple spaces are collapsed."""
+        assert sanitize_for_filename("Too    Many   Spaces") == "Too Many Spaces"
+
+    def test_strips_dots_and_spaces(self):
+        """Test leading/trailing dots and spaces are stripped."""
+        assert sanitize_for_filename("  Book  ") == "Book"
+        assert sanitize_for_filename("...Book...") == "Book"
+
+    def test_empty_string(self):
+        """Test empty string handling."""
+        assert sanitize_for_filename("") == ""
+
+    def test_complex_case(self):
+        """Test complex case with multiple issues."""
+        result = sanitize_for_filename("  Book:  Title?  <Part 1>  ")
+        assert ":" not in result
+        assert "?" not in result
+        assert "<" not in result
+        assert ">" not in result
+        assert "  " not in result

@@ -204,3 +204,72 @@ class TestRunLiberate:
         ):
             result = run_liberate()
             assert result.success is False
+
+    def test_liberate_exception(self):
+        """Test liberate when exception occurs."""
+        mock_settings = MagicMock()
+        mock_settings.libation_container = "Libation"
+        mock_settings.docker_bin = "/usr/bin/docker"
+
+        with (
+            patch("subprocess.run", side_effect=RuntimeError("Unexpected error")),
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+        ):
+            result = run_liberate()
+            assert result.success is False
+            assert result.returncode == -1
+            assert "Unexpected error" in result.stderr
+
+
+class TestRunScanInteractive:
+    """Tests for run_scan interactive mode."""
+
+    def test_scan_interactive_success(self):
+        """Test successful interactive scan."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        mock_settings = MagicMock()
+        mock_settings.libation_container = "Libation"
+        mock_settings.docker_bin = "/usr/bin/docker"
+
+        with (
+            patch("subprocess.run", return_value=mock_result) as mock_run,
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+        ):
+            result = run_scan(interactive=True)
+            assert result.success is True
+            # Verify -it flag is passed
+            call_args = mock_run.call_args[0][0]
+            assert "-it" in call_args
+
+    def test_scan_interactive_failure(self):
+        """Test failed interactive scan."""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+
+        mock_settings = MagicMock()
+        mock_settings.libation_container = "Libation"
+        mock_settings.docker_bin = "/usr/bin/docker"
+
+        with (
+            patch("subprocess.run", return_value=mock_result),
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+        ):
+            result = run_scan(interactive=True)
+            assert result.success is False
+
+    def test_scan_exception_generic(self):
+        """Test scan with generic exception."""
+        mock_settings = MagicMock()
+        mock_settings.libation_container = "Libation"
+        mock_settings.docker_bin = "/usr/bin/docker"
+
+        with (
+            patch("subprocess.run", side_effect=RuntimeError("Docker crash")),
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+        ):
+            result = run_scan()
+            assert result.success is False
+            assert result.returncode == -1
+            assert "Docker crash" in result.stderr
