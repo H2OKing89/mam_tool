@@ -113,6 +113,12 @@ Examples:
         help="Fetch metadata (Audnex + MediaInfo) for staged releases",
     )
     metadata_parser.add_argument(
+        "path",
+        nargs="?",
+        type=Path,
+        help="Path to specific audiobook directory to process",
+    )
+    metadata_parser.add_argument(
         "--asin",
         type=str,
         help="Process specific release by ASIN only",
@@ -346,8 +352,13 @@ def cmd_prepare(args: argparse.Namespace) -> int:
 def cmd_metadata(args: argparse.Namespace) -> int:
     """Fetch metadata."""
     from mamfast.config import reload_settings
-    from mamfast.discovery import get_release_by_asin
-    from mamfast.metadata import fetch_all_metadata
+    from mamfast.discovery import extract_asin_from_name
+    from mamfast.metadata import (
+        build_mam_json,
+        fetch_all_metadata,
+        save_mam_json,
+    )
+    from mamfast.models import AudiobookRelease
 
     print("📋 Fetching metadata...")
 
@@ -357,46 +368,60 @@ def cmd_metadata(args: argparse.Namespace) -> int:
         print(f"❌ Config error: {e}")
         return 1
 
-    # Find releases that have been staged
-    library_root = settings.paths.library_root
-    if not library_root.exists():
-        print(f"❌ Library directory does not exist: {library_root}")
-        return 1
+    # Torrent output directory for MAM JSON files
+    torrent_output = settings.paths.torrent_output
 
-    staged_dirs = [d for d in library_root.iterdir() if d.is_dir()]
-
-    if args.asin:
-        # Find specific release
-        release = get_release_by_asin(args.asin)
-        if not release:
-            print(f"❌ Release not found with ASIN: {args.asin}")
+    # If a specific path is provided, use that directly
+    if args.path:
+        target_dir = Path(args.path).resolve()
+        if not target_dir.exists():
+            print(f"❌ Path does not exist: {target_dir}")
+            return 1
+        if not target_dir.is_dir():
+            print(f"❌ Path is not a directory: {target_dir}")
+            return 1
+        staged_dirs = [target_dir]
+        print(f"Targeting: {target_dir.name}\n")
+    elif args.asin:
+        # Find specific release by ASIN in seed_root
+        seed_root = settings.paths.seed_root
+        if not seed_root.exists():
+            print(f"⚠️ Seed directory does not exist: {seed_root}")
             return 1
 
-        # Find its staging dir - check both directory name and files inside
-        from mamfast.discovery import extract_asin_from_name
-
-        matching_dirs = []
-        for d in staged_dirs:
+        staged_dirs = []
+        for d in seed_root.iterdir():
+            if not d.is_dir():
+                continue
             # Check directory name
             if args.asin in d.name:
-                matching_dirs.append(d)
+                staged_dirs.append(d)
                 continue
             # Check files inside the directory for ASIN
             for f in d.iterdir():
                 asin = extract_asin_from_name(f.name)
                 if asin == args.asin:
-                    matching_dirs.append(d)
+                    staged_dirs.append(d)
                     break
-        staged_dirs = matching_dirs
+
         if not staged_dirs:
             print(f"❌ No staged directory found for ASIN: {args.asin}")
             return 1
+    else:
+        # Default: process all staged releases in seed_root
+        seed_root = settings.paths.seed_root
+        if not seed_root.exists():
+            print(f"⚠️ Seed directory does not exist yet: {seed_root}")
+            print("  Run 'mamfast prepare' first to stage releases.")
+            return 0
+        staged_dirs = [d for d in seed_root.iterdir() if d.is_dir()]
 
     if not staged_dirs:
-        print("✅ No staged releases to process")
+        print("✅ No releases to process")
         return 0
 
-    print(f"Found {len(staged_dirs)} staged release(s)\n")
+    if not args.path:
+        print(f"Found {len(staged_dirs)} staged release(s)\n")
 
     success = 0
     for staging_dir in staged_dirs:
@@ -407,8 +432,6 @@ def cmd_metadata(args: argparse.Namespace) -> int:
         m4b_path = m4b_files[0] if m4b_files else None
 
         # Extract ASIN from m4b filename (has ASIN), fallback to dir name
-        from mamfast.discovery import extract_asin_from_name
-
         asin = None
         if m4b_path:
             asin = extract_asin_from_name(m4b_path.name)
@@ -418,6 +441,7 @@ def cmd_metadata(args: argparse.Namespace) -> int:
         if args.dry_run:
             print(f"    [DRY RUN] Would fetch Audnex for ASIN: {asin}")
             print(f"    [DRY RUN] Would run MediaInfo on: {m4b_path}")
+            print(f"    [DRY RUN] Would generate MAM JSON in: {torrent_output}")
             continue
 
         audnex_data, mediainfo_data = fetch_all_metadata(
@@ -435,6 +459,25 @@ def cmd_metadata(args: argparse.Namespace) -> int:
             print("    ✅ MediaInfo: mediainfo.json")
         else:
             print("    ⚠️ MediaInfo: failed")
+
+        # Build and save MAM JSON
+        # Create a temporary release object for building the JSON
+        release = AudiobookRelease(
+            asin=asin,
+            staging_dir=staging_dir,
+            main_m4b=m4b_path,
+            audnex_metadata=audnex_data,
+            mediainfo_data=mediainfo_data,
+        )
+
+        mam_data = build_mam_json(release)
+        if mam_data.get("title"):
+            json_name = f"{staging_dir.name}.json"
+            json_path = torrent_output / json_name
+            save_mam_json(mam_data, json_path)
+            print(f"    ✅ MAM JSON: {json_name}")
+        else:
+            print("    ⚠️ MAM JSON: no title available")
 
         success += 1
 
