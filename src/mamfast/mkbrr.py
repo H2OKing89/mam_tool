@@ -189,9 +189,10 @@ def create_torrent(
     logger.debug(f"Command: {shlex.join(cmd)}")
 
     try:
+        # Run mkbrr and let output stream to terminal (like interactive mode)
+        # This allows progress bars and feedback to display
         result = subprocess.run(
             cmd,
-            capture_output=True,
             text=True,
             check=False,
         )
@@ -212,19 +213,14 @@ def create_torrent(
                 success=True,
                 return_code=0,
                 torrent_path=torrent_path,
-                stdout=result.stdout,
-                stderr=result.stderr,
             )
         else:
             logger.error(f"mkbrr create failed with code {result.returncode}")
-            logger.error(f"stderr: {result.stderr}")
 
             return MkbrrResult(
                 success=False,
                 return_code=result.returncode,
-                error=result.stderr or f"mkbrr exited with code {result.returncode}",
-                stdout=result.stdout,
-                stderr=result.stderr,
+                error=f"mkbrr exited with code {result.returncode}",
             )
 
     except Exception as e:

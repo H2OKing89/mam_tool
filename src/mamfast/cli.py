@@ -133,6 +133,12 @@ Examples:
         help="Create .torrent files for staged releases using mkbrr",
     )
     torrent_parser.add_argument(
+        "path",
+        nargs="?",
+        type=Path,
+        help="Path to specific audiobook directory to process",
+    )
+    torrent_parser.add_argument(
         "--preset",
         type=str,
         help="Override mkbrr preset (default from config)",
@@ -503,24 +509,45 @@ def cmd_torrent(args: argparse.Namespace) -> int:
         print("❌ Docker is not available")
         return 1
 
-    # Find staged releases
-    library_root = settings.paths.library_root
-    if not library_root.exists():
-        print(f"❌ Library directory does not exist: {library_root}")
-        return 1
-
-    staged_dirs = [d for d in library_root.iterdir() if d.is_dir()]
-
-    if args.asin:
-        staged_dirs = [d for d in staged_dirs if args.asin in d.name]
+    # Determine which directories to process
+    if args.path:
+        # Specific path provided
+        target_dir = Path(args.path).resolve()
+        if not target_dir.exists():
+            print(f"❌ Path does not exist: {target_dir}")
+            return 1
+        if not target_dir.is_dir():
+            print(f"❌ Path is not a directory: {target_dir}")
+            return 1
+        staged_dirs = [target_dir]
+        print(f"Targeting: {target_dir.name}\n")
+    elif args.asin:
+        # Find by ASIN in seed_root
+        seed_root = settings.paths.seed_root
+        if not seed_root.exists():
+            print(f"❌ Seed directory does not exist: {seed_root}")
+            return 1
+        staged_dirs = [d for d in seed_root.iterdir() if d.is_dir() and args.asin in d.name]
+        if not staged_dirs:
+            print(f"❌ No staged directory found for ASIN: {args.asin}")
+            return 1
+    else:
+        # Default: all staged releases in seed_root
+        seed_root = settings.paths.seed_root
+        if not seed_root.exists():
+            print(f"⚠️ Seed directory does not exist yet: {seed_root}")
+            print("  Run 'mamfast prepare' first to stage releases.")
+            return 0
+        staged_dirs = [d for d in seed_root.iterdir() if d.is_dir()]
 
     if not staged_dirs:
-        print("✅ No staged releases to process")
+        print("✅ No releases to process")
         return 0
 
     preset = args.preset or settings.mkbrr.preset
     print(f"Using preset: {preset}")
-    print(f"Found {len(staged_dirs)} staged release(s)\n")
+    if not args.path:
+        print(f"Found {len(staged_dirs)} staged release(s)\n")
 
     success = 0
     failed = 0

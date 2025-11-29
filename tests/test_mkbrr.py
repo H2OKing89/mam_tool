@@ -182,4 +182,4 @@ class TestCreateTorrent:
 
         assert result.success is False
         assert result.return_code == 1
-        assert "Error" in (result.error or "")
+        assert "exited with code" in (result.error or "")
