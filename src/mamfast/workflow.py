@@ -231,6 +231,7 @@ def full_run(
     # -------------------------------------------------------------------------
     results = []
     skipped = 0
+    settings = get_settings()
 
     for i, release in enumerate(releases, 1):
         logger.info(f"[{i}/{len(releases)}] {release.display_name}")
@@ -243,7 +244,37 @@ def full_run(
             continue
 
         if dry_run:
-            logger.info("  [DRY RUN] Would process release")
+            # Show detailed dry-run info for each step
+            logger.info("  [DRY RUN] Steps that would be performed:")
+
+            # Step 1: Stage
+            if release.source_dir:
+                staging_name = release.source_dir.name
+                seed_root = settings.paths.seed_root
+                logger.info(f"    1. STAGE: Hardlink to {seed_root / staging_name}")
+
+            # Step 2: Metadata
+            if not skip_metadata:
+                if release.asin:
+                    logger.info(f"    2. METADATA: Fetch Audnex for ASIN {release.asin}")
+                if release.main_m4b:
+                    logger.info(f"    2. METADATA: Run MediaInfo on {release.main_m4b.name}")
+                logger.info(
+                    f"    2. METADATA: Generate MAM JSON to {settings.paths.torrent_output}"
+                )
+            else:
+                logger.info("    2. METADATA: [SKIPPED]")
+
+            # Step 3: Torrent
+            logger.info(f"    3. TORRENT: Create with preset '{settings.mkbrr.preset}'")
+            logger.info(f"    3. TORRENT: Output to {settings.paths.torrent_output}")
+
+            # Step 4: Upload
+            logger.info(f"    4. UPLOAD: Add to qBittorrent at {settings.qbittorrent.host}")
+            logger.info(f"    4. UPLOAD: Category '{settings.qbittorrent.category}'")
+
+            # Step 5: Mark processed
+            logger.info(f"    5. STATE: Mark {identifier} as processed")
             continue
 
         result = process_single_release(
