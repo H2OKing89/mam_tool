@@ -315,8 +315,18 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         print(f"  → {release.display_name}")
 
         if args.dry_run:
-            # Hardlinks go to seed_root for qBittorrent seeding
-            seed_path = settings.paths.seed_root / release.safe_dirname
+            # Hardlinks go to seed_root, with filtered folder name
+            from mamfast.utils.naming import filter_title
+
+            if release.source_dir:
+                original_name = release.source_dir.name
+                filtered_name = filter_title(original_name, settings.filters.remove_phrases)
+                seed_path = settings.paths.seed_root / filtered_name
+                if original_name != filtered_name:
+                    print(f"    [DRY RUN] Original: {original_name}")
+                    print(f"    [DRY RUN] Filtered: {filtered_name}")
+            else:
+                seed_path = settings.paths.seed_root / "unknown"
             print(f"    [DRY RUN] Would hardlink to: {seed_path}")
             continue
 

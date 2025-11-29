@@ -15,7 +15,7 @@ from pathlib import Path
 
 from mamfast.config import get_settings
 from mamfast.models import AudiobookRelease
-from mamfast.utils.naming import truncate_filename
+from mamfast.utils.naming import filter_title, truncate_filename
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,9 @@ def stage_release(release: AudiobookRelease) -> Path:
     """
     Create staging directory and hardlink files for a release.
 
-    1. Create directory under staging_root with MAM-compliant name
+    1. Create directory under seed_root with same name as source folder
     2. Find all allowed file types in source_dir
-    3. Hardlink each file (with truncated name if needed)
+    3. Hardlink each file (keeping original names)
     4. Update release.staging_dir and return the path
 
     Args:
@@ -48,8 +48,15 @@ def stage_release(release: AudiobookRelease) -> Path:
     seed_root = settings.paths.seed_root
     seed_root.mkdir(parents=True, exist_ok=True)
 
-    staging_name = release.safe_dirname
-    staging_name = truncate_filename(staging_name, settings.mam.max_filename_length)
+    # Use the original folder name (the book folder, not author folder)
+    # e.g., "Reincarnated in a Fantasy World... {ASIN.B0FF4L58ZY} [H2OKing]"
+    original_folder_name = release.source_dir.name
+    
+    # Apply title filters (remove "Book XX", "Light Novel", etc.)
+    filtered_name = filter_title(original_folder_name, settings.filters.remove_phrases)
+    
+    # Truncate if needed for MAM compliance
+    staging_name = truncate_filename(filtered_name, settings.mam.max_filename_length)
     staging_dir = seed_root / staging_name
 
     logger.info(f"Staging release: {release.display_name}")
@@ -58,15 +65,16 @@ def stage_release(release: AudiobookRelease) -> Path:
 
     staging_dir.mkdir(parents=True, exist_ok=True)
 
-    # Find and hardlink allowed files
+    # Find and hardlink allowed files (not recursive - just files in this folder)
     staged_files = []
     for src_file in find_allowed_files(release.source_dir):
+        # Keep original filename, just truncate if too long
         dst_name = truncate_filename(src_file.name, settings.mam.max_filename_length)
         dst_file = staging_dir / dst_name
 
         hardlink_file(src_file, dst_file)
         staged_files.append(dst_file)
-        logger.debug(f"  Hardlinked: {src_file.name} → {dst_name}")
+        logger.debug(f"  Hardlinked: {src_file.name}")
 
     # Update release
     release.staging_dir = staging_dir

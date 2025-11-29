@@ -75,6 +75,16 @@ class MediaInfoConfig:
 
 
 @dataclass
+class FiltersConfig:
+    """Title filtering settings."""
+
+    # Phrases to remove from titles (case-insensitive)
+    remove_phrases: list[str] = field(default_factory=list)
+    # Remove "Book XX" patterns (we keep vol_XX)
+    remove_book_numbers: bool = True
+
+
+@dataclass
 class Settings:
     """Complete application settings."""
 
@@ -94,6 +104,7 @@ class Settings:
     qbittorrent: QBittorrentConfig
     audnex: AudnexConfig
     mediainfo: MediaInfoConfig
+    filters: FiltersConfig
 
 
 def _get_env(key: str, default: str | None = None) -> str:
@@ -208,6 +219,13 @@ def load_settings(
         binary=mediainfo_data.get("binary", "mediainfo"),
     )
 
+    # Parse filters config
+    filters_data = yaml_config.get("filters", {})
+    filters = FiltersConfig(
+        remove_phrases=filters_data.get("remove_phrases", []),
+        remove_book_numbers=filters_data.get("remove_book_numbers", True),
+    )
+
     # Parse environment section (YAML overrides env vars)
     env_data = yaml_config.get("environment", {})
 
@@ -237,6 +255,7 @@ def load_settings(
         qbittorrent=qbittorrent,
         audnex=audnex,
         mediainfo=mediainfo,
+        filters=filters,
     )
 
 

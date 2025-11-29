@@ -26,6 +26,19 @@ NORMALIZE_MAP = {
     "*": "",
 }
 
+# Hardcoded patterns to always remove (regex patterns)
+HARDCODED_REMOVE_PATTERNS = [
+    # "Book 12", "Book XII", "Book: 12" etc - we keep vol_XX instead
+    r"\bBook\s*[:\s]*\d+\b",
+    r"\bBook\s*[:\s]*[IVXLCDM]+\b",
+    # "Vol. 12" or "Volume 12" (but NOT vol_12 which is Libation format)
+    r"\bVol\.\s*\d+\b",
+    r"\bVolume\s*\d+\b",
+    # Extra whitespace patterns
+    r"\s*-\s*-\s*",  # Double dashes
+    r"\s*,\s*,\s*",  # Double commas
+]
+
 
 def sanitize_filename(name: str) -> str:
     """
@@ -49,6 +62,54 @@ def sanitize_filename(name: str) -> str:
 
     # Strip leading/trailing whitespace and dots
     result = result.strip(". ")
+
+    return result
+
+
+def filter_title(name: str, remove_phrases: list[str] | None = None) -> str:
+    """
+    Remove unwanted phrases from a title/folder name.
+
+    Applies:
+    1. Hardcoded patterns (Book XX, Vol. XX, etc.)
+    2. User-configured phrases from config.yaml
+    3. Duplicate number before vol_XX (e.g., "Title 12 vol_12" -> "Title vol_12")
+
+    Args:
+        name: Original name
+        remove_phrases: List of phrases to remove (case-insensitive)
+
+    Returns:
+        Filtered name with unwanted phrases removed
+    """
+    result = name
+
+    # Apply hardcoded regex patterns
+    for pattern in HARDCODED_REMOVE_PATTERNS:
+        result = re.sub(pattern, "", result, flags=re.IGNORECASE)
+
+    # Apply user-configured phrases (case-insensitive)
+    if remove_phrases:
+        for phrase in remove_phrases:
+            # Escape regex special chars and make case-insensitive
+            escaped = re.escape(phrase)
+            result = re.sub(escaped, "", result, flags=re.IGNORECASE)
+
+    # Collapse whitespace before duplicate check
+    result = re.sub(r"\s+", " ", result)
+
+    # Remove duplicate number before vol_XX (e.g., "Title 12 vol_12" -> "Title vol_12")
+    # Must happen AFTER phrase removal so "12 <phrase> vol_12" -> "12 vol_12" -> "vol_12"
+    result = re.sub(r"\b(\d+)\s+vol_\1\b", r"vol_\1", result)
+
+    # Clean up whitespace artifacts
+    result = re.sub(r"\s+", " ", result)  # Collapse multiple spaces
+    result = re.sub(r"\s*-\s*-\s*", " - ", result)  # Fix double dashes
+    result = re.sub(r"^\s*-\s*", "", result)  # Remove leading dash
+    result = re.sub(r"\s*-\s*$", "", result)  # Remove trailing dash
+    result = re.sub(r"\(\s*\)", "", result)  # Remove empty parens
+    result = re.sub(r"\[\s*\]", "", result)  # Remove empty brackets
+    result = result.strip()
 
     return result
 
