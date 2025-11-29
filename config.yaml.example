@@ -1,38 +1,43 @@
 # =============================================================================
-# MAMFast Configuration
-# Copy to config.yaml and adjust paths for your setup
+# MAMFast Configuration Example
+# =============================================================================
+# Copy this file to config/config.yaml and adjust for your setup.
+# Environment variables in .env override some settings.
 # =============================================================================
 
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Environment / Docker
+# ─────────────────────────────────────────────────────────────────────────────
+environment:
+  libation_container: "Libation"      # Docker container name for Libation
+  docker_bin: "/usr/bin/docker"       # Path to docker binary
+  target_uid: 99                      # UID for created files (99 = nobody on Unraid)
+  target_gid: 100                     # GID for created files (100 = users on Unraid)
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Paths
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
 paths:
-  # Where Libation stores downloaded audiobooks
-  libation_library_root: "/mnt/user/data/audio/audiobooks"
-  
-  # Where we hardlink + stage releases for upload
-  staging_root: "/mnt/user/data/mam-staging"
-  
-  # Where .torrent files are written (must match mkbrr output)
-  torrent_output: "/mnt/user/data/downloads/torrents/torrentfiles"
-  
-  # qBittorrent seed directory (save_path for added torrents)
-  seed_root: "/mnt/user/data/downloads/torrents/qbittorrent/seedvault/mam"
-  
+  # Libation library directory (where audiobooks are downloaded/stored)
+  library_root: "/path/to/your/audiobook/library"
+
+  # Where .torrent files are written
+  torrent_output: "/path/to/torrent/files"
+
+  # qBittorrent seed directory - hardlinks created here for seeding
+  seed_root: "/path/to/seedvault/audiobooks"
+
   # State file for tracking processed releases
   state_file: "./data/processed.json"
-  
-  # Log file location
+
+  # Log file
   log_file: "./logs/mamfast.log"
 
-# -----------------------------------------------------------------------------
-# MAM Compliance Rules
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# MAM Compliance
+# ─────────────────────────────────────────────────────────────────────────────
 mam:
-  # Maximum filename length allowed by MAM
-  max_filename_length: 225
-  
-  # File extensions to include when staging
+  max_filename_length: 225            # MAM's filename length limit
   allowed_extensions:
     - ".m4b"
     - ".jpg"
@@ -41,46 +46,68 @@ mam:
     - ".pdf"
     - ".cue"
 
-# -----------------------------------------------------------------------------
-# mkbrr Docker Configuration
-# These should match your existing mkbrr setup
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# Title Filters
+# ─────────────────────────────────────────────────────────────────────────────
+filters:
+  # Phrases to remove from titles (case-insensitive)
+  remove_phrases:
+    - "(Light Novel)"
+    - "Light Novel"
+    - "A LitRPG Adventure"
+    - "LitRPG Adventure"
+    - "(Unabridged)"
+    - "Unabridged"
+
+  # Remove "Book XX" patterns (we keep vol_XX from Libation naming)
+  remove_book_numbers: true
+
+  # Author name mapping (foreign name -> romanized name)
+  # Add entries as you encounter non-ASCII author names
+  author_map:
+    # "日本語名": "Romanized Name"
+
+  # Use pykakasi to transliterate unknown Japanese text as fallback
+  transliterate_japanese: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mkbrr Docker Settings
+# ─────────────────────────────────────────────────────────────────────────────
 mkbrr:
-  image: "ghcr.io/autobrr/mkbrr"
-  preset: "mam"
-  
-  # Host path that maps to /data inside container
+  image: "ghcr.io/autobrr/mkbrr:latest"
+  preset: "mam"                       # mkbrr preset for MAM announce URL
+
+  # Path mapping: how host paths appear inside the mkbrr container
   host_data_root: "/mnt/user/data"
   container_data_root: "/data"
-  
-  # Host path for torrent output (maps to /torrentfiles inside container)
-  host_output_dir: "/mnt/user/data/downloads/torrents/torrentfiles"
-  container_output_dir: "/torrentfiles"
-  
-  # mkbrr config directory (contains presets.yaml)
-  host_config_dir: "/mnt/cache/appdata/mkbrr"
+
+  # mkbrr config directory mapping (where config.yaml with announce URL lives)
+  host_config_dir: "/path/to/mkbrr/config"
   container_config_dir: "/root/.config/mkbrr"
 
-# -----------------------------------------------------------------------------
-# qBittorrent Behavior
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# qBittorrent Settings
+# ─────────────────────────────────────────────────────────────────────────────
+# Note: Host, username, and password are read from .env file:
+#   QB_HOST=http://localhost:8080
+#   QB_USERNAME=admin
+#   QB_PASSWORD=yourpassword
 qbittorrent:
-  category: "mam-audiobooks"
+  category: "upload.audiobooks"       # Category for uploaded torrents
   tags:
     - "mamfast"
     - "auto-upload"
-  auto_start: true
-  
-# -----------------------------------------------------------------------------
-# Audnex API (metadata source)
-# -----------------------------------------------------------------------------
+  auto_start: true                    # Start seeding immediately after upload
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Audnex API (for fetching audiobook metadata)
+# ─────────────────────────────────────────────────────────────────────────────
 audnex:
   base_url: "https://api.audnex.us"
   timeout_seconds: 30
 
-# -----------------------------------------------------------------------------
-# MediaInfo
-# -----------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────────────────────
+# MediaInfo (for extracting audio file metadata)
+# ─────────────────────────────────────────────────────────────────────────────
 mediainfo:
-  # Path to mediainfo binary (or just "mediainfo" if in PATH)
-  binary: "mediainfo"
+  binary: "mediainfo"                 # or full path: /usr/bin/mediainfo

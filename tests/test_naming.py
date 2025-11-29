@@ -1,7 +1,5 @@
 """Tests for naming utilities."""
 
-import pytest
-
 from mamfast.utils.naming import (
     build_release_dirname,
     sanitize_filename,

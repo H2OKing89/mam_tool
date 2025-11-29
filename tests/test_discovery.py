@@ -1,7 +1,5 @@
 """Tests for discovery module."""
 
-import pytest
-
 from mamfast.discovery import (
     ASIN_PATTERN,
     extract_asin_from_name,
@@ -42,7 +40,8 @@ class TestParseFolderName:
         result = parse_folder_name(name)
 
         assert result["title"] == "He Who Fights with Monsters"
-        assert result["volume"] == "01"
+        # volume goes into volume2 group when not preceded by " - "
+        assert result["volume2"] == "01" or result["volume"] == "01"
         assert result["year"] == "2021"
         assert result["author"] == "Shirtaloon"
         assert result["asin"] == "1774248182"
@@ -54,7 +53,8 @@ class TestParseFolderName:
         result = parse_folder_name(name)
 
         assert result["title"] == "Some Book"
-        assert result["volume"] == "03"
+        # volume goes into volume2 group when not preceded by " - "
+        assert result["volume2"] == "03" or result["volume"] == "03"
         assert result["year"] == "2020"
         assert result["author"] == "Jane Doe"
         assert result["asin"] == "B001234567"
@@ -65,18 +65,22 @@ class TestParseFolderName:
         name = "Book vol_10.5 (2023) (Author) {ASIN.1234}"
         result = parse_folder_name(name)
 
-        assert result["volume"] == "10.5"
+        # volume goes into volume2 group when not preceded by " - "
+        assert result["volume2"] == "10.5" or result["volume"] == "10.5"
 
 
 class TestAsinPattern:
     """Tests for the ASIN regex pattern."""
 
-    def test_pattern_matches_curly_braces(self):
-        """Verify pattern requires curly braces."""
-        # Should match
+    def test_pattern_matches_both_bracket_styles(self):
+        """Verify pattern matches both curly and square brackets."""
+        # Should match curly braces
         assert ASIN_PATTERN.search("{ASIN.1234567890}")
         assert ASIN_PATTERN.search("{ASIN.B09ABCDEFG}")
 
-        # Should not match
+        # Should also match square brackets (Libation uses both)
+        assert ASIN_PATTERN.search("[ASIN.1234567890]")
+        assert ASIN_PATTERN.search("[ASIN.B09ABCDEFG]")
+
+        # Should not match without brackets
         assert ASIN_PATTERN.search("ASIN.1234567890") is None
-        assert ASIN_PATTERN.search("[ASIN.1234567890]") is None

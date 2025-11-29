@@ -15,7 +15,7 @@ from pathlib import Path
 
 from mamfast.config import get_settings
 from mamfast.models import AudiobookRelease
-from mamfast.utils.naming import filter_title, truncate_filename
+from mamfast.utils.naming import filter_title, transliterate_text, truncate_filename
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +51,13 @@ def stage_release(release: AudiobookRelease) -> Path:
     # Use the original folder name (the book folder, not author folder)
     # e.g., "Reincarnated in a Fantasy World... {ASIN.B0FF4L58ZY} [H2OKing]"
     original_folder_name = release.source_dir.name
-    
+
     # Apply title filters (remove "Book XX", "Light Novel", etc.)
     filtered_name = filter_title(original_folder_name, settings.filters.remove_phrases)
-    
+
+    # Transliterate foreign characters (Japanese author names, etc.)
+    filtered_name = transliterate_text(filtered_name, settings.filters)
+
     # Truncate if needed for MAM compliance
     staging_name = truncate_filename(filtered_name, settings.mam.max_filename_length)
     staging_dir = seed_root / staging_name

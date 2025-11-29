@@ -206,7 +206,7 @@ def full_run(
     try:
         settings = get_settings()
         releases = get_new_releases(
-            settings.paths.libation_library_root,
+            settings.paths.library_root,
             settings.paths.state_file,
         )
     except NotImplementedError:
@@ -305,13 +305,13 @@ def create_torrents_only(
     settings = get_settings()
 
     if staging_dirs is None:
-        # Find all directories in staging root
-        staging_root = settings.paths.staging_root
-        if not staging_root.exists():
-            logger.warning(f"Staging root does not exist: {staging_root}")
+        # Find all directories in library root
+        library_root = settings.paths.library_root
+        if not library_root.exists():
+            logger.warning(f"Library root does not exist: {library_root}")
             return []
 
-        staging_dirs = [d for d in staging_root.iterdir() if d.is_dir()]
+        staging_dirs = [d for d in library_root.iterdir() if d.is_dir()]
 
     created = []
 
@@ -359,7 +359,7 @@ def upload_only(torrent_paths: list[Path] | None = None) -> int:
         # Determine save path from torrent name
         # Convention: torrent name matches staging dir name
         staging_name = torrent_path.stem
-        save_path = settings.paths.staging_root / staging_name
+        save_path = settings.paths.library_root / staging_name
 
         if not save_path.exists():
             # Try seed root as fallback

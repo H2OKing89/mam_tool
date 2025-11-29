@@ -316,11 +316,12 @@ def cmd_prepare(args: argparse.Namespace) -> int:
 
         if args.dry_run:
             # Hardlinks go to seed_root, with filtered folder name
-            from mamfast.utils.naming import filter_title
+            from mamfast.utils.naming import filter_title, transliterate_text
 
             if release.source_dir:
                 original_name = release.source_dir.name
                 filtered_name = filter_title(original_name, settings.filters.remove_phrases)
+                filtered_name = transliterate_text(filtered_name, settings.filters)
                 seed_path = settings.paths.seed_root / filtered_name
                 if original_name != filtered_name:
                     print(f"    [DRY RUN] Original: {original_name}")
@@ -357,12 +358,12 @@ def cmd_metadata(args: argparse.Namespace) -> int:
         return 1
 
     # Find releases that have been staged
-    staging_root = settings.paths.staging_root
-    if not staging_root.exists():
-        print(f"❌ Staging directory does not exist: {staging_root}")
+    library_root = settings.paths.library_root
+    if not library_root.exists():
+        print(f"❌ Library directory does not exist: {library_root}")
         return 1
 
-    staged_dirs = [d for d in staging_root.iterdir() if d.is_dir()]
+    staged_dirs = [d for d in library_root.iterdir() if d.is_dir()]
 
     if args.asin:
         # Find specific release
@@ -373,6 +374,7 @@ def cmd_metadata(args: argparse.Namespace) -> int:
 
         # Find its staging dir - check both directory name and files inside
         from mamfast.discovery import extract_asin_from_name
+
         matching_dirs = []
         for d in staged_dirs:
             # Check directory name
@@ -406,6 +408,7 @@ def cmd_metadata(args: argparse.Namespace) -> int:
 
         # Extract ASIN from m4b filename (has ASIN), fallback to dir name
         from mamfast.discovery import extract_asin_from_name
+
         asin = None
         if m4b_path:
             asin = extract_asin_from_name(m4b_path.name)
@@ -458,12 +461,12 @@ def cmd_torrent(args: argparse.Namespace) -> int:
         return 1
 
     # Find staged releases
-    staging_root = settings.paths.staging_root
-    if not staging_root.exists():
-        print(f"❌ Staging directory does not exist: {staging_root}")
+    library_root = settings.paths.library_root
+    if not library_root.exists():
+        print(f"❌ Library directory does not exist: {library_root}")
         return 1
 
-    staged_dirs = [d for d in staging_root.iterdir() if d.is_dir()]
+    staged_dirs = [d for d in library_root.iterdir() if d.is_dir()]
 
     if args.asin:
         staged_dirs = [d for d in staged_dirs if args.asin in d.name]
@@ -544,7 +547,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
         # Determine save path (staging dir with matching name)
         staging_name = torrent_path.stem
-        save_path = settings.paths.staging_root / staging_name
+        save_path = settings.paths.library_root / staging_name
 
         if not save_path.exists():
             # Fallback to seed root
@@ -616,18 +619,12 @@ def cmd_status(args: argparse.Namespace) -> int:
     # Check directories
     print("\n📁 Directories:")
 
-    lib_root = settings.paths.libation_library_root
+    lib_root = settings.paths.library_root
     if lib_root.exists():
-        print(f"  ✅ Library: {lib_root}")
+        book_count = len([d for d in lib_root.iterdir() if d.is_dir()])
+        print(f"  ✅ Library: {lib_root} ({book_count} folders)")
     else:
         print(f"  ❌ Library: {lib_root} (not found)")
-
-    staging = settings.paths.staging_root
-    if staging.exists():
-        staged_count = len([d for d in staging.iterdir() if d.is_dir()])
-        print(f"  ✅ Staging: {staging} ({staged_count} releases)")
-    else:
-        print(f"  ⚠️  Staging: {staging} (not created yet)")
 
     torrent_out = settings.paths.torrent_output
     if torrent_out.exists():
@@ -682,8 +679,7 @@ def cmd_config(args: argparse.Namespace) -> int:
         print(f"  Log level: {settings.log_level}")
 
         print("\n=== Paths ===")
-        print(f"  Libation library: {settings.paths.libation_library_root}")
-        print(f"  Staging root: {settings.paths.staging_root}")
+        print(f"  Library root: {settings.paths.library_root}")
         print(f"  Torrent output: {settings.paths.torrent_output}")
         print(f"  Seed root: {settings.paths.seed_root}")
 

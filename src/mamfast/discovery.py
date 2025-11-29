@@ -184,9 +184,7 @@ def load_metadata_json(metadata_path: Path) -> LibationMetadata | None:
         metadata.language = data.get("language") or data.get("Language")
 
         runtime = (
-            data.get("runtimeLengthMin")
-            or data.get("runtime_minutes")
-            or data.get("duration")
+            data.get("runtimeLengthMin") or data.get("runtime_minutes") or data.get("duration")
         )
         if runtime:
             with contextlib.suppress(ValueError, TypeError):
@@ -300,7 +298,7 @@ def build_release_from_dir(audiobook_dir: Path) -> AudiobookRelease:
             # Go up to find author dir (skip series dir if present)
             parent = audiobook_dir.parent
             grandparent = parent.parent
-            library_root = settings.paths.libation_library_root
+            library_root = settings.paths.library_root
 
             if grandparent != library_root and parent != library_root:
                 # We're in Author/Series/Book structure
@@ -320,7 +318,7 @@ def build_release_from_dir(audiobook_dir: Path) -> AudiobookRelease:
     else:
         # Try to get series from parent folder name
         parent = audiobook_dir.parent
-        library_root = settings.paths.libation_library_root
+        library_root = settings.paths.library_root
         if parent != library_root and parent.parent != library_root:
             # Parent might be series folder
             release.series = parent.name
@@ -365,7 +363,7 @@ def scan_library(library_root: Path | None = None) -> list[AudiobookRelease]:
     """
     if library_root is None:
         settings = get_settings()
-        library_root = settings.paths.libation_library_root
+        library_root = settings.paths.library_root
 
     logger.info(f"Scanning library: {library_root}")
 

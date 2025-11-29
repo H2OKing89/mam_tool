@@ -54,9 +54,7 @@ def setup_logging(
     else:
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(level)
-        console_handler.setFormatter(
-            logging.Formatter("%(levelname)s: %(message)s")
-        )
+        console_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
 
     logger.addHandler(console_handler)
 

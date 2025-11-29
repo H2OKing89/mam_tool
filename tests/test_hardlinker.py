@@ -20,9 +20,13 @@ from mamfast.models import AudiobookRelease
 def mock_settings():
     """Create mock settings for tests."""
     settings = MagicMock()
-    settings.paths.staging_root = Path(tempfile.mkdtemp())
+    settings.paths.seed_root = Path(tempfile.mkdtemp())
+    settings.paths.library_root = Path(tempfile.mkdtemp())
     settings.mam.max_filename_length = 225
     settings.mam.allowed_extensions = [".m4b", ".jpg", ".pdf", ".cue"]
+    settings.filters.remove_phrases = []
+    settings.filters.author_map = {}
+    settings.filters.transliterate_japanese = False
     return settings
 
 
@@ -156,9 +160,11 @@ class TestStageRelease:
         """Test that ValueError is raised when source_dir is None."""
         release = AudiobookRelease(title="Test Book")
 
-        with patch("mamfast.hardlinker.get_settings", return_value=mock_settings):
-            with pytest.raises(ValueError, match="no source_dir"):
-                stage_release(release)
+        with (
+            patch("mamfast.hardlinker.get_settings", return_value=mock_settings),
+            pytest.raises(ValueError, match="no source_dir"),
+        ):
+            stage_release(release)
 
     def test_creates_staging_directory(self, temp_source_dir, mock_settings):
         """Test that staging directory is created."""

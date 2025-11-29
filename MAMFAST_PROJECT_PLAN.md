@@ -139,19 +139,19 @@ LOG_LEVEL=INFO
 paths:
   # Where Libation stores downloaded audiobooks
   libation_library_root: "/mnt/user/data/audio/LibationLibrary"
-  
+
   # Where we hardlink + stage releases for upload
   staging_root: "/mnt/user/data/mam-staging"
-  
+
   # Where .torrent files are written
   torrent_output: "/mnt/user/data/torrents/mamfast"
-  
+
   # qBittorrent seed directory (save_path for added torrents)
   seed_root: "/mnt/user/data/downloads/torrents/qbittorrent/seedvault/mam"
-  
+
   # State file for tracking processed releases
   state_file: "./data/processed.json"
-  
+
   # Log file
   log_file: "./logs/mamfast.log"
 
@@ -174,11 +174,11 @@ mam:
 mkbrr:
   image: "ghcr.io/autobrr/mkbrr:latest"
   preset: "mam"
-  
+
   # Path mapping: how host paths appear inside the mkbrr container
   host_data_root: "/mnt/user/data"
   container_data_root: "/data"
-  
+
   # mkbrr config directory mapping
   host_config_dir: "/mnt/cache/appdata/mkbrr"
   container_config_dir: "/root/.config/mkbrr"
@@ -192,7 +192,7 @@ qbittorrent:
     - "mamfast"
     - "auto-upload"
   auto_start: true
-  
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Audnex API
 # ─────────────────────────────────────────────────────────────────────────────
@@ -229,7 +229,7 @@ class ReleaseStatus(Enum):
 @dataclass
 class AudiobookRelease:
     """Represents a single audiobook ready for processing."""
-    
+
     # Identity
     asin: Optional[str]          # Audible ASIN (primary identifier)
     title: str
@@ -237,25 +237,25 @@ class AudiobookRelease:
     narrator: Optional[str] = None
     series: Optional[str] = None
     series_position: Optional[str] = None
-    
+
     # Paths
     source_dir: Path = None      # Original Libation directory
     staging_dir: Path = None     # Hardlinked upload workspace
     main_m4b: Path = None        # Primary audiobook file
-    
+
     # Files found
     files: list[Path] = field(default_factory=list)
-    
+
     # Processing state
     status: ReleaseStatus = ReleaseStatus.DISCOVERED
     torrent_path: Optional[Path] = None
-    
+
     # Metadata (populated later)
     audnex_metadata: Optional[dict] = None
     mediainfo_data: Optional[dict] = None
 
 
-@dataclass  
+@dataclass
 class ProcessingResult:
     """Result of processing a single release."""
     release: AudiobookRelease
@@ -413,7 +413,7 @@ def full_run() -> list[ProcessingResult]:
     """
     Complete pipeline:
     1. Libation scan
-    2. Discover new releases  
+    2. Discover new releases
     3. For each release: stage → metadata → torrent → upload → record
     """
 
@@ -489,7 +489,7 @@ Example output:
   "processed": {
     "B000SEI1RG": {
       "title": "Mistborn",
-      "author": "Brandon Sanderson", 
+      "author": "Brandon Sanderson",
       "processed_at": "2024-01-15T10:23:48Z",
       "staging_dir": "/mnt/user/data/mam-staging/Brandon Sanderson - Mistborn",
       "torrent_path": "/mnt/user/data/torrents/mamfast/Brandon Sanderson - Mistborn.torrent",

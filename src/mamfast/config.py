@@ -15,8 +15,7 @@ from dotenv import load_dotenv
 class PathsConfig:
     """Path configuration settings."""
 
-    libation_library_root: Path
-    staging_root: Path
+    library_root: Path  # Libation library / staging directory (same in Libation workflow)
     torrent_output: Path
     seed_root: Path
     state_file: Path
@@ -82,6 +81,10 @@ class FiltersConfig:
     remove_phrases: list[str] = field(default_factory=list)
     # Remove "Book XX" patterns (we keep vol_XX)
     remove_book_numbers: bool = True
+    # Author name mapping (foreign name -> romanized name)
+    author_map: dict[str, str] = field(default_factory=dict)
+    # Use pykakasi to transliterate unknown Japanese text
+    transliterate_japanese: bool = True
 
 
 @dataclass
@@ -163,8 +166,7 @@ def load_settings(
     # Parse paths config
     paths_data = yaml_config.get("paths", {})
     paths = PathsConfig(
-        libation_library_root=Path(paths_data.get("libation_library_root", "")),
-        staging_root=Path(paths_data.get("staging_root", "")),
+        library_root=Path(paths_data.get("library_root", "")),
         torrent_output=Path(paths_data.get("torrent_output", "")),
         seed_root=Path(paths_data.get("seed_root", "")),
         state_file=Path(paths_data.get("state_file", "./data/processed.json")),
@@ -224,6 +226,8 @@ def load_settings(
     filters = FiltersConfig(
         remove_phrases=filters_data.get("remove_phrases", []),
         remove_book_numbers=filters_data.get("remove_book_numbers", True),
+        author_map=filters_data.get("author_map", {}),
+        transliterate_japanese=filters_data.get("transliterate_japanese", True),
     )
 
     # Parse environment section (YAML overrides env vars)
@@ -234,18 +238,10 @@ def load_settings(
         libation_container=env_data.get(
             "libation_container", _get_env("LIBATION_CONTAINER", "libation")
         ),
-        docker_bin=env_data.get(
-            "docker_bin", _get_env("DOCKER_BIN", "/usr/bin/docker")
-        ),
-        target_uid=env_data.get(
-            "target_uid", _get_env_int("TARGET_UID", 99)
-        ),
-        target_gid=env_data.get(
-            "target_gid", _get_env_int("TARGET_GID", 100)
-        ),
-        mam_announce_url=env_data.get(
-            "mam_announce_url", _get_env("MAM_ANNOUNCE_URL", "")
-        ),
+        docker_bin=env_data.get("docker_bin", _get_env("DOCKER_BIN", "/usr/bin/docker")),
+        target_uid=env_data.get("target_uid", _get_env_int("TARGET_UID", 99)),
+        target_gid=env_data.get("target_gid", _get_env_int("TARGET_GID", 100)),
+        mam_announce_url=env_data.get("mam_announce_url", _get_env("MAM_ANNOUNCE_URL", "")),
         env=env_data.get("env", _get_env("MAMFAST_ENV", "development")),
         log_level=env_data.get("log_level", _get_env("LOG_LEVEL", "INFO")),
         # YAML config

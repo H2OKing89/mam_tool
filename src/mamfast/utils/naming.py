@@ -9,6 +9,10 @@ from __future__ import annotations
 import hashlib
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mamfast.config import FiltersConfig
 
 # Characters not allowed in filenames (cross-platform safe)
 ILLEGAL_CHARS = r'[<>:"/\\|?*]'
@@ -110,6 +114,68 @@ def filter_title(name: str, remove_phrases: list[str] | None = None) -> str:
     result = re.sub(r"\(\s*\)", "", result)  # Remove empty parens
     result = re.sub(r"\[\s*\]", "", result)  # Remove empty brackets
     result = result.strip()
+
+    return result
+
+
+def transliterate_text(
+    text: str,
+    filters: FiltersConfig | None = None,
+) -> str:
+    """
+    Transliterate foreign text (especially Japanese) to ASCII.
+
+    Priority:
+    1. Check author_map for exact matches
+    2. Use pykakasi for Japanese characters (if enabled)
+    3. Leave other text unchanged
+
+    Args:
+        text: Text that may contain foreign characters
+        filters: Filter config with author_map and transliterate settings
+
+    Returns:
+        Transliterated text (ASCII-safe)
+    """
+    if filters is None:
+        return text
+
+    result = text
+
+    # First, apply author_map for exact substring matches
+    for foreign, romanized in filters.author_map.items():
+        if foreign in result:
+            result = result.replace(foreign, romanized)
+
+    # Check if there are any remaining non-ASCII characters
+    if result.isascii():
+        return result
+
+    # Try Japanese transliteration if enabled
+    if filters.transliterate_japanese:
+        try:
+            import pykakasi
+
+            kks = pykakasi.kakasi()
+
+            # Find non-ASCII segments and transliterate them
+            def transliterate_segment(match: re.Match[str]) -> str:
+                segment = match.group(0)
+                # Check author_map first (already done above, but for safety)
+                if segment in filters.author_map:
+                    return filters.author_map[segment]
+                # Use pykakasi
+                converted = kks.convert(segment)
+                romaji = " ".join([item["hepburn"] for item in converted])
+                # Title case for names
+                return romaji.title()
+
+            # Match sequences of non-ASCII characters
+            result = re.sub(r"[^\x00-\x7F]+", transliterate_segment, result)
+
+        except ImportError:
+            # pykakasi not installed, leave as-is
+            pass
 
     return result
 

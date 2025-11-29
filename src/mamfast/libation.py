@@ -44,11 +44,13 @@ def run_scan(interactive: bool = False) -> ScanResult:
     if interactive:
         cmd.extend(["-it"])
 
-    cmd.extend([
-        settings.libation_container,
-        "/libation/LibationCli",  # Full path, proper case
-        "scan",
-    ])
+    cmd.extend(
+        [
+            settings.libation_container,
+            "/libation/LibationCli",  # Full path, proper case
+            "scan",
+        ]
+    )
 
     logger.info(f"Running Libation scan in container: {settings.libation_container}")
     logger.debug(f"Command: {' '.join(cmd)}")
