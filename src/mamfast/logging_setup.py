@@ -69,8 +69,3 @@ def setup_logging(
         logger.addHandler(file_handler)
 
     return logger
-
-
-def get_logger(name: str) -> logging.Logger:
-    """Get a child logger under the mamfast namespace."""
-    return logging.getLogger(f"mamfast.{name}")

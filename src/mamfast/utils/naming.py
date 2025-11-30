@@ -7,12 +7,15 @@ MAM has a 225-character limit on filenames/paths.
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mamfast.config import FiltersConfig
+
+logger = logging.getLogger(__name__)
 
 # Characters not allowed in filenames (cross-platform safe)
 ILLEGAL_CHARS = r'[<>:"/\\|?*]'
@@ -239,7 +242,7 @@ def transliterate_text(
 
         except ImportError:
             # pykakasi not installed, leave as-is
-            pass
+            logger.debug("pykakasi not installed, skipping Japanese transliteration")
 
     return result
 
