@@ -245,7 +245,7 @@ def validate_required_env_vars() -> None:
         "QB_HOST": "qBittorrent Web UI URL (e.g., http://10.1.60.10:8080)",
         "QB_USERNAME": "qBittorrent username",
         "QB_PASSWORD": "qBittorrent password",
-        "MAM_ANNOUNCE_URL": "MAM tracker announce URL",
+        # Note: MAM_ANNOUNCE_URL is optional - mkbrr presets handle the announce URL
     }
 
     missing = []
@@ -319,7 +319,10 @@ def validate_settings(settings: Settings) -> list[str]:
 
     # Validate URLs
     validate_url(settings.qbittorrent.host, "QB_HOST")
-    validate_url(settings.mam_announce_url, "MAM_ANNOUNCE_URL")
+
+    # MAM_ANNOUNCE_URL is optional - mkbrr presets typically handle the announce URL
+    if settings.mam_announce_url:
+        validate_url(settings.mam_announce_url, "MAM_ANNOUNCE_URL")
 
     # Validate Audnex API URL
     if settings.audnex.base_url:

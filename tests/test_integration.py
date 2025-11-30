@@ -15,9 +15,11 @@ from mamfast.workflow import PipelineResult, full_run, process_single_release
 class TestProcessSingleRelease:
     """Integration tests for processing a single release through the pipeline."""
 
+    @patch("mamfast.workflow.get_settings")
+    @patch("mamfast.workflow.generate_mam_json_for_release")
     @patch("mamfast.workflow.upload_torrent")
     @patch("mamfast.workflow.create_torrent")
-    @patch("mamfast.workflow.fetch_all_metadata")
+    @patch("mamfast.workflow._fetch_metadata_with_retry")
     @patch("mamfast.workflow.stage_release")
     @patch("mamfast.workflow.mark_processed")
     def test_full_pipeline_success(
@@ -27,6 +29,8 @@ class TestProcessSingleRelease:
         mock_metadata: Mock,
         mock_torrent: Mock,
         mock_upload: Mock,
+        mock_mam_json: Mock,
+        mock_settings: Mock,
     ) -> None:
         """Test successful processing of a single release through all steps."""
         # Arrange
@@ -70,6 +74,7 @@ class TestProcessSingleRelease:
             mock_upload.assert_called_once()
             mock_mark_processed.assert_called_once_with(release)
 
+    @patch("mamfast.workflow.get_settings")
     @patch("mamfast.workflow.upload_torrent")
     @patch("mamfast.workflow.create_torrent")
     @patch("mamfast.workflow.stage_release")
@@ -80,6 +85,7 @@ class TestProcessSingleRelease:
         mock_stage: Mock,
         mock_torrent: Mock,
         mock_upload: Mock,
+        mock_settings: Mock,
     ) -> None:
         """Test that pipeline handles torrent creation failure correctly."""
         # Arrange
@@ -115,6 +121,7 @@ class TestProcessSingleRelease:
             # Upload should not be called if torrent creation fails
             mock_upload.assert_not_called()
 
+    @patch("mamfast.workflow.get_settings")
     @patch("mamfast.workflow.upload_torrent")
     @patch("mamfast.workflow.create_torrent")
     @patch("mamfast.workflow.stage_release")
@@ -125,6 +132,7 @@ class TestProcessSingleRelease:
         mock_stage: Mock,
         mock_torrent: Mock,
         mock_upload: Mock,
+        mock_settings: Mock,
     ) -> None:
         """Test that pipeline handles upload failure correctly."""
         # Arrange
@@ -166,6 +174,7 @@ class TestProcessSingleRelease:
 class TestFullPipeline:
     """Integration tests for the full pipeline."""
 
+    @patch("mamfast.workflow.get_settings")
     @patch("mamfast.discovery.get_new_releases")
     @patch("mamfast.workflow.run_liberate")
     @patch("mamfast.workflow.run_scan")
@@ -174,6 +183,7 @@ class TestFullPipeline:
         mock_scan: Mock,
         mock_liberate: Mock,
         mock_get_releases: Mock,
+        mock_settings: Mock,
     ) -> None:
         """Test full run when no new releases are found."""
         # Arrange
@@ -201,6 +211,7 @@ class TestFullPipeline:
         mock_scan.assert_called_once()
         mock_liberate.assert_called_once()
 
+    @patch("mamfast.workflow.get_settings")
     @patch("mamfast.workflow.is_processed")
     @patch("mamfast.workflow.process_single_release")
     @patch("mamfast.discovery.get_new_releases")
@@ -213,6 +224,7 @@ class TestFullPipeline:
         mock_get_releases: Mock,
         mock_process: Mock,
         mock_is_processed: Mock,
+        mock_settings: Mock,
     ) -> None:
         """Test that full run skips already processed releases."""
         # Arrange
@@ -255,6 +267,7 @@ class TestFullPipeline:
         """Test that dry run mode shows what would happen without making changes."""
         # This is a smoke test - just ensure dry run doesn't crash
         with (
+            patch("mamfast.workflow.get_settings"),
             patch("mamfast.workflow.run_scan") as mock_scan,
             patch("mamfast.workflow.run_liberate") as mock_liberate,
             patch("mamfast.discovery.get_new_releases") as mock_releases,

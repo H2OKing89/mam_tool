@@ -144,6 +144,10 @@ class TestCreateTorrent:
         mock_settings.target_uid = 99
         mock_settings.target_gid = 100
 
+        # Create the expected torrent file (mkbrr would create this)
+        expected_torrent = output_dir / f"{content_dir.name}.torrent"
+        expected_torrent.touch()
+
         with (
             patch("subprocess.run", return_value=mock_result),
             patch("mamfast.mkbrr.get_settings", return_value=mock_settings),
@@ -154,6 +158,7 @@ class TestCreateTorrent:
 
         assert result.success is True
         assert result.return_code == 0
+        assert result.torrent_path == expected_torrent
 
     def test_create_torrent_failure(self, tmp_path: Path):
         """Test failed torrent creation."""

@@ -32,7 +32,7 @@ from rich.progress import (
 from mamfast.config import get_settings
 from mamfast.hardlinker import stage_release
 from mamfast.libation import run_liberate, run_scan
-from mamfast.metadata import fetch_all_metadata
+from mamfast.metadata import fetch_metadata, generate_mam_json_for_release
 from mamfast.mkbrr import create_torrent
 from mamfast.models import AudiobookRelease, ProcessingResult, ReleaseStatus
 from mamfast.qbittorrent import upload_torrent
@@ -103,10 +103,9 @@ class PipelineResult:
 def _fetch_metadata_with_retry(
     asin: str | None,
     m4b_path: Path | None,
-    output_dir: Path,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """Fetch metadata with retry logic for network failures."""
-    return fetch_all_metadata(asin=asin, m4b_path=m4b_path, output_dir=output_dir)
+    return fetch_metadata(asin=asin, m4b_path=m4b_path)
 
 
 @retry_with_backoff(
@@ -194,7 +193,6 @@ def process_single_release(
             audnex_data, mediainfo_data = _fetch_metadata_with_retry(
                 asin=release.asin,
                 m4b_path=release.main_m4b,
-                output_dir=staging_dir,
             )
             release.audnex_metadata = audnex_data
             release.mediainfo_data = mediainfo_data
@@ -226,7 +224,19 @@ def process_single_release(
             )
 
         release.torrent_path = mkbrr_result.torrent_path
+        release.staging_dir = staging_dir  # Store for MAM JSON generation
         release.status = ReleaseStatus.TORRENT_CREATED
+
+        # ---------------------------------------------------------------------
+        # 3b. Generate MAM fast-upload JSON (saved with torrent file)
+        # ---------------------------------------------------------------------
+        if not skip_metadata and (release.audnex_metadata or release.mediainfo_data):
+            logger.debug("Step 3b: Generating MAM fast-upload JSON")
+            mam_json_path = generate_mam_json_for_release(
+                release, output_dir=settings.paths.torrent_output
+            )
+            if mam_json_path:
+                logger.info(f"MAM JSON saved: {mam_json_path.name}")
 
         # ---------------------------------------------------------------------
         # 4. Upload to qBittorrent
