@@ -224,7 +224,6 @@ def process_single_release(
             )
 
         release.torrent_path = mkbrr_result.torrent_path
-        release.staging_dir = staging_dir  # Store for MAM JSON generation
         release.status = ReleaseStatus.TORRENT_CREATED
 
         # ---------------------------------------------------------------------

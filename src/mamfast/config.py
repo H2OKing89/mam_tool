@@ -247,7 +247,6 @@ def validate_required_env_vars() -> None:
         "QB_HOST": "qBittorrent Web UI URL (e.g., http://10.1.60.10:8080)",
         "QB_USERNAME": "qBittorrent username",
         "QB_PASSWORD": "qBittorrent password",
-        # Note: MAM_ANNOUNCE_URL is optional - mkbrr presets handle the announce URL
     }
 
     missing = []

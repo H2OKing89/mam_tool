@@ -516,7 +516,10 @@ def fetch_all_metadata(
     save_intermediate: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     """
-    Fetch both Audnex and MediaInfo metadata.
+    Fetch both Audnex and MediaInfo metadata, optionally saving intermediate files.
+
+    By default, this function only fetches metadata without saving files.
+    Set save_intermediate=True to write audnex.json and mediainfo.json to output_dir.
 
     Args:
         asin: Audible ASIN (None to skip Audnex)
