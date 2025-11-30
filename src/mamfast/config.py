@@ -331,7 +331,8 @@ def validate_settings(settings: Settings) -> list[str]:
     # Validate numeric ranges
     if settings.mam.max_filename_length < 1 or settings.mam.max_filename_length > 255:
         raise ConfigurationError(
-            f"mam.max_filename_length must be between 1 and 255, got: {settings.mam.max_filename_length}\n"
+            f"mam.max_filename_length must be between 1 and 255, "
+            f"got: {settings.mam.max_filename_length}\n"
             f"Fix: Update mam.max_filename_length in config/config.yaml"
         )
 
@@ -536,8 +537,9 @@ def load_settings(
 
     # Parse Libation config
     libation_data = yaml_config.get("libation", {})
+    default_folder_pattern = r"^(.*?)(?: vol_(\d+))?(?: \((\d{4})\))?$"
     libation = LibationConfig(
-        folder_pattern=libation_data.get("folder_pattern", r"^(.*?)(?: vol_(\d+))?(?: \((\d{4})\))?$"),
+        folder_pattern=libation_data.get("folder_pattern", default_folder_pattern),
         metadata_file_suffix=libation_data.get("metadata_file_suffix", ".metadata.json"),
         asin_pattern=libation_data.get("asin_pattern", r"^[A-Z0-9]{10}$"),
     )

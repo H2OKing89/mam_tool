@@ -24,7 +24,6 @@ from rich.progress import (
     BarColumn,
     Progress,
     SpinnerColumn,
-    TaskID,
     TextColumn,
     TimeElapsedColumn,
     TimeRemainingColumn,
@@ -218,7 +217,8 @@ def process_single_release(
                 f"\nTroubleshooting:\n"
                 f"  1. Verify mkbrr Docker image is available: {settings.mkbrr.image}\n"
                 f"     Run: docker pull {settings.mkbrr.image}\n"
-                f"  2. Check preset '{settings.mkbrr.preset}' exists in {settings.mkbrr.host_config_dir}/presets.yaml\n"
+                f"  2. Check preset '{settings.mkbrr.preset}' exists in "
+                f"{settings.mkbrr.host_config_dir}/presets.yaml\n"
                 f"  3. Verify path mappings in config.yaml:\n"
                 f"     - host_data_root: {settings.mkbrr.host_data_root}\n"
                 f"     - container_data_root: {settings.mkbrr.container_data_root}\n"
@@ -248,18 +248,20 @@ def process_single_release(
         )
 
         if not success:
+            qb_host = settings.qbittorrent.host
             raise RuntimeError(
                 f"Failed to upload torrent to qBittorrent\n"
                 f"Torrent: {release.torrent_path}\n"
                 f"Save path: {staging_dir}\n"
                 f"\nTroubleshooting:\n"
-                f"  1. Verify qBittorrent is running and accessible at {settings.qbittorrent.host}\n"
+                f"  1. Verify qBittorrent is running and accessible at {qb_host}\n"
                 f"  2. Check credentials in config/.env:\n"
                 f"     - QB_USERNAME: {settings.qbittorrent.username}\n"
                 f"     - QB_PASSWORD: (check it's correct)\n"
                 f"  3. Verify WebUI is enabled in qBittorrent preferences\n"
                 f"  4. Check qBittorrent logs for errors\n"
-                f"  5. Test connection: curl -u username:password {settings.qbittorrent.host}/api/v2/app/version"
+                f"  5. Test connection: curl -u username:password "
+                f"{qb_host}/api/v2/app/version"
             )
 
         release.status = ReleaseStatus.UPLOADED
