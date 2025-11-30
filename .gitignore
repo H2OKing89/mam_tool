@@ -50,7 +50,13 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
-# data
+# Data and config (user-specific, may contain secrets)
 data/
 logs/
 config/config.yaml
+config/.env
+
+# Backup files
+*.bak
+*.backup
+*~
