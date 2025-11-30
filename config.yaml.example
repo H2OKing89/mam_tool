@@ -98,6 +98,8 @@ qbittorrent:
     - "mamfast"
     - "auto-upload"
   auto_start: true                    # Start seeding immediately after upload
+  auto_tmm: false                     # Automatic Torrent Management (let qBittorrent manage save paths)
+  save_path: "/data/downloads/torrents/qbittorrent/seedvault/audiobooks"  # Path as seen by qBittorrent container
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Audnex API (for fetching audiobook metadata)

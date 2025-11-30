@@ -95,7 +95,7 @@ class QBittorrentConfig:
     qBittorrent settings.
 
     Credentials (host, username, password) come from .env file.
-    Other settings (category, tags, auto_start) come from config.yaml.
+    Other settings (category, tags, auto_start, auto_tmm, save_path) come from config.yaml.
     """
 
     host: str = ""  # From .env: QB_HOST
@@ -104,6 +104,8 @@ class QBittorrentConfig:
     category: str = "mam-audiobooks"
     tags: list[str] = field(default_factory=lambda: ["mamfast"])
     auto_start: bool = True
+    auto_tmm: bool = False  # Automatic Torrent Management
+    save_path: str = ""  # Static save path as seen by qBittorrent (container path)
 
 
 @dataclass
@@ -521,6 +523,8 @@ def load_settings(
         category=qb_data.get("category", "mam-audiobooks"),
         tags=qb_data.get("tags", ["mamfast"]),
         auto_start=qb_data.get("auto_start", True),
+        auto_tmm=qb_data.get("auto_tmm", False),
+        save_path=qb_data.get("save_path", ""),
     )
 
     # Parse Audnex config

@@ -116,7 +116,7 @@ def _fetch_metadata_with_retry(
 )
 def _upload_torrent_with_retry(
     torrent_path: Path,
-    save_path: Path,
+    save_path: Path | None = None,
 ) -> bool:
     """Upload torrent with retry logic for network failures."""
     return upload_torrent(torrent_path=torrent_path, save_path=save_path)
@@ -252,9 +252,18 @@ def process_single_release(
                 f"  - mkbrr result: {mkbrr_result}"
             )
 
+        # Use configured save_path (container path) + release folder name
+        # Only needed when auto_tmm is disabled
+        if settings.qbittorrent.auto_tmm:
+            # Auto TMM: qBittorrent manages save path via category
+            qb_save_path = None
+        else:
+            # Manual: build save path from config + release folder
+            qb_save_path = Path(settings.qbittorrent.save_path) / staging_dir.name
+
         success = _upload_torrent_with_retry(
             torrent_path=release.torrent_path,
-            save_path=staging_dir,
+            save_path=qb_save_path,
         )
 
         if not success:
@@ -595,20 +604,28 @@ def upload_only(torrent_paths: list[Path] | None = None) -> int:
     uploaded = 0
 
     for torrent_path in torrent_paths:
-        # Determine save path from torrent name
-        # Convention: torrent name matches staging dir name
-        staging_name = torrent_path.stem
-        save_path = settings.paths.library_root / staging_name
+        # Determine save_path only if auto_tmm is disabled
+        if settings.qbittorrent.auto_tmm:
+            # Auto TMM: qBittorrent manages save path via category
+            qb_save_path = None
+        else:
+            # Manual: build save path from config + release folder name
+            # Strip any mkbrr preset prefix from torrent name
+            staging_name = torrent_path.stem
+            # Handle preset prefixes like "myanonamouse_"
+            if "_" in staging_name:
+                parts = staging_name.split("_", 1)
+                # If first part looks like a preset name, use the rest
+                if len(parts) == 2 and not any(c.isdigit() for c in parts[0]):
+                    staging_name = parts[1]
 
-        if not save_path.exists():
-            # Try seed root as fallback
-            save_path = settings.paths.seed_root / staging_name
+            qb_save_path = Path(settings.qbittorrent.save_path) / staging_name
 
         logger.info(f"Uploading: {torrent_path.name}")
 
         success = upload_torrent(
             torrent_path=torrent_path,
-            save_path=save_path,
+            save_path=qb_save_path,
         )
 
         if success:
