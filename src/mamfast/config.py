@@ -344,7 +344,7 @@ def validate_settings(settings: Settings) -> list[str]:
 
     # Validate Docker binary exists
     docker_bin = Path(settings.docker_bin)
-    if not docker_bin.exists() and not docker_bin.is_file():
+    if not docker_bin.is_file():
         warnings.append(
             f"Docker binary not found at: {settings.docker_bin}\n"
             f"Fix: Install Docker or update DOCKER_BIN in config/.env"
@@ -358,12 +358,10 @@ def validate_settings(settings: Settings) -> list[str]:
         )
 
     # Validate file extensions format
-    for ext in settings.mam.allowed_extensions:
-        if not ext.startswith("."):
-            warnings.append(
-                f"Extension should start with dot: '{ext}' "
-                f"(recommended: '.{ext}')"
-            )
+    invalid_extensions = [ext for ext in settings.mam.allowed_extensions if not ext.startswith(".")]
+    if invalid_extensions:
+        formatted = ", ".join(f"'{ext}' -> '.{ext}'" for ext in invalid_extensions)
+        warnings.append(f"Extensions should start with dot: {formatted}")
 
     return warnings
 

@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed race condition in state file writes by using atomic rename operations
 - Fixed indentation issues in dry-run output
 
-## [0.1.0] - 2025-11-30
+## [0.1.0] - 2025-01-30
 
 ### Added
 

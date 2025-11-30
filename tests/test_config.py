@@ -227,7 +227,8 @@ environment:
                 "MAM_ANNOUNCE_URL=http://tracker.example.com\n"
             )
 
-            settings = load_settings(env_file=env_path, config_file=config_path)
+            # validate=False since we're testing config loading, not path validation
+            settings = load_settings(env_file=env_path, config_file=config_path, validate=False)
 
             assert settings.paths.library_root == Path("/tmp/library")
             assert settings.mam.max_filename_length == 200
@@ -267,7 +268,8 @@ paths:
                 {"QB_HOST": "", "QB_USERNAME": "", "QB_PASSWORD": "", "MAM_ANNOUNCE_URL": ""},
                 clear=False,
             ):
-                settings = load_settings(config_file=config_path)
+                # validate=False since we're testing .env discovery, not path validation
+                settings = load_settings(config_file=config_path, validate=False)
 
             # The .env file should have been loaded
             assert settings.qbittorrent.host in [

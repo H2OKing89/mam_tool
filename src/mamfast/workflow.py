@@ -413,10 +413,10 @@ def full_run(
         )
 
         for i, release in enumerate(releases, 1):
-            # Update progress description
-            progress.update(
-                task, description=f"[cyan]{release.display_name[:50]}...", visible=not dry_run
-            )
+            # Update progress description (truncate long names with ellipsis)
+            name = release.display_name
+            display = f"{name[:50]}..." if len(name) > 50 else name
+            progress.update(task, description=f"[cyan]{display}", visible=not dry_run)
 
             logger.info(f"[{i}/{len(releases)}] {release.display_name}")
 
