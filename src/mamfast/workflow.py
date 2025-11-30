@@ -257,9 +257,12 @@ def process_single_release(
         if settings.qbittorrent.auto_tmm:
             # Auto TMM: qBittorrent manages save path via category
             qb_save_path = None
-        else:
+        elif settings.qbittorrent.save_path:
             # Manual: build save path from config + release folder
             qb_save_path = Path(settings.qbittorrent.save_path) / staging_dir.name
+        else:
+            # No save_path configured - let qBittorrent use its default
+            qb_save_path = None
 
         success = _upload_torrent_with_retry(
             torrent_path=release.torrent_path,
@@ -608,18 +611,18 @@ def upload_only(torrent_paths: list[Path] | None = None) -> int:
         if settings.qbittorrent.auto_tmm:
             # Auto TMM: qBittorrent manages save path via category
             qb_save_path = None
-        else:
+        elif settings.qbittorrent.save_path:
             # Manual: build save path from config + release folder name
-            # Strip any mkbrr preset prefix from torrent name
+            # Strip mkbrr preset prefix from torrent name if present
             staging_name = torrent_path.stem
-            # Handle preset prefixes like "myanonamouse_"
-            if "_" in staging_name:
-                parts = staging_name.split("_", 1)
-                # If first part looks like a preset name, use the rest
-                if len(parts) == 2 and not any(c.isdigit() for c in parts[0]):
-                    staging_name = parts[1]
+            preset_prefix = settings.mkbrr.preset
+            if preset_prefix and staging_name.startswith(f"{preset_prefix}_"):
+                staging_name = staging_name[len(preset_prefix) + 1 :]
 
             qb_save_path = Path(settings.qbittorrent.save_path) / staging_name
+        else:
+            # No save_path configured - let qBittorrent use its default
+            qb_save_path = None
 
         logger.info(f"Uploading: {torrent_path.name}")
 
