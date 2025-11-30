@@ -166,7 +166,7 @@ class TestProcessSingleRelease:
 class TestFullPipeline:
     """Integration tests for the full pipeline."""
 
-    @patch("mamfast.workflow.get_new_releases")
+    @patch("mamfast.discovery.get_new_releases")
     @patch("mamfast.workflow.run_liberate")
     @patch("mamfast.workflow.run_scan")
     def test_full_run_with_no_releases(
@@ -203,7 +203,7 @@ class TestFullPipeline:
 
     @patch("mamfast.workflow.is_processed")
     @patch("mamfast.workflow.process_single_release")
-    @patch("mamfast.workflow.get_new_releases")
+    @patch("mamfast.discovery.get_new_releases")
     @patch("mamfast.workflow.run_liberate")
     @patch("mamfast.workflow.run_scan")
     def test_full_run_skips_already_processed(
@@ -257,7 +257,7 @@ class TestFullPipeline:
         with (
             patch("mamfast.workflow.run_scan") as mock_scan,
             patch("mamfast.workflow.run_liberate") as mock_liberate,
-            patch("mamfast.workflow.get_new_releases") as mock_releases,
+            patch("mamfast.discovery.get_new_releases") as mock_releases,
         ):
             mock_scan.return_value = MagicMock(success=True)
             mock_liberate.return_value = MagicMock(success=True)
