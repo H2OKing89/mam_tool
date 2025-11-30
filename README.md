@@ -61,13 +61,13 @@ Automates the pipeline from Libation audiobook downloads to MAM-ready torrents s
 
 ## 🔄 Pipeline
 
-\`\`\`
+```
 Libation Scan → Discover New → Stage (Hardlink) → Metadata → mkbrr → qBittorrent
-\`\`\`
+```
 
 ## 📥 Installation
 
-\`\`\`bash
+```bash
 # Clone the repo
 git clone <your-repo-url> mamfast
 cd mamfast
@@ -85,8 +85,8 @@ mkdir -p config
 echo "# See .env.example for available variables" > config/.env
 
 # Edit with your settings
-\$EDITOR config/.env config/config.yaml
-\`\`\`
+$EDITOR config/.env config/config.yaml
+```
 
 ## ⚙️ Configuration
 
@@ -95,7 +95,7 @@ MAMFast uses three configuration sources:
 <details>
 <summary><strong>1. <code>config/.env</code> - Secrets (never commit)</strong></summary>
 
-\`\`\`bash
+```bash
 # qBittorrent credentials
 QB_HOST=http://10.1.60.10:8080
 QB_USERNAME=admin
@@ -110,14 +110,14 @@ DOCKER_BIN=/usr/bin/docker
 TARGET_UID=99
 TARGET_GID=100
 LOG_LEVEL=INFO
-\`\`\`
+```
 
 </details>
 
 <details>
 <summary><strong>2. <code>config/config.yaml</code> - Paths & Settings</strong></summary>
 
-\`\`\`yaml
+```yaml
 paths:
   library_root: "/mnt/user/data/audio/LibationLibrary"
   seed_root: "/mnt/user/data/seedvault/audiobooks"
@@ -152,7 +152,7 @@ qbittorrent:
 audnex:
   base_url: "https://api.audnex.us"
   timeout_seconds: 30
-\`\`\`
+```
 
 </details>
 
@@ -161,13 +161,13 @@ audnex:
 
 Maps audiobook genres to MAM category IDs:
 
-\`\`\`json
+```json
 {
   "fantasy": 39,
   "science fiction": 40,
   "mystery": 41
 }
-\`\`\`
+```
 
 </details>
 
@@ -175,15 +175,15 @@ Maps audiobook genres to MAM category IDs:
 
 ### Full Pipeline
 
-\`\`\`bash
+```bash
 mamfast run                   # Run everything
 mamfast run --skip-scan       # Skip Libation scan
 mamfast run --skip-metadata   # Skip metadata fetching
-\`\`\`
+```
 
 ### Step by Step
 
-\`\`\`bash
+```bash
 mamfast scan              # Trigger Libation download
 mamfast scan --liberate   # Scan and download new books
 mamfast discover          # List new audiobooks
@@ -192,27 +192,27 @@ mamfast prepare           # Stage files (hardlink + rename)
 mamfast metadata          # Fetch Audnex + MediaInfo
 mamfast torrent           # Create .torrent files
 mamfast upload            # Add to qBittorrent
-\`\`\`
+```
 
 ### Utilities
 
-\`\`\`bash
+```bash
 mamfast status            # Show processing status
 mamfast config            # Debug: print loaded config
-\`\`\`
+```
 
 ### Global Options
 
 | Option | Description |
 |--------|-------------|
-| \`-v, --verbose\` | Enable DEBUG logging |
-| \`-c, --config PATH\` | Custom config.yaml path |
-| \`--dry-run\` | Preview without changes |
-| \`-V, --version\` | Show version |
+| `-v, --verbose` | Enable DEBUG logging |
+| `-c, --config PATH` | Custom config.yaml path |
+| `--dry-run` | Preview without changes |
+| `-V, --version` | Show version |
 
 ## 📁 Project Structure
 
-\`\`\`
+```
 mamfast/
 ├── src/mamfast/
 │   ├── __init__.py
@@ -244,7 +244,7 @@ mamfast/
 ├── pyproject.toml
 ├── LICENSE
 └── README.md
-\`\`\`
+```
 
 ## 📋 Requirements
 
@@ -253,11 +253,11 @@ mamfast/
 | Python 3.11+ | Required |
 | Docker | For Libation and mkbrr containers |
 | qBittorrent | With Web UI enabled |
-| \`mediainfo\` | CLI tool for audio metadata |
+| `mediainfo` | CLI tool for audio metadata |
 
 ## 🛠️ Development
 
-\`\`\`bash
+```bash
 # Install dev dependencies
 pip install -e ".[dev]"
 
@@ -278,7 +278,7 @@ mypy src/
 
 # Run all checks (pre-commit)
 pre-commit run --all-files
-\`\`\`
+```
 
 ## 📄 License
 
