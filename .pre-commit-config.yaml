@@ -11,15 +11,15 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  # MyPy - static type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+  # MyPy - static type checking (uses local installation)
+  - repo: local
     hooks:
       - id: mypy
-        additional_dependencies:
-          - types-PyYAML
-        args: [--strict, --ignore-missing-imports]
-        exclude: ^tests/
+        name: mypy
+        entry: bash -c 'cd /mnt/cache/scripts/mam_tool && source .venv/bin/activate && mypy src/'
+        language: system
+        pass_filenames: false
+        always_run: true
 
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks

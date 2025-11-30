@@ -219,7 +219,9 @@ def _get_kakasi() -> Any:
     try:
         import pykakasi
 
-        return pykakasi.kakasi()
+        # pykakasi has no type stubs, suppress mypy error
+        kks = pykakasi.kakasi()  # type: ignore[no-untyped-call]
+        return kks
     except ImportError:
         logger.debug("pykakasi not installed, Japanese transliteration unavailable")
         return None
