@@ -14,8 +14,11 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from mamfast.config import get_settings
 from mamfast.hardlinker import stage_release
@@ -24,9 +27,45 @@ from mamfast.metadata import fetch_all_metadata
 from mamfast.mkbrr import create_torrent
 from mamfast.models import AudiobookRelease, ProcessingResult, ReleaseStatus
 from mamfast.qbittorrent import upload_torrent
+from mamfast.utils.retry import NETWORK_EXCEPTIONS, retry_with_backoff
 from mamfast.utils.state import is_processed, mark_failed, mark_processed
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Progress Callback Types
+# =============================================================================
+
+
+class ProgressStage(Enum):
+    """Pipeline stages for progress reporting."""
+
+    SCAN = "scan"
+    DISCOVERY = "discovery"
+    STAGING = "staging"
+    METADATA = "metadata"
+    TORRENT = "torrent"
+    UPLOAD = "upload"
+    COMPLETE = "complete"
+    FAILED = "failed"
+
+
+@dataclass
+class ProgressInfo:
+    """Progress information passed to callbacks."""
+
+    stage: ProgressStage
+    release_index: int = 0  # Current release (1-based)
+    release_total: int = 0  # Total releases
+    release_name: str = ""
+    message: str = ""
+    error: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+# Type alias for progress callback
+ProgressCallback = Callable[[ProgressInfo], None]
 
 
 @dataclass
@@ -41,10 +80,52 @@ class PipelineResult:
     duration_seconds: float
 
 
+# =============================================================================
+# Retry-wrapped operations
+# =============================================================================
+
+
+@retry_with_backoff(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=30.0,
+    exceptions=NETWORK_EXCEPTIONS,
+)
+def _fetch_metadata_with_retry(
+    asin: str | None,
+    m4b_path: Path | None,
+    output_dir: Path,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Fetch metadata with retry logic for network failures."""
+    return fetch_all_metadata(asin=asin, m4b_path=m4b_path, output_dir=output_dir)
+
+
+@retry_with_backoff(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=15.0,
+    exceptions=NETWORK_EXCEPTIONS,
+)
+def _upload_torrent_with_retry(
+    torrent_path: Path,
+    save_path: Path,
+) -> bool:
+    """Upload torrent with retry logic for network failures."""
+    return upload_torrent(torrent_path=torrent_path, save_path=save_path)
+
+
+# =============================================================================
+# Single Release Processing
+# =============================================================================
+
+
 def process_single_release(
     release: AudiobookRelease,
     skip_metadata: bool = False,
     preset: str | None = None,
+    progress_callback: ProgressCallback | None = None,
+    release_index: int = 0,
+    release_total: int = 0,
 ) -> ProcessingResult:
     """
     Process a single release through the full pipeline.
@@ -60,6 +141,9 @@ def process_single_release(
         release: AudiobookRelease to process
         skip_metadata: Skip Audnex/MediaInfo fetching
         preset: Override mkbrr preset
+        progress_callback: Optional callback for progress updates
+        release_index: Current release number (1-based) for progress
+        release_total: Total releases being processed
 
     Returns:
         ProcessingResult with success/failure info
@@ -67,12 +151,27 @@ def process_single_release(
     settings = get_settings()
     start_time = time.time()
 
+    def notify(stage: ProgressStage, message: str = "", **extra: Any) -> None:
+        """Helper to send progress updates."""
+        if progress_callback:
+            progress_callback(
+                ProgressInfo(
+                    stage=stage,
+                    release_index=release_index,
+                    release_total=release_total,
+                    release_name=release.display_name,
+                    message=message,
+                    extra=extra,
+                )
+            )
+
     logger.info(f"Processing: {release.display_name}")
 
     try:
         # ---------------------------------------------------------------------
         # 1. Stage
         # ---------------------------------------------------------------------
+        notify(ProgressStage.STAGING, "Creating hardlinks...")
         logger.debug("Step 1: Staging release")
         staging_dir = stage_release(release)
         release.status = ReleaseStatus.STAGED
@@ -81,8 +180,9 @@ def process_single_release(
         # 2. Metadata (optional)
         # ---------------------------------------------------------------------
         if not skip_metadata:
+            notify(ProgressStage.METADATA, "Fetching Audnex + MediaInfo...")
             logger.debug("Step 2: Fetching metadata")
-            audnex_data, mediainfo_data = fetch_all_metadata(
+            audnex_data, mediainfo_data = _fetch_metadata_with_retry(
                 asin=release.asin,
                 m4b_path=release.main_m4b,
                 output_dir=staging_dir,
@@ -94,6 +194,7 @@ def process_single_release(
         # ---------------------------------------------------------------------
         # 3. Create torrent
         # ---------------------------------------------------------------------
+        notify(ProgressStage.TORRENT, "Creating torrent file...")
         logger.debug("Step 3: Creating torrent")
         mkbrr_result = create_torrent(
             content_path=staging_dir,
@@ -109,12 +210,13 @@ def process_single_release(
         # ---------------------------------------------------------------------
         # 4. Upload to qBittorrent
         # ---------------------------------------------------------------------
+        notify(ProgressStage.UPLOAD, "Uploading to qBittorrent...")
         logger.debug("Step 4: Uploading to qBittorrent")
 
         if release.torrent_path is None:
             raise RuntimeError("No torrent path after mkbrr")
 
-        success = upload_torrent(
+        success = _upload_torrent_with_retry(
             torrent_path=release.torrent_path,
             save_path=staging_dir,
         )
@@ -131,6 +233,7 @@ def process_single_release(
         mark_processed(release)
 
         duration = time.time() - start_time
+        notify(ProgressStage.COMPLETE, f"Completed in {duration:.1f}s")
         logger.info(f"✅ Completed: {release.display_name} ({duration:.1f}s)")
 
         return ProcessingResult(
@@ -144,6 +247,7 @@ def process_single_release(
         duration = time.time() - start_time
         error_msg = str(e)
 
+        notify(ProgressStage.FAILED, error_msg, error=error_msg)
         logger.error(f"❌ Failed: {release.display_name} - {error_msg}")
 
         release.status = ReleaseStatus.FAILED
@@ -158,10 +262,16 @@ def process_single_release(
         )
 
 
+# =============================================================================
+# Full Pipeline
+# =============================================================================
+
+
 def full_run(
     skip_scan: bool = False,
     skip_metadata: bool = False,
     dry_run: bool = False,
+    progress_callback: ProgressCallback | None = None,
 ) -> PipelineResult:
     """
     Run the complete pipeline from Libation scan to qBittorrent upload.
@@ -170,16 +280,29 @@ def full_run(
         skip_scan: Skip Libation scan step
         skip_metadata: Skip metadata fetching
         dry_run: Show what would happen without making changes
+        progress_callback: Optional callback for progress updates
 
     Returns:
         PipelineResult with statistics
     """
     start_time = time.time()
 
+    def notify(stage: ProgressStage, message: str = "", **extra: Any) -> None:
+        """Helper to send progress updates."""
+        if progress_callback:
+            progress_callback(
+                ProgressInfo(
+                    stage=stage,
+                    message=message,
+                    extra=extra,
+                )
+            )
+
     # -------------------------------------------------------------------------
     # 1. Libation scan + liberate (optional)
     # -------------------------------------------------------------------------
     if not skip_scan:
+        notify(ProgressStage.SCAN, "Running Libation scan...")
         logger.info("Step 1: Running Libation scan...")
         if not dry_run:
             scan_result = run_scan()
@@ -197,6 +320,7 @@ def full_run(
     # -------------------------------------------------------------------------
     # 2. Discover new releases
     # -------------------------------------------------------------------------
+    notify(ProgressStage.DISCOVERY, "Discovering new releases...")
     logger.info("Step 2: Discovering new releases...")
 
     # TODO: Replace with actual discovery once implemented
@@ -280,6 +404,9 @@ def full_run(
         result = process_single_release(
             release,
             skip_metadata=skip_metadata,
+            progress_callback=progress_callback,
+            release_index=i,
+            release_total=len(releases),
         )
         results.append(result)
 
@@ -289,6 +416,14 @@ def full_run(
     duration = time.time() - start_time
     successful = sum(1 for r in results if r.success)
     failed = sum(1 for r in results if not r.success)
+
+    notify(
+        ProgressStage.COMPLETE,
+        f"Pipeline complete: {successful} succeeded, {failed} failed, {skipped} skipped",
+        successful=successful,
+        failed=failed,
+        skipped=skipped,
+    )
 
     logger.info("=" * 50)
     logger.info(f"Pipeline complete in {duration:.1f}s")
