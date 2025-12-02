@@ -519,7 +519,7 @@ class TestQBittorrentHelper:
         assert success is False
         assert "not configured" in message
 
-    @patch("requests.get")
+    @patch("httpx.get")
     def test_connection_success(self, mock_get):
         """Successful connection should return True."""
         mock_get.return_value = MagicMock(status_code=200, text="4.5.0")
@@ -530,12 +530,12 @@ class TestQBittorrentHelper:
         assert success is True
         assert "Connected" in message
 
-    @patch("requests.get")
+    @patch("httpx.get")
     def test_connection_refused(self, mock_get):
         """Connection refused should return False."""
-        import requests
+        import httpx
 
-        mock_get.side_effect = requests.exceptions.ConnectionError()
+        mock_get.side_effect = httpx.ConnectError("Connection refused")
 
         settings = MockSettings()
         success, message = _check_qbittorrent(settings)
@@ -547,28 +547,28 @@ class TestQBittorrentHelper:
 class TestAudnexHelper:
     """Tests for Audnex API helper function."""
 
-    @patch("requests.head")
+    @patch("httpx.head")
     def test_api_reachable(self, mock_head):
         """Reachable API should return True."""
         mock_head.return_value = MagicMock(status_code=200)
         assert _check_audnex_api("https://api.audnex.us", 30) is True
 
-    @patch("requests.head")
+    @patch("httpx.head")
     def test_api_404_still_reachable(self, mock_head):
         """404 response should still count as reachable."""
         mock_head.return_value = MagicMock(status_code=404)
         assert _check_audnex_api("https://api.audnex.us", 30) is True
 
-    @patch("requests.head")
+    @patch("httpx.head")
     def test_api_500_not_reachable(self, mock_head):
         """500 response should count as not reachable."""
         mock_head.return_value = MagicMock(status_code=500)
         assert _check_audnex_api("https://api.audnex.us", 30) is False
 
-    @patch("requests.head")
+    @patch("httpx.head")
     def test_api_connection_error(self, mock_head):
         """Connection error should return False."""
-        import requests
+        import httpx
 
-        mock_head.side_effect = requests.exceptions.ConnectionError()
+        mock_head.side_effect = httpx.ConnectError("Connection refused")
         assert _check_audnex_api("https://api.audnex.us", 30) is False

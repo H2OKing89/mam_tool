@@ -27,7 +27,6 @@ dev = [
     "ruff",
     "mypy",
     "types-PyYAML",
-    "types-requests",
     "pre-commit>=3.0",
 ]
 
@@ -50,10 +49,6 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = "pykakasi"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "requests"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Literal
 
-import requests
+import httpx
 
 if TYPE_CHECKING:
     from mamfast.config import Settings
@@ -419,7 +419,7 @@ def _check_qbittorrent(settings: Settings) -> tuple[bool, str]:
     try:
         # First check if API is reachable
         version_url = f"{host}/api/v2/app/version"
-        response = requests.get(version_url, timeout=5)
+        response = httpx.get(version_url, timeout=5)
 
         if response.status_code == 200:
             version = response.text.strip()
@@ -428,7 +428,7 @@ def _check_qbittorrent(settings: Settings) -> tuple[bool, str]:
         # Try to authenticate
         if settings.qbittorrent.username and settings.qbittorrent.password:
             login_url = f"{host}/api/v2/auth/login"
-            login_response = requests.post(
+            login_response = httpx.post(
                 login_url,
                 data={
                     "username": settings.qbittorrent.username,
@@ -438,10 +438,9 @@ def _check_qbittorrent(settings: Settings) -> tuple[bool, str]:
             )
 
             if login_response.status_code == 200 and login_response.text == "Ok.":
-                # Try version again with session
-                session = requests.Session()
-                session.cookies = login_response.cookies
-                version_response = session.get(version_url, timeout=5)
+                # Try version again with cookies
+                cookies = login_response.cookies
+                version_response = httpx.get(version_url, cookies=cookies, timeout=5)
                 if version_response.status_code == 200:
                     version = version_response.text.strip()
                     return True, f"qBittorrent: Connected (v{version})"
@@ -450,11 +449,11 @@ def _check_qbittorrent(settings: Settings) -> tuple[bool, str]:
 
         return False, f"qBittorrent: Requires authentication at {host}"
 
-    except requests.exceptions.ConnectionError:
+    except httpx.ConnectError:
         return False, f"qBittorrent: Connection refused at {host}"
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         return False, f"qBittorrent: Connection timeout at {host}"
-    except requests.exceptions.RequestException as e:
+    except httpx.HTTPError as e:
         return False, f"qBittorrent: Error - {e}"
 
 
@@ -463,8 +462,8 @@ def _check_audnex_api(base_url: str, timeout: int) -> bool:
     try:
         # Use a known ASIN to test the API (lightweight check)
         test_url = f"{base_url}/books/B0G4NFQDWR"
-        response = requests.head(test_url, timeout=timeout)
+        response = httpx.head(test_url, timeout=timeout)
         # Accept any response (200, 404, etc.) as long as we got a response
         return bool(response.status_code < 500)
-    except requests.exceptions.RequestException:
+    except httpx.HTTPError:
         return False
