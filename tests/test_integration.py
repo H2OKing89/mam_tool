@@ -50,7 +50,7 @@ class TestProcessSingleRelease:
 
             # Mock the pipeline steps
             mock_stage.return_value = staging_dir
-            mock_metadata.return_value = ({"title": "Test"}, {"media": {}})
+            mock_metadata.return_value = ({"title": "Test"}, {"media": {}}, {"chapters": []})
 
             mock_torrent_result = MagicMock()
             mock_torrent_result.success = True
@@ -379,7 +379,7 @@ class TestWorkflowSavePathLogic:
             )
 
             mock_stage.return_value = staging_dir
-            mock_metadata.return_value = ({"title": "Test"}, {"media": {}})
+            mock_metadata.return_value = ({"title": "Test"}, {"media": {}}, {"chapters": []})
 
             mock_torrent_result = MagicMock()
             mock_torrent_result.success = True
@@ -433,7 +433,7 @@ class TestWorkflowSavePathLogic:
             )
 
             mock_stage.return_value = staging_dir
-            mock_metadata.return_value = ({"title": "Test"}, {"media": {}})
+            mock_metadata.return_value = ({"title": "Test"}, {"media": {}}, {"chapters": []})
 
             mock_torrent_result = MagicMock()
             mock_torrent_result.success = True
@@ -488,7 +488,7 @@ class TestWorkflowSavePathLogic:
             )
 
             mock_stage.return_value = staging_dir
-            mock_metadata.return_value = ({"title": "Test"}, {"media": {}})
+            mock_metadata.return_value = ({"title": "Test"}, {"media": {}}, {"chapters": []})
 
             mock_torrent_result = MagicMock()
             mock_torrent_result.success = True

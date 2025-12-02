@@ -64,6 +64,7 @@ class AudiobookRelease:
     # -------------------------------------------------------------------------
     audnex_metadata: dict[str, Any] | None = None
     mediainfo_data: dict[str, Any] | None = None
+    audnex_chapters: dict[str, Any] | None = None  # Audnex chapters API response
 
     # -------------------------------------------------------------------------
     # Timestamps

@@ -79,6 +79,121 @@ class TestFetchAudnexBook:
         assert result is None
 
 
+class TestFetchAudnexChapters:
+    """Tests for Audnex chapters API integration."""
+
+    def test_fetch_chapters_success(self):
+        """Test successful chapters fetch."""
+        from mamfast.metadata import fetch_audnex_chapters
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "asin": "B09TEST123",
+            "runtimeLengthMs": 25050260,
+            "runtimeLengthSec": 25050,
+            "chapters": [
+                {
+                    "lengthMs": 19597,
+                    "startOffsetMs": 0,
+                    "startOffsetSec": 0,
+                    "title": "Opening Credits",
+                },
+                {
+                    "lengthMs": 706513,
+                    "startOffsetMs": 19597,
+                    "startOffsetSec": 19,
+                    "title": "Prologue",
+                },
+            ],
+        }
+
+        mock_client = MagicMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        mock_settings = MagicMock()
+        mock_settings.audnex.base_url = "https://api.audnex.us"
+        mock_settings.audnex.timeout_seconds = 30
+
+        with (
+            patch("httpx.Client", return_value=mock_client),
+            patch("mamfast.metadata.get_settings", return_value=mock_settings),
+        ):
+            result = fetch_audnex_chapters("B09TEST123")
+
+        assert result is not None
+        assert result["asin"] == "B09TEST123"
+        assert result["runtimeLengthSec"] == 25050
+        assert len(result["chapters"]) == 2
+        assert result["chapters"][0]["title"] == "Opening Credits"
+
+    def test_fetch_chapters_not_found(self):
+        """Test handling 404 response for chapters."""
+        from mamfast.metadata import fetch_audnex_chapters
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+
+        mock_client = MagicMock()
+        mock_client.get.return_value = mock_response
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        mock_settings = MagicMock()
+        mock_settings.audnex.base_url = "https://api.audnex.us"
+        mock_settings.audnex.timeout_seconds = 30
+
+        with (
+            patch("httpx.Client", return_value=mock_client),
+            patch("mamfast.metadata.get_settings", return_value=mock_settings),
+        ):
+            result = fetch_audnex_chapters("INVALID_ASIN")
+
+        assert result is None
+
+
+class TestParseChaptersFromAudnex:
+    """Tests for parsing Audnex chapters response."""
+
+    def test_parse_chapters(self):
+        """Test parsing chapters from Audnex response."""
+        from mamfast.metadata import _parse_chapters_from_audnex
+
+        chapters_data = {
+            "chapters": [
+                {"startOffsetSec": 0, "title": "Opening Credits"},
+                {"startOffsetSec": 726, "title": "Chapter 1"},
+                {"startOffsetSec": 5479, "title": "Chapter 2"},
+            ],
+        }
+
+        result = _parse_chapters_from_audnex(chapters_data)
+
+        assert len(result) == 3
+        assert result[0].start == "00:00"
+        assert result[0].title == "Opening Credits"
+        assert result[1].start == "12:06"
+        assert result[1].title == "Chapter 1"
+        assert result[2].start == "1:31:19"
+        assert result[2].title == "Chapter 2"
+
+    def test_parse_empty_chapters(self):
+        """Test parsing empty chapters list."""
+        from mamfast.metadata import _parse_chapters_from_audnex
+
+        result = _parse_chapters_from_audnex({"chapters": []})
+        assert result == []
+
+    def test_parse_no_chapters_key(self):
+        """Test parsing response without chapters key."""
+        from mamfast.metadata import _parse_chapters_from_audnex
+
+        result = _parse_chapters_from_audnex({})
+        assert result == []
+
+
 class TestRunMediainfo:
     """Tests for mediainfo integration."""
 

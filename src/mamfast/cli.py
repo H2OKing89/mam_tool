@@ -476,7 +476,7 @@ def cmd_metadata(args: argparse.Namespace) -> int:
             print_dry_run(f"Would generate MAM JSON in: {torrent_output}")
             continue
 
-        audnex_data, mediainfo_data = fetch_all_metadata(
+        audnex_data, mediainfo_data, audnex_chapters = fetch_all_metadata(
             asin=asin,
             m4b_path=m4b_path,
             output_dir=staging_dir,
@@ -486,6 +486,12 @@ def cmd_metadata(args: argparse.Namespace) -> int:
             print_success("Audnex metadata fetched")
         else:
             print_warning("Audnex: not found")
+
+        if audnex_chapters:
+            chapter_count = len(audnex_chapters.get("chapters", []))
+            print_success(f"Audnex chapters: {chapter_count} chapters")
+        else:
+            print_warning("Audnex chapters: not found")
 
         if mediainfo_data:
             print_success("MediaInfo extracted")
@@ -499,9 +505,10 @@ def cmd_metadata(args: argparse.Namespace) -> int:
             main_m4b=m4b_path,
             audnex_metadata=audnex_data,
             mediainfo_data=mediainfo_data,
+            audnex_chapters=audnex_chapters,
         )
 
-        mam_data = build_mam_json(release)
+        mam_data = build_mam_json(release, audnex_chapters=audnex_chapters)
         if mam_data.get("title"):
             json_name = f"{staging_dir.name}.json"
             json_path = torrent_output / json_name

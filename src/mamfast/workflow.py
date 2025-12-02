@@ -104,7 +104,7 @@ class PipelineResult:
 def _fetch_metadata_with_retry(
     asin: str | None,
     m4b_path: Path | None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
     """Fetch metadata with retry logic for network failures."""
     return fetch_metadata(asin=asin, m4b_path=m4b_path)
 
@@ -192,14 +192,18 @@ def process_single_release(
         if not skip_metadata:
             notify(ProgressStage.METADATA, "Fetching Audnex + MediaInfo...")
             logger.debug("Step 2: Fetching metadata")
-            audnex_data, mediainfo_data = _fetch_metadata_with_retry(
+            audnex_data, mediainfo_data, audnex_chapters = _fetch_metadata_with_retry(
                 asin=release.asin,
                 m4b_path=release.main_m4b,
             )
             release.audnex_metadata = audnex_data
             release.mediainfo_data = mediainfo_data
+            release.audnex_chapters = audnex_chapters
             if audnex_data:
                 print_success(f"Audnex metadata for {release.asin}")
+            if audnex_chapters:
+                chapter_count = len(audnex_chapters.get("chapters", []))
+                print_success(f"Audnex chapters: {chapter_count} chapters")
             if mediainfo_data:
                 print_success("MediaInfo extracted")
             release.status = ReleaseStatus.METADATA_FETCHED

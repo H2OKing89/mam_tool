@@ -218,6 +218,7 @@ def render_bbcode_description(
     audnex_data: dict[str, Any],
     mediainfo_data: dict[str, Any] | None = None,
     asin: str | None = None,
+    audnex_chapters: dict[str, Any] | None = None,
 ) -> str:
     """
     Render BBCode description from Audnex and MediaInfo data.
@@ -228,6 +229,7 @@ def render_bbcode_description(
         audnex_data: Audnex API response
         mediainfo_data: MediaInfo JSON (optional)
         asin: ASIN override (uses audnex_data.asin if not provided)
+        audnex_chapters: Audnex chapters API response (preferred over mediainfo)
 
     Returns:
         Rendered BBCode description string
@@ -292,10 +294,17 @@ def render_bbcode_description(
 
     # Audio info from MediaInfo
     audio_info = {}
-    chapters: list[Chapter] = []
     if mediainfo_data:
         audio_info = _extract_audio_info(mediainfo_data)
+
+    # Chapters: prefer Audnex API data over mediainfo (Audnex is authoritative)
+    chapters: list[Chapter] = []
+    if audnex_chapters:
+        chapters = _parse_chapters_from_audnex(audnex_chapters)
+        logger.debug(f"Using {len(chapters)} chapters from Audnex API")
+    elif mediainfo_data:
         chapters = _parse_chapters_from_mediainfo(mediainfo_data)
+        logger.debug(f"Using {len(chapters)} chapters from mediainfo (Audnex not available)")
 
     # Render template
     description = template.render(
@@ -399,6 +408,82 @@ def fetch_audnex_author(asin: str) -> dict[str, Any] | None:
         return None
 
 
+def fetch_audnex_chapters(asin: str) -> dict[str, Any] | None:
+    """
+    Fetch chapter data from Audnex API.
+
+    Args:
+        asin: Audible ASIN (e.g., "B000SEI1RG")
+
+    Returns:
+        Parsed JSON response with chapters or None if not found.
+        Response includes: asin, brandIntroDurationMs, brandOutroDurationMs,
+        chapters (list with lengthMs, startOffsetMs, startOffsetSec, title),
+        runtimeLengthMs, runtimeLengthSec
+    """
+    settings = get_settings()
+    url = f"{settings.audnex.base_url}/books/{asin}/chapters"
+
+    logger.debug(f"Fetching Audnex chapters: {url}")
+
+    try:
+        with httpx.Client(timeout=settings.audnex.timeout_seconds) as client:
+            response = client.get(url)
+
+            if response.status_code == 404:
+                logger.warning(f"Chapters not found in Audnex for ASIN: {asin}")
+                return None
+
+            response.raise_for_status()
+            data: dict[str, Any] = response.json()
+
+            chapter_count = len(data.get("chapters", []))
+            logger.info(f"Fetched {chapter_count} chapters from Audnex for ASIN: {asin}")
+            return data
+
+    except httpx.TimeoutException:
+        logger.error(f"Timeout fetching Audnex chapters for: {asin}")
+        return None
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"HTTP error from Audnex chapters: {e}")
+        return None
+
+    except Exception as e:
+        logger.exception(f"Error fetching Audnex chapters: {e}")
+        return None
+
+
+def _parse_chapters_from_audnex(chapters_data: dict[str, Any]) -> list[Chapter]:
+    """
+    Convert Audnex chapters API response to list of Chapter objects.
+
+    Args:
+        chapters_data: Audnex chapters API response
+
+    Returns:
+        List of Chapter objects with formatted timestamps
+    """
+    chapters: list[Chapter] = []
+
+    try:
+        raw_chapters = chapters_data.get("chapters", [])
+        for ch in raw_chapters:
+            start_seconds = ch.get("startOffsetSec", 0)
+            title = ch.get("title", "")
+            if title:
+                chapters.append(
+                    Chapter(
+                        start=_format_chapter_time(float(start_seconds)),
+                        title=title,
+                    )
+                )
+    except Exception as e:
+        logger.warning(f"Failed to parse chapters from Audnex: {e}")
+
+    return chapters
+
+
 def save_audnex_json(data: dict[str, Any], output_path: Path) -> None:
     """Write Audnex metadata to JSON file."""
     with open(output_path, "w", encoding="utf-8") as f:
@@ -476,27 +561,30 @@ def save_mediainfo_json(data: dict[str, Any], output_path: Path) -> None:
 def fetch_metadata(
     asin: str | None = None,
     m4b_path: Path | None = None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
     """
-    Fetch Audnex and MediaInfo metadata without saving.
+    Fetch Audnex book metadata, chapters, and MediaInfo without saving.
 
     Args:
         asin: Audible ASIN (None to skip Audnex)
         m4b_path: Path to m4b file (None to skip MediaInfo)
 
     Returns:
-        Tuple of (audnex_data, mediainfo_data), either may be None on error.
+        Tuple of (audnex_data, mediainfo_data, audnex_chapters), any may be None on error.
     """
     audnex_data = None
     mediainfo_data = None
+    audnex_chapters = None
 
     if asin:
         audnex_data = fetch_audnex_book(asin)
+        # Also fetch chapter data from Audnex (authoritative source)
+        audnex_chapters = fetch_audnex_chapters(asin)
 
     if m4b_path and m4b_path.exists():
         mediainfo_data = run_mediainfo(m4b_path)
 
-    return audnex_data, mediainfo_data
+    return audnex_data, mediainfo_data, audnex_chapters
 
 
 def save_metadata_files(
@@ -527,9 +615,9 @@ def fetch_all_metadata(
     output_dir: Path | None = None,
     *,
     save_intermediate: bool = False,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
     """
-    Fetch both Audnex and MediaInfo metadata, optionally saving intermediate files.
+    Fetch Audnex book data, chapters, and MediaInfo, optionally saving intermediate files.
 
     By default, this function only fetches metadata without saving files.
     Set save_intermediate=True to write audnex.json and mediainfo.json to output_dir.
@@ -541,14 +629,14 @@ def fetch_all_metadata(
         save_intermediate: If True, save audnex.json and mediainfo.json files
 
     Returns:
-        Tuple of (audnex_data, mediainfo_data), either may be None on error.
+        Tuple of (audnex_data, mediainfo_data, audnex_chapters), any may be None on error.
     """
-    audnex_data, mediainfo_data = fetch_metadata(asin=asin, m4b_path=m4b_path)
+    audnex_data, mediainfo_data, audnex_chapters = fetch_metadata(asin=asin, m4b_path=m4b_path)
 
     if save_intermediate and output_dir:
         save_metadata_files(output_dir, audnex_data=audnex_data, mediainfo_data=mediainfo_data)
 
-    return audnex_data, mediainfo_data
+    return audnex_data, mediainfo_data, audnex_chapters
 
 
 # =============================================================================
@@ -824,6 +912,7 @@ def build_mam_json(
     release: AudiobookRelease,
     audnex_data: dict[str, Any] | None = None,
     mediainfo_data: dict[str, Any] | None = None,
+    audnex_chapters: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Build MAM fast-fillout JSON from release metadata.
@@ -832,6 +921,7 @@ def build_mam_json(
         release: AudiobookRelease object with metadata
         audnex_data: Optional Audnex API response (uses release.audnex_metadata if None)
         mediainfo_data: Optional MediaInfo JSON (uses release.mediainfo_data if None)
+        audnex_chapters: Optional Audnex chapters API response (for accurate chapter data)
 
     Returns:
         Dict ready to be serialized as MAM JSON
@@ -878,6 +968,7 @@ def build_mam_json(
             audnex_data=audnex,
             mediainfo_data=mediainfo,
             asin=release.asin,
+            audnex_chapters=audnex_chapters,
         )
         if bbcode_description:
             mam_json["description"] = bbcode_description
@@ -1015,8 +1106,8 @@ def generate_mam_json_for_release(
     """
     Generate MAM JSON file for a release.
 
-    Uses release.audnex_metadata and release.mediainfo_data if available,
-    or fetches them if not.
+    Uses release.audnex_metadata, release.mediainfo_data, and release.audnex_chapters
+    if available, or fetches them if not.
 
     Args:
         release: AudiobookRelease with metadata populated
@@ -1040,8 +1131,8 @@ def generate_mam_json_for_release(
 
     output_path = Path(output_dir) / json_name
 
-    # Build and save
-    mam_data = build_mam_json(release)
+    # Build and save (pass audnex_chapters from release if available)
+    mam_data = build_mam_json(release, audnex_chapters=release.audnex_chapters)
 
     if not mam_data.get("title"):
         logger.warning(f"No title for MAM JSON: {release.display_name}")
