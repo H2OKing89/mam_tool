@@ -39,7 +39,12 @@ from mamfast.mkbrr import create_torrent
 from mamfast.models import AudiobookRelease, ProcessingResult, ReleaseStatus
 from mamfast.qbittorrent import upload_torrent
 from mamfast.utils.retry import NETWORK_EXCEPTIONS, retry_with_backoff
-from mamfast.utils.state import is_processed, mark_failed, mark_processed
+from mamfast.utils.state import (
+    get_processed_identifiers,
+    is_processed,
+    mark_failed,
+    mark_processed,
+)
 from mamfast.validation import (
     ChapterIntegrityChecker,
     DiscoveryValidation,
@@ -191,7 +196,9 @@ def process_single_release(
         notify(ProgressStage.VALIDATION, "Validating release...")
         logger.debug("Step 0: Discovery validation")
 
-        discovery_validator = DiscoveryValidation()
+        # Load processed identifiers for duplicate detection
+        processed_ids = get_processed_identifiers()
+        discovery_validator = DiscoveryValidation(processed_identifiers=processed_ids)
         discovery_result = discovery_validator.validate(release)
 
         # Log validation results

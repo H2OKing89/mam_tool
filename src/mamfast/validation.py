@@ -1242,13 +1242,22 @@ class ChapterIntegrityChecker:
         """Sum chapter durations in seconds."""
         total = 0.0
         for ch in chapters:
-            # Try different duration field names
-            duration = ch.get("lengthMs") or ch.get("length_ms") or ch.get("duration")
-            if duration:
-                # Convert ms to seconds if needed
-                if duration > 1000000:  # Likely milliseconds
+            duration: float | None = None
+
+            # Prefer explicit milliseconds fields (field name indicates unit)
+            if "lengthMs" in ch and ch["lengthMs"] is not None:
+                duration = float(ch["lengthMs"]) / 1000
+            elif "length_ms" in ch and ch["length_ms"] is not None:
+                duration = float(ch["length_ms"]) / 1000
+            elif "duration" in ch and ch["duration"] is not None:
+                duration = float(ch["duration"])
+                # If duration is suspiciously large, treat as ms
+                # Threshold: 10,000,000 = ~115 days (extremely unlikely for audiobooks)
+                if duration > 10_000_000:
                     duration = duration / 1000
-                total += float(duration)
+
+            if duration is not None:
+                total += duration
         return total
 
     def _extract_mediainfo_chapters(
@@ -1310,17 +1319,22 @@ def sanitize_path_component(name: str) -> str:
     # Remove null bytes
     result = name.replace("\x00", "")
 
-    # Remove directory traversal patterns
-    result = result.replace("..", "")
-    result = result.replace("./", "")
-    result = result.replace(".\\", "")
+    # Remove path separators FIRST (before traversal patterns)
+    # This prevents bypass attacks like "..../" -> "../" after single replacement
+    result = result.replace("/", "-")
+    result = result.replace("\\", "-")
+
+    # Remove directory traversal patterns in a loop until none remain
+    # This prevents bypass attacks like "...." -> ".." after single replacement
+    while ".." in result:
+        result = result.replace("..", "")
+    while "./" in result:
+        result = result.replace("./", "")
+    while ".\\" in result:
+        result = result.replace(".\\", "")
 
     # Remove leading/trailing dots and spaces
     result = result.strip(". ")
-
-    # Remove path separators
-    result = result.replace("/", "-")
-    result = result.replace("\\", "-")
 
     # Collapse multiple dashes
     while "--" in result:
