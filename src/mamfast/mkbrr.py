@@ -170,6 +170,9 @@ def create_torrent(
         preset = settings.mkbrr.preset
     output_dir = Path(settings.mkbrr.host_output_dir) if output_dir is None else Path(output_dir)
 
+    # Ensure output directory exists (may be per-release subfolder)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     # Convert to container paths
     container_content = host_to_container_data_path(content_path)
     container_output = host_to_container_torrent_path(output_dir)

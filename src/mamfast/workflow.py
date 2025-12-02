@@ -213,8 +213,14 @@ def process_single_release(
         # ---------------------------------------------------------------------
         notify(ProgressStage.TORRENT, "Creating torrent file...")
         logger.debug("Step 3: Creating torrent")
+
+        # Create per-release output subfolder for torrent + JSON
+        release_output_dir = settings.paths.torrent_output / staging_dir.name
+        release_output_dir.mkdir(parents=True, exist_ok=True)
+
         mkbrr_result = create_torrent(
             content_path=staging_dir,
+            output_dir=release_output_dir,
             preset=preset or settings.mkbrr.preset,
         )
 
@@ -243,9 +249,7 @@ def process_single_release(
         # ---------------------------------------------------------------------
         if not skip_metadata and (release.audnex_metadata or release.mediainfo_data):
             logger.debug("Step 3b: Generating MAM fast-upload JSON")
-            mam_json_path = generate_mam_json_for_release(
-                release, output_dir=settings.paths.torrent_output
-            )
+            mam_json_path = generate_mam_json_for_release(release, output_dir=release_output_dir)
             if mam_json_path:
                 print_success(f"MAM JSON: {mam_json_path.name}")
 

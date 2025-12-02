@@ -1122,6 +1122,9 @@ def generate_mam_json_for_release(
     if output_dir is None:
         output_dir = settings.paths.torrent_output
 
+    # Ensure output directory exists (may be per-release subfolder)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
     # Build filename: same as torrent but .json extension
     # Format: "Author - Title.json"
     if release.staging_dir:
