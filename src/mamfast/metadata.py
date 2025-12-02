@@ -27,7 +27,7 @@ import httpx
 from jinja2 import Environment, PackageLoader
 
 from mamfast.config import get_settings
-from mamfast.utils.naming import filter_authors
+from mamfast.utils.naming import filter_authors, transliterate_text
 
 if TYPE_CHECKING:
     from mamfast.models import AudiobookRelease
@@ -251,10 +251,23 @@ def render_bbcode_description(
 
     synopsis = _clean_html(audnex_data.get("summary", ""))
 
+    # Get settings for transliteration (fallback to no transliteration if not available)
+    try:
+        settings = get_settings()
+        filters = settings.filters
+    except Exception:
+        filters = None
+
     authors_raw = audnex_data.get("authors", [])
     authors_filtered = filter_authors(authors_raw)
-    authors = [a.get("name", "") for a in authors_filtered if a.get("name")]
-    narrators = [n.get("name", "") for n in audnex_data.get("narrators", []) if n.get("name")]
+    authors = [
+        transliterate_text(a.get("name", ""), filters) for a in authors_filtered if a.get("name")
+    ]
+    narrators = [
+        transliterate_text(n.get("name", ""), filters)
+        for n in audnex_data.get("narrators", [])
+        if n.get("name")
+    ]
 
     # Translator detection (look for "translator" in author/narrator names or roles)
     translator = None
@@ -676,8 +689,16 @@ def _get_audiobook_category(audnex_data: dict[str, Any], is_fiction: bool) -> st
     Returns:
         MAM audiobook category string (e.g., "Audiobooks - Fantasy")
     """
-    settings = get_settings()
-    categories = settings.categories
+    # Default fallback
+    default_category = (
+        "Audiobooks - General Fiction" if is_fiction else "Audiobooks - General Non-Fic"
+    )
+
+    try:
+        settings = get_settings()
+        categories = settings.categories
+    except Exception:
+        return default_category
 
     # Select the appropriate map based on fiction/nonfiction
     if is_fiction:
@@ -687,11 +708,8 @@ def _get_audiobook_category(audnex_data: dict[str, Any], is_fiction: bool) -> st
         category_map = categories.audiobook_nonfiction_map
         default_key = "nonfiction"
 
-    # Get default from config or hardcode
-    default_category = categories.audiobook_defaults.get(
-        default_key,
-        "Audiobooks - General Fiction" if is_fiction else "Audiobooks - General Non-Fic",
-    )
+    # Get default from config
+    default_category = categories.audiobook_defaults.get(default_key, default_category)
 
     # If no map loaded, return default
     if not category_map:
@@ -721,8 +739,12 @@ def _map_genres_to_categories(genres: list[dict[str, Any]]) -> list[int]:
     Returns:
         List of unique MAM category IDs
     """
-    settings = get_settings()
-    category_map = settings.categories.genre_map
+    try:
+        settings = get_settings()
+        category_map = settings.categories.genre_map
+    except Exception:
+        return []
+
     categories: set[int] = set()
 
     for genre in genres:
@@ -820,25 +842,35 @@ def build_mam_json(
 
     mam_json: dict[str, Any] = {}
 
+    # Get settings for transliteration (fallback to no transliteration if not available)
+    try:
+        settings = get_settings()
+        filters = settings.filters
+    except Exception:
+        filters = None
+
     # Title - use Audnex title or fallback to release title
     title = audnex.get("title") or release.title
     if title:
         mam_json["title"] = title
 
-    # Authors (filter out translators, illustrators, etc.)
+    # Authors (filter out translators, illustrators, etc. and transliterate Japanese names)
     authors = audnex.get("authors", [])
     if authors:
         filtered_authors = filter_authors(authors)
-        mam_json["authors"] = [a.get("name", "") for a in filtered_authors if a.get("name")]
+        author_names = [a.get("name", "") for a in filtered_authors if a.get("name")]
+        # Transliterate Japanese/foreign names
+        mam_json["authors"] = [transliterate_text(name, filters) for name in author_names]
     elif release.author:
-        mam_json["authors"] = [release.author]
+        mam_json["authors"] = [transliterate_text(release.author, filters)]
 
-    # Narrators
+    # Narrators (also transliterate)
     narrators = audnex.get("narrators", [])
     if narrators:
-        mam_json["narrators"] = [n.get("name", "") for n in narrators if n.get("name")]
+        narrator_names = [n.get("name", "") for n in narrators if n.get("name")]
+        mam_json["narrators"] = [transliterate_text(name, filters) for name in narrator_names]
     elif release.narrator:
-        mam_json["narrators"] = [release.narrator]
+        mam_json["narrators"] = [transliterate_text(release.narrator, filters)]
 
     # Description - render BBCode using Jinja2 template
     if audnex:
