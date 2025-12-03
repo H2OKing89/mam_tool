@@ -1384,8 +1384,8 @@ class TestBuildMamPath:
         without_tag = build_mam_path(**kwargs, ripper_tag=None)
 
         # Without tag should have more room
-        # Budget without tag: (225 - 5) // 2 = 110
-        # Budget with "H2OKing": (225 - 7 - 4 - 4) // 2 = 105
+        # Budget without tag: (225 - ext - 1) // 2 = (225 - 4 - 1) // 2 = 110
+        # Budget with "H2OKing": (225 - (len(tag)+4) - ext) // 2 = (225 - 11 - 4) // 2 = 105
         assert without_tag.length < with_tag.length
         assert "[H2OKing]" in with_tag.folder
         assert "[" not in without_tag.folder

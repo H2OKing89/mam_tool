@@ -104,8 +104,22 @@ def stage_release(release: AudiobookRelease) -> Path:
             dst_name = mam_path.filename
         else:
             # Strip .m4b and add this file's extension
-            base_without_ext = mam_path.filename.rsplit(".m4b", 1)[0]
+            base_without_ext = mam_path.filename.removesuffix(".m4b")
             dst_name = f"{base_without_ext}{src_file.suffix}"
+
+            # Check if non-.m4b extension exceeds budget (e.g., .jpeg > .m4b)
+            full_ancillary_path = f"{mam_path.folder}/{dst_name}"
+            max_path_len = settings.mam.max_filename_length
+            if len(full_ancillary_path) > max_path_len:
+                # Truncate base to fit the longer extension
+                max_base = max_path_len - len(mam_path.folder) - 1 - len(src_file.suffix)
+                base_without_ext = base_without_ext[:max_base]
+                dst_name = f"{base_without_ext}{src_file.suffix}"
+                new_len = len(mam_path.folder) + 1 + len(dst_name)
+                logger.debug(
+                    f"  Truncated ancillary filename for {src_file.suffix}: "
+                    f"{len(full_ancillary_path)} -> {new_len} chars"
+                )
 
         dst_file = staging_dir / dst_name
 

@@ -1649,9 +1649,6 @@ def _build_truncated_base_name(
     # Determine if this is a series or standalone book
     is_series = bool(series and vol_str)
 
-    # Build base identity (never dropped)
-    identity = f"{series} {vol_str}" if is_series else title
-
     # Track which optional components we have
     use_arc = bool(arc)
     use_year = bool(year)
@@ -1744,7 +1741,11 @@ def _build_truncated_base_name(
         asin_str,
     )
     dropped.append("emergency_truncation")
-    return f"{identity[:max_length - len(asin_str) - 4]}... {asin_str}"[:max_length], True, dropped
+    return (
+        f"{identity_to_truncate[:max_length - len(asin_str) - 4]}... {asin_str}"[:max_length],
+        True,
+        dropped,
+    )
 
 
 def build_mam_path(
@@ -1832,8 +1833,31 @@ def build_mam_path(
         max_length=max_base_len,
     )
 
-    # Sanitize the base name
+    # Sanitize the base name (can increase length: e.g., ':' -> ' -')
     base_name = sanitize_filename(base_name)
+
+    # Re-check length after sanitization - truncate if sanitization expanded it
+    if len(base_name) > max_base_len:
+        # Truncate to fit, preserving the ASIN at the end
+        asin_idx = base_name.rfind("{ASIN.")
+        if asin_idx > 0:
+            # Keep ASIN intact, truncate before it
+            available = max_base_len - (len(base_name) - asin_idx) - 4  # 4 for "... "
+            if available > 3:
+                base_name = base_name[:available] + "... " + base_name[asin_idx:]
+                if not truncated:
+                    truncated = True
+                    dropped.append("sanitization_expansion")
+            else:
+                # Emergency: just hard truncate
+                base_name = base_name[:max_base_len]
+        else:
+            base_name = base_name[:max_base_len]
+        logger.debug(
+            "Post-sanitization truncation for %s: base exceeded budget by %d chars",
+            asin,
+            len(base_name) - max_base_len,
+        )
 
     # Check if tag was dropped during truncation (not yet implemented in _build_truncated_base_name)
     # For now, tag is always included if provided - it's handled by the budget formula
