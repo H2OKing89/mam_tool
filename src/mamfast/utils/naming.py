@@ -1811,7 +1811,9 @@ def build_mam_path(
     vol_str = format_volume_number(volume_number)
 
     # Format ASIN (required for MAM)
-    asin_str = f"{{ASIN.{asin}}}"
+    # Pre-sanitize ASIN to ensure it doesn't introduce characters needing expansion later
+    clean_asin = sanitize_filename(asin) if asin else asin
+    asin_str = f"{{ASIN.{clean_asin}}}"
 
     # Calculate max base length using the budget formula
     max_base_len = _calculate_max_base_length(

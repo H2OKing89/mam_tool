@@ -55,7 +55,8 @@ def stage_release(release: AudiobookRelease) -> Path:
     volume_number = extract_volume_number(release.title, series_position=release.series_position)
 
     # Count how many audio files we have (for multi-part budget calculation)
-    m4b_count = sum(1 for f in release.source_dir.rglob("*.m4b"))
+    # Use glob (not rglob) since we only process files in this folder, not recursive
+    m4b_count = sum(1 for f in release.source_dir.glob("*.m4b"))
     part_count = max(1, m4b_count)
 
     # ASIN is required for MAM-compliant paths
@@ -108,17 +109,21 @@ def stage_release(release: AudiobookRelease) -> Path:
             dst_name = f"{base_without_ext}{src_file.suffix}"
 
             # Check if non-.m4b extension exceeds budget (e.g., .jpeg > .m4b)
-            full_ancillary_path = f"{mam_path.folder}/{dst_name}"
             max_path_len = settings.mam.max_filename_length
-            if len(full_ancillary_path) > max_path_len:
-                # Truncate base to fit the longer extension
-                max_base = max_path_len - len(mam_path.folder) - 1 - len(src_file.suffix)
-                base_without_ext = base_without_ext[:max_base]
-                dst_name = f"{base_without_ext}{src_file.suffix}"
-                new_len = len(mam_path.folder) + 1 + len(dst_name)
+            full_ancillary_path = f"{mam_path.folder}/{dst_name}"
+            original_len = len(full_ancillary_path)
+            if original_len > max_path_len:
+                # Truncate base and verify the full path fits; loop if needed
+                truncated_base = base_without_ext
+                while len(f"{mam_path.folder}/{truncated_base}{src_file.suffix}") > max_path_len:
+                    if len(truncated_base) <= 1:
+                        break  # Safety: don't truncate to empty
+                    truncated_base = truncated_base[:-1]
+                dst_name = f"{truncated_base}{src_file.suffix}"
+                new_len = len(f"{mam_path.folder}/{dst_name}")
                 logger.debug(
                     f"  Truncated ancillary filename for {src_file.suffix}: "
-                    f"{len(full_ancillary_path)} -> {new_len} chars"
+                    f"{original_len} -> {new_len} chars"
                 )
 
         dst_file = staging_dir / dst_name
