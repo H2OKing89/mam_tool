@@ -1,6 +1,6 @@
 # MAMFast Improvements Plan
 
-> Actionable roadmap for hardening the naming pipeline and improving DX.
+> Actionable roadmap for hardening MAMFast and improving DX across the entire codebase.
 > Derived from analysis of current implementation + community recommendations.
 
 ---
@@ -8,7 +8,7 @@
 ## Table of Contents
 
 1. [Priority Matrix](#priority-matrix)
-2. [Phase 1: Lock In Rules Engine](#phase-1-lock-in-rules-engine-pydantic)
+2. [Phase 1: Schema Validation](#phase-1-schema-validation-pydantic)
 3. [Phase 2: Bullet-Proof Filenames](#phase-2-bullet-proof-filenames-pathvalidate)
 4. [Phase 3: Visibility & Debugging](#phase-3-visibility--debugging-rich-enhancements)
 5. [Phase 4: Smart Validation](#phase-4-smart-validation-rapidfuzz)
@@ -19,38 +19,49 @@
 
 ## Priority Matrix
 
-| Priority | Library | Purpose | Status |
-|----------|---------|---------|--------|
-| **A1** | `pydantic` | Validate `naming.json` schema | 🔲 Not started |
-| **A2** | `pathvalidate` | Cross-platform filename safety | 🔲 Not started |
-| **A3** | `rich` (enhance) | Debug/dry-run output | ✅ Installed, enhance usage |
-| **A4** | `rapidfuzz` | Suspicious change detection | 🔲 Not started |
-| **B1** | `typer` | CLI improvements | 🔲 Nice to have |
-| **B2** | `tenacity` | Advanced retry logic | 🔲 Nice to have |
-| **B3** | `orjson` | Performance for large JSON | 🔲 Nice to have |
-| **B4** | `hypothesis` | Property-based testing | 🔲 Nice to have |
+| Priority | Library | Purpose | Applies To |
+|----------|---------|---------|------------|
+| **A1** | `pydantic` | Schema validation | Config, naming.json, API responses, state files |
+| **A2** | `pathvalidate` | Cross-platform filename safety | Naming, hardlinker, torrent output |
+| **A3** | `rich` (enhance) | Debug/dry-run output | CLI, workflow, validation |
+| **A4** | `rapidfuzz` | Fuzzy matching & dedup | Naming validation, duplicate detection |
+| **B1** | `typer` | CLI improvements | All CLI commands |
+| **B2** | `tenacity` | Advanced retry logic | Audnex, qBittorrent, Docker calls |
+| **B3** | `orjson` | Performance for large JSON | State files, exports, metadata cache |
+| **B4** | `hypothesis` | Property-based testing | All string processing, invariants |
 
 ---
 
-## Phase 1: Lock In Rules Engine (Pydantic)
+## Phase 1: Schema Validation (Pydantic)
 
 ### Problem
 
-Current `NamingConfig` is a dataclass with no runtime validation. A typo in `naming.json` like:
-
-```json
-{"action": "drp_subtitle"}  // should be "drop_subtitle"
-```
-
-...silently fails at runtime instead of at startup.
+Multiple data sources lack runtime validation:
+- `naming.json` - typos silently fail
+- `config.yaml` - wrong types not caught until runtime
+- Audnex API responses - unexpected structure causes crashes
+- `processed.json` state - corruption goes undetected
+- Libation exports - malformed data causes pipeline failures
 
 ### Solution
 
-Add Pydantic models **just** for `naming.json` validation. Keep existing dataclass-based config for everything else.
+Add Pydantic models for all external data boundaries. Keep existing dataclass-based config internally.
 
 ### Implementation
 
-#### 1.1 Create Pydantic models for naming.json
+#### 1.1 Create schema modules
+
+```
+src/mamfast/schemas/
+├── __init__.py
+├── naming.py          # naming.json validation
+├── config.py          # config.yaml validation
+├── audnex.py          # Audnex API response validation
+├── state.py           # processed.json validation
+└── libation.py        # Libation export validation
+```
+
+#### 1.2 Naming schema (naming.json)
 
 ```python
 # src/mamfast/schemas/naming.py
@@ -145,7 +156,154 @@ class NamingSchema(BaseModel):
     model_config = {"extra": "forbid"}  # Fail on unknown keys
 ```
 
-#### 1.2 Add validation to config loading
+#### 1.3 Audnex API response schema
+
+```python
+# src/mamfast/schemas/audnex.py
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+
+
+class AudnexAuthor(BaseModel):
+    """Author from Audnex API."""
+    asin: str
+    name: str
+
+
+class AudnexSeries(BaseModel):
+    """Series info from Audnex API."""
+    asin: str | None = None
+    name: str
+    position: str | None = None
+
+
+class AudnexChapter(BaseModel):
+    """Chapter from Audnex API."""
+    lengthMs: int
+    startOffsetMs: int
+    startOffsetSec: int
+    title: str
+
+
+class AudnexBook(BaseModel):
+    """
+    Validated Audnex book response.
+
+    Catches API changes/malformed responses at the boundary.
+    """
+    asin: str
+    title: str
+    subtitle: str | None = None
+    authors: list[AudnexAuthor] = Field(default_factory=list)
+    narrators: list[AudnexAuthor] = Field(default_factory=list)
+    seriesPrimary: AudnexSeries | None = None
+    seriesSecondary: AudnexSeries | None = None
+    genres: list[dict] = Field(default_factory=list)
+    releaseDate: str | None = None
+    publisherName: str | None = None
+    summary: str | None = None
+    image: str | None = None
+    chapters: list[AudnexChapter] = Field(default_factory=list)
+    lengthMin: int | None = None
+    language: str | None = None
+    region: str | None = None
+
+    model_config = {"extra": "ignore"}  # API may add new fields
+```
+
+#### 1.4 State file schema (processed.json)
+
+```python
+# src/mamfast/schemas/state.py
+from pydantic import BaseModel, Field
+from datetime import datetime
+
+
+class ProcessedRelease(BaseModel):
+    """A single processed release entry."""
+    asin: str
+    title: str
+    series: str | None = None
+    processed_at: datetime
+    status: str  # "complete", "failed", etc.
+    torrent_path: str | None = None
+    folder_name: str | None = None
+
+
+class ProcessedState(BaseModel):
+    """
+    Schema for processed.json state file.
+
+    Validates state integrity on load, catches corruption.
+    """
+    version: str = "1.0.0"
+    releases: dict[str, ProcessedRelease] = Field(default_factory=dict)
+
+    @classmethod
+    def load(cls, path: Path) -> "ProcessedState":
+        """Load and validate state file."""
+        if not path.exists():
+            return cls()
+        data = json.loads(path.read_text())
+        return cls.model_validate(data)
+
+    def save(self, path: Path) -> None:
+        """Save state with validation."""
+        path.write_text(self.model_dump_json(indent=2))
+```
+
+#### 1.5 Config schema (config.yaml)
+
+```python
+# src/mamfast/schemas/config.py
+from pydantic import BaseModel, Field, field_validator, DirectoryPath, FilePath
+from pathlib import Path
+
+
+class PathsSchema(BaseModel):
+    """Paths configuration validation."""
+    library_root: Path
+    torrent_output: Path
+    seed_root: Path
+    state_file: Path = Path("data/processed.json")
+    log_file: Path = Path("logs/mamfast.log")
+
+    @field_validator("library_root", "seed_root")
+    @classmethod
+    def validate_directory_exists(cls, v: Path) -> Path:
+        if not v.exists():
+            raise ValueError(f"Directory does not exist: {v}")
+        if not v.is_dir():
+            raise ValueError(f"Not a directory: {v}")
+        return v
+
+
+class QBittorrentSchema(BaseModel):
+    """qBittorrent configuration validation."""
+    category: str = "audiobooks"
+    tags: list[str] = Field(default_factory=list)
+    auto_start: bool = True
+    auto_tmm: bool = False
+    save_path: str | None = None
+
+
+class ConfigSchema(BaseModel):
+    """
+    Top-level config.yaml validation.
+
+    Catches missing required fields, wrong types, invalid paths.
+    """
+    paths: PathsSchema
+    mam: dict = Field(default_factory=dict)
+    mkbrr: dict = Field(default_factory=dict)
+    qbittorrent: QBittorrentSchema = Field(default_factory=QBittorrentSchema)
+    audnex: dict = Field(default_factory=dict)
+    filters: dict = Field(default_factory=dict)
+
+    model_config = {"extra": "allow"}  # Allow unknown sections for extensibility
+```
+
+#### 1.6 Add validation to config loading
 
 ```python
 # In src/mamfast/config.py
@@ -171,7 +329,7 @@ def _load_naming_config(config_dir: Path) -> NamingConfig:
         raise ConfigurationError(f"Invalid naming.json: {e}")
 ```
 
-#### 1.3 Add CLI command for validation
+#### 1.7 Add CLI command for validation
 
 ```bash
 mamfast validate-config
@@ -182,7 +340,19 @@ Output:
 ✅ config.yaml: valid
 ✅ naming.json: valid (v1.2.0, 47 rules)
 ✅ categories.json: valid (156 genre mappings)
+✅ processed.json: valid (127 releases)
 ```
+
+### Where Pydantic Applies
+
+| Component | Schema | Catches |
+|-----------|--------|---------|
+| `config.yaml` | `ConfigSchema` | Missing paths, wrong types |
+| `naming.json` | `NamingSchema` | Invalid actions, bad regexes |
+| `categories.json` | `CategoriesSchema` | Invalid category IDs |
+| `processed.json` | `ProcessedState` | Corrupted state, missing fields |
+| Audnex responses | `AudnexBook` | API changes, malformed data |
+| Libation exports | `LibationExport` | Unexpected format changes |
 
 ### Dependencies
 
@@ -196,11 +366,11 @@ dependencies = [
 
 ### Tests
 
-- [ ] `test_naming_schema_valid.py` - Valid naming.json loads
-- [ ] `test_naming_schema_invalid_action.py` - Bad action value fails
-- [ ] `test_naming_schema_invalid_regex.py` - Bad regex fails
-- [ ] `test_naming_schema_extra_keys.py` - Unknown keys fail
-- [ ] `test_naming_schema_version_format.py` - Version pattern validation
+- [ ] `test_naming_schema.py` - naming.json validation
+- [ ] `test_config_schema.py` - config.yaml validation
+- [ ] `test_audnex_schema.py` - API response validation
+- [ ] `test_state_schema.py` - processed.json validation
+- [ ] `test_schema_migration.py` - Version upgrades
 
 [↑ Back to top](#mamfast-improvements-plan)
 
@@ -215,20 +385,28 @@ Current sanitization handles common cases but may miss edge cases:
 - Unicode normalization issues
 - Platform-specific quirks
 
+These affect multiple components:
+- **Naming**: Release folder names, file names
+- **Hardlinker**: Destination paths for hardlinks
+- **Torrent output**: .torrent file names
+- **State files**: Paths stored in processed.json
+
 ### Solution
 
-Wrap existing filename builders with `pathvalidate` as a safety net.
+Wrap all path/filename generation with `pathvalidate` as a safety net.
 
 ### Implementation
 
-#### 2.1 Add pathvalidate wrapper
+#### 2.1 Create centralized path safety module
 
 ```python
-# src/mamfast/utils/naming.py
+# src/mamfast/utils/paths.py (extend existing)
 
 from pathvalidate import sanitize_filename as pv_sanitize
+from pathvalidate import sanitize_filepath as pv_sanitize_path
 
-def build_safe_filename(raw: str, max_length: int = 225) -> str:
+
+def safe_filename(raw: str, max_length: int = 225) -> str:
     """
     Build a safe filename with truncation and cross-platform sanitization.
 
@@ -237,32 +415,65 @@ def build_safe_filename(raw: str, max_length: int = 225) -> str:
     2. Truncate to max length
     3. Apply pathvalidate for OS-level safety
     """
-    # Our rules first
+    from mamfast.utils.naming import sanitize_filename, truncate_filename
+
     sanitized = sanitize_filename(raw)
-
-    # Truncate
     truncated = truncate_filename(sanitized, max_length=max_length)
-
-    # Final safety pass
     return pv_sanitize(truncated, platform="auto")
 
 
-def build_safe_dirname(raw: str, max_length: int = 225) -> str:
+def safe_dirname(raw: str, max_length: int = 225) -> str:
     """Build a safe directory name."""
+    from mamfast.utils.naming import sanitize_filename, truncate_filename
+
     sanitized = sanitize_filename(raw)
     truncated = truncate_filename(sanitized, max_length=max_length)
     return pv_sanitize(truncated, platform="auto")
+
+
+def safe_path(raw: str | Path) -> Path:
+    """Sanitize a full path (handles each component)."""
+    return Path(pv_sanitize_path(str(raw), platform="auto"))
 ```
 
-#### 2.2 Use in folder/file builders
+#### 2.2 Apply across codebase
 
 ```python
+# src/mamfast/utils/naming.py - build_release_dirname()
 def build_release_dirname(...) -> str:
     """Build release directory name."""
-    # ... existing logic to build raw name ...
     raw_name = f"{series} vol_{vol_num} ..."
-    return build_safe_dirname(raw_name)
+    return safe_dirname(raw_name)
+
+# src/mamfast/hardlinker.py - hardlink destination
+def create_hardlink(src: Path, dest_dir: Path, filename: str) -> Path:
+    safe_name = safe_filename(filename)
+    dest = dest_dir / safe_name
+    ...
+
+# src/mamfast/mkbrr.py - torrent file naming
+def create_torrent(release: AudiobookRelease) -> Path:
+    torrent_name = safe_filename(f"{release.folder_name}.torrent")
+    ...
+
+# src/mamfast/utils/state.py - stored paths
+def record_processed(release: AudiobookRelease) -> None:
+    # Paths stored in state are already sanitized at creation
+    state.releases[release.asin] = ProcessedRelease(
+        folder_name=release.folder_name,  # Already safe
+        ...
+    )
 ```
+
+### Where pathvalidate Applies
+
+| Component | Function | Why |
+|-----------|----------|-----|
+| `naming.py` | `build_release_dirname()` | Release folder names |
+| `naming.py` | `build_m4b_filename()` | Audio file names |
+| `hardlinker.py` | `create_hardlinks()` | Destination paths |
+| `mkbrr.py` | `create_torrent()` | Torrent file names |
+| `metadata.py` | `write_mam_json()` | JSON file paths |
 
 ### Dependencies
 
@@ -278,6 +489,8 @@ dependencies = [
 - [ ] `test_reserved_windows_names.py` - CON, PRN, NUL handled
 - [ ] `test_unicode_normalization.py` - Various Unicode edge cases
 - [ ] `test_platform_specific.py` - Windows vs Unix differences
+- [ ] `test_hardlinker_safe_paths.py` - Hardlink paths sanitized
+- [ ] `test_torrent_safe_names.py` - Torrent names sanitized
 
 [↑ Back to top](#mamfast-improvements-plan)
 
@@ -294,16 +507,20 @@ dependencies = [
 1. **Rule trace tables** - See exactly what each rule did
 2. **Dry-run mode** - Preview changes without writing
 3. **Validation reports** - Pretty tables of issues
+4. **Workflow progress** - Show pipeline stages
+5. **Error formatting** - Better exception display
 
 ### Implementation
 
-#### 3.1 Rule transformation logger
+#### 3.1 Create console utilities module
 
 ```python
 # src/mamfast/utils/console.py
 
 from rich.console import Console
 from rich.table import Table
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.panel import Panel
 
 console = Console()
 
@@ -344,9 +561,89 @@ def print_validation_report(results: list[dict]) -> None:
         table.add_row(r["asin"], r["title"][:40], status, issues)
 
     console.print(table)
+
+
+def print_workflow_summary(releases: list, stats: dict) -> None:
+    """Print workflow completion summary."""
+    table = Table(title="Workflow Summary", show_header=True)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="white")
+
+    table.add_row("Total Discovered", str(stats.get("discovered", 0)))
+    table.add_row("Staged", str(stats.get("staged", 0)))
+    table.add_row("Metadata Fetched", str(stats.get("metadata", 0)))
+    table.add_row("Torrents Created", str(stats.get("torrents", 0)))
+    table.add_row("Uploaded to qBit", str(stats.get("uploaded", 0)))
+    table.add_row("Skipped", str(stats.get("skipped", 0)))
+    table.add_row("Errors", str(stats.get("errors", 0)))
+
+    console.print(table)
+
+
+def print_release_details(release) -> None:
+    """Print detailed release info in a panel."""
+    from mamfast.models import AudiobookRelease
+
+    if not isinstance(release, AudiobookRelease):
+        return
+
+    content = f"""[cyan]ASIN:[/cyan] {release.asin}
+[cyan]Title:[/cyan] {release.title}
+[cyan]Series:[/cyan] {release.series or 'N/A'}
+[cyan]Authors:[/cyan] {', '.join(a.get('name', '') for a in release.authors[:3])}
+[cyan]Folder:[/cyan] {release.folder_name or 'Not set'}
+[cyan]Status:[/cyan] {release.status.value}"""
+
+    console.print(Panel(content, title=release.title[:50], expand=False))
 ```
 
-#### 3.2 Dry-run command
+#### 3.2 Workflow progress display
+
+```python
+# src/mamfast/workflow.py
+
+from mamfast.utils.console import console
+
+def run_workflow(releases: list[AudiobookRelease], dry_run: bool = False) -> None:
+    """Run the full workflow with progress display."""
+    from rich.progress import track
+
+    with console.status("[bold green]Processing releases...") as status:
+        for i, release in enumerate(releases):
+            status.update(f"[bold green]Processing {i+1}/{len(releases)}: {release.title[:30]}...")
+
+            # Stage
+            stage_release(release)
+
+            # Fetch metadata
+            status.update(f"[bold blue]Fetching metadata for {release.title[:30]}...")
+            fetch_metadata(release)
+
+            # Create torrent
+            if not dry_run:
+                status.update(f"[bold yellow]Creating torrent for {release.title[:30]}...")
+                create_torrent(release)
+
+    console.print("[bold green]✅ Workflow complete!")
+```
+
+#### 3.3 Error display
+
+```python
+# src/mamfast/utils/console.py
+
+def print_error(title: str, error: Exception, context: dict | None = None) -> None:
+    """Print formatted error with context."""
+    from rich.traceback import Traceback
+
+    console.print(f"[bold red]❌ {title}[/bold red]")
+    if context:
+        for key, value in context.items():
+            console.print(f"  [dim]{key}:[/dim] {value}")
+    console.print(Traceback.from_exception(type(error), error, error.__traceback__))
+```
+
+#### 3.4 Dry-run command
 
 ```bash
 mamfast dry-run --limit 5 --verbose
@@ -364,14 +661,18 @@ Output:
 │ title        │ Overlord (Light Novel)    │ Overlord                  │
 └──────────────┴───────────────────────────┴───────────────────────────┘
   rule: format_indicators
-
-┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Field        ┃ Before                    ┃ After                     ┃
-┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ subtitle     │ Overlord 14               │ (dropped)                 │
-└──────────────┴───────────────────────────┴───────────────────────────┘
-  rule: subtitle_redundancy:series_vol_pattern
 ```
+
+### Where Rich Applies
+
+| Component | Feature | Purpose |
+|-----------|---------|---------|
+| `cli.py` | Command output | Status, summaries, errors |
+| `workflow.py` | Progress display | Stage tracking |
+| `naming.py` | Rule traces | Debug title transformations |
+| `validation.py` | Reports | Validation result tables |
+| `metadata.py` | API responses | Debug Audnex data |
+| All modules | Error handling | Formatted tracebacks |
 
 ### No New Dependencies
 
@@ -393,18 +694,31 @@ if abs(len(out) - len(in)) / len(in) > 0.5:
 
 This misses semantic changes where length is similar but meaning differs.
 
+Beyond just naming validation, fuzzy matching is useful across the codebase:
+- **Duplicate detection** - Find near-duplicate releases in library
+- **Author matching** - Match "Reki Kawahara" to "川原 礫"
+- **Series grouping** - Group "Re:Zero" and "Re: Zero" and "ReZero"
+- **Title normalization** - Detect when Audnex title differs from Libation
+
 ### Solution
 
-Use `rapidfuzz` for fuzzy string matching to detect "suspicious" changes.
+Use `rapidfuzz` for fuzzy string matching throughout the codebase.
 
 ### Implementation
 
-#### 4.1 Add fuzzy validation
+#### 4.1 Core fuzzy utilities
 
 ```python
-# src/mamfast/validation.py
+# src/mamfast/utils/fuzzy.py
 
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
+
+
+def similarity_ratio(a: str, b: str) -> float:
+    """Get similarity ratio between two strings (0-100)."""
+    if not a or not b:
+        return 0.0
+    return fuzz.ratio(a.lower(), b.lower())
 
 
 def is_suspicious_change(before: str, after: str, threshold: int = 50) -> bool:
@@ -415,38 +729,140 @@ def is_suspicious_change(before: str, after: str, threshold: int = 50) -> bool:
     - Character transpositions
     - Partial removals
     - Japanese -> romaji changes
-
-    Args:
-        before: Original string
-        after: Cleaned string
-        threshold: Minimum similarity ratio (0-100)
-
-    Returns:
-        True if the change is suspicious (too different)
     """
     if not before.strip():
         return False
     if not after.strip():
         return True  # Completely empty output is always suspicious
 
-    ratio = fuzz.ratio(before.lower(), after.lower())
-    return ratio < threshold
+    return similarity_ratio(before, after) < threshold
+
+
+def find_best_match(query: str, choices: list[str], threshold: int = 80) -> str | None:
+    """Find best matching string from choices."""
+    if not choices:
+        return None
+    result = process.extractOne(query, choices, score_cutoff=threshold)
+    return result[0] if result else None
+
+
+def find_duplicates(items: list[str], threshold: int = 90) -> list[tuple[str, str, float]]:
+    """Find near-duplicate strings in a list."""
+    duplicates = []
+    seen = set()
+
+    for i, item1 in enumerate(items):
+        if item1 in seen:
+            continue
+        for item2 in items[i + 1:]:
+            ratio = similarity_ratio(item1, item2)
+            if ratio >= threshold:
+                duplicates.append((item1, item2, ratio))
+                seen.add(item2)
+
+    return duplicates
+```
+
+#### 4.2 Duplicate release detection
+
+```python
+# src/mamfast/discovery.py
+
+from mamfast.utils.fuzzy import find_duplicates, similarity_ratio
+
+
+def find_duplicate_releases(releases: list[AudiobookRelease]) -> list[tuple]:
+    """Find potential duplicate releases in library."""
+    titles = [r.title for r in releases]
+    duplicates = find_duplicates(titles, threshold=85)
+
+    results = []
+    for title1, title2, ratio in duplicates:
+        r1 = next(r for r in releases if r.title == title1)
+        r2 = next(r for r in releases if r.title == title2)
+        results.append({
+            "release1": r1,
+            "release2": r2,
+            "title_similarity": ratio,
+            "same_author": r1.authors == r2.authors,
+            "same_series": similarity_ratio(r1.series or "", r2.series or "") > 90,
+        })
+
+    return results
+```
+
+#### 4.3 Author name matching
+
+```python
+# src/mamfast/utils/naming.py
+
+from mamfast.utils.fuzzy import find_best_match
+
+
+def match_author_name(
+    author: str,
+    known_authors: dict[str, str],
+    threshold: int = 85,
+) -> str:
+    """
+    Match author name to known mappings using fuzzy matching.
+
+    Handles variations like:
+    - "Reki Kawahara" -> "Reki Kawahara"
+    - "川原 礫" -> "Reki Kawahara" (if in mapping)
+    - "Kawahara, Reki" -> "Reki Kawahara"
+    """
+    # Exact match first
+    if author in known_authors:
+        return known_authors[author]
+
+    # Fuzzy match against known names
+    match = find_best_match(author, list(known_authors.keys()), threshold)
+    if match:
+        return known_authors[match]
+
+    return author
+```
+
+#### 4.4 Series grouping
+
+```python
+# src/mamfast/metadata.py
+
+from mamfast.utils.fuzzy import similarity_ratio
+
+
+def normalize_series_name(series: str, known_series: list[str]) -> str:
+    """
+    Normalize series name to match existing series in library.
+
+    Groups variations like:
+    - "Re:Zero" / "Re: Zero" / "ReZero"
+    - "Sword Art Online" / "SAO"
+    """
+    for known in known_series:
+        if similarity_ratio(series, known) > 90:
+            return known  # Use existing name for consistency
+    return series
+```
+
+#### 4.5 Validation integration
+
+```python
+# src/mamfast/validation.py
+
+from mamfast.utils.fuzzy import is_suspicious_change, find_duplicates
 
 
 def flag_suspicious_titles(
     releases: list[dict],
     threshold: int = 50,
 ) -> list[dict]:
-    """
-    Scan releases and flag those with suspicious title changes.
-
-    Returns list of flagged releases with details.
-    """
+    """Scan releases and flag those with suspicious title changes."""
     flagged = []
     for release in releases:
         issues = []
 
-        # Check title
         if is_suspicious_change(
             release.get("original_title", ""),
             release.get("cleaned_title", ""),
@@ -454,7 +870,6 @@ def flag_suspicious_titles(
         ):
             issues.append("title_changed_significantly")
 
-        # Check series
         if is_suspicious_change(
             release.get("original_series", ""),
             release.get("cleaned_series", ""),
@@ -467,35 +882,70 @@ def flag_suspicious_titles(
                 "asin": release.get("asin"),
                 "title": release.get("original_title"),
                 "issues": issues,
-                "similarity": fuzz.ratio(
-                    release.get("original_title", ""),
-                    release.get("cleaned_title", ""),
-                ),
             })
 
     return flagged
+
+
+def validate_library_duplicates(releases: list) -> list[dict]:
+    """Check for potential duplicate releases."""
+    titles = [(r.asin, r.title) for r in releases]
+    duplicates = []
+
+    for i, (asin1, title1) in enumerate(titles):
+        for asin2, title2 in titles[i + 1:]:
+            ratio = similarity_ratio(title1, title2)
+            if ratio > 85:
+                duplicates.append({
+                    "asin1": asin1,
+                    "asin2": asin2,
+                    "title1": title1,
+                    "title2": title2,
+                    "similarity": ratio,
+                })
+
+    return duplicates
 ```
 
-#### 4.2 Integration with validation command
+#### 4.6 CLI integration
 
 ```bash
+# Check for suspicious title changes
 mamfast validate --check-suspicious --threshold 60
+
+# Find potential duplicates in library
+mamfast check-duplicates --threshold 85
 ```
 
 Output:
 ```
 ⚠️  Found 3 suspicious title changes:
 
-┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ ASIN         ┃ Original Title            ┃ Similarity   ┃ Issues                  ┃
-┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ B0ABC123     │ 転生したらスライムだった件  │ 42%          │ title_changed_signif... │
-│ B0DEF456     │ Re:Zero vol_15 (LN)       │ 58%          │ title_changed_signif... │
-│ B0GHI789     │ Mushoku Tensei: Jobless   │ 55%          │ series_changed_signi... │
-└──────────────┴───────────────────────────┴──────────────┴─────────────────────────┘
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ ASIN         ┃ Original Title            ┃ Similarity   ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ B0ABC123     │ 転生したらスライムだった件  │ 42%          │
+│ B0DEF456     │ Re:Zero vol_15 (LN)       │ 58%          │
+└──────────────┴───────────────────────────┴──────────────┘
 
-Consider adding these to `preserve_exact` or adjusting filter rules.
+🔍 Potential duplicates found:
+
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Release 1    ┃ Release 2                 ┃ Similarity   ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ Overlord 14  │ Overlord, Vol. 14         │ 92%          │
+└──────────────┴───────────────────────────┴──────────────┘
 ```
+
+### Where RapidFuzz Applies
+
+| Component | Use Case | Purpose |
+|-----------|----------|---------|
+| `validation.py` | Title change detection | Flag over-aggressive cleaning |
+| `discovery.py` | Duplicate detection | Find near-duplicate releases |
+| `naming.py` | Author matching | Fuzzy author name lookup |
+| `metadata.py` | Series normalization | Group series variations |
+| `workflow.py` | Audnex vs Libation | Detect title mismatches |
 
 ### Dependencies
 
@@ -508,9 +958,11 @@ dependencies = [
 
 ### Tests
 
+- [ ] `test_fuzzy_utils.py` - Core fuzzy functions
 - [ ] `test_suspicious_detection.py` - Various change scenarios
-- [ ] `test_threshold_tuning.py` - Different threshold values
-- [ ] `test_japanese_transliteration.py` - Japanese to romaji changes
+- [ ] `test_duplicate_detection.py` - Duplicate finding
+- [ ] `test_author_matching.py` - Author name fuzzy match
+- [ ] `test_series_grouping.py` - Series name normalization
 
 [↑ Back to top](#mamfast-improvements-plan)
 
