@@ -975,3 +975,53 @@ class TestPrintErrorSummary:
         with patch.object(err_console, "print") as mock_print:
             print_error_summary(errors)
             mock_print.assert_called_once()
+
+
+# =============================================================================
+# Phase 3: Test Progress Context Manager
+# =============================================================================
+
+
+class TestProgressContext:
+    """Test progress_context context manager."""
+
+    def test_progress_context_creates_progress(self):
+        """progress_context should yield a Progress and TaskID."""
+        from mamfast.console import progress_context
+
+        with progress_context("Test task", total=5) as (progress, task):
+            assert progress is not None
+            assert task is not None
+            # Advance and verify no errors
+            progress.update(task, advance=1)
+
+    def test_progress_context_with_none_total(self):
+        """progress_context should work with indeterminate total."""
+        from mamfast.console import progress_context
+
+        with progress_context("Indeterminate task", total=None) as (progress, task):
+            assert progress is not None
+            # Update description
+            progress.update(task, description="Still working...")
+
+
+class TestCreatePipelineProgress:
+    """Test create_pipeline_progress function."""
+
+    def test_creates_progress_instance(self):
+        """create_pipeline_progress should return a Progress instance."""
+        from rich.progress import Progress
+
+        from mamfast.console import create_pipeline_progress
+
+        progress = create_pipeline_progress()
+        assert isinstance(progress, Progress)
+
+    def test_can_use_as_context_manager(self):
+        """create_pipeline_progress result should work as context manager."""
+        from mamfast.console import create_pipeline_progress
+
+        with create_pipeline_progress() as progress:
+            task = progress.add_task("[cyan]Test", total=3)
+            progress.update(task, advance=1)
+            progress.update(task, advance=2)

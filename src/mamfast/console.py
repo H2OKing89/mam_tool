@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 from rich.theme import Theme
@@ -526,6 +529,70 @@ def print_pipeline_progress(
         else (f" {release_name}" if release_name else "")
     )
     console.print(f"[step]{stage}[/] {progress}{name}")
+
+
+@contextmanager
+def progress_context(
+    description: str = "Processing",
+    total: int | None = None,
+) -> Generator[tuple[Progress, TaskID], None, None]:
+    """
+    Context manager for Rich progress bar.
+
+    Usage:
+        with progress_context("Processing releases", total=10) as (progress, task):
+            for item in items:
+                # do work
+                progress.update(task, advance=1, description=f"Processing {item.name}")
+
+    Args:
+        description: Initial description for the progress bar
+        total: Total number of items (None for indeterminate spinner)
+
+    Yields:
+        Tuple of (Progress instance, TaskID) for updates
+    """
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    )
+
+    with progress:
+        task = progress.add_task(f"[cyan]{description}[/]", total=total)
+        yield progress, task
+
+
+def create_pipeline_progress() -> Progress:
+    """
+    Create a Progress instance for pipeline steps.
+
+    Returns a Progress object that can be used as a context manager.
+
+    Usage:
+        with create_pipeline_progress() as progress:
+            scan_task = progress.add_task("[cyan]Scanning...", total=1)
+            # do scan
+            progress.update(scan_task, completed=1)
+
+            process_task = progress.add_task("[cyan]Processing...", total=len(releases))
+            for release in releases:
+                # process
+                progress.update(process_task, advance=1)
+    """
+    return Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=False,  # Keep completed tasks visible
+    )
 
 
 # =============================================================================
