@@ -762,9 +762,9 @@ def extract_volume_number(title: str, series_position: str | None = None) -> str
     """
     # Priority 1: Use explicit series_position if it's numeric
     if series_position:
-        # Handle "1.5", "2", etc.
+        # Handle "1.5", "2", etc. - validate proper decimal format
         clean_pos = series_position.strip()
-        if clean_pos and (clean_pos.replace(".", "").isdigit() or clean_pos.isdigit()):
+        if clean_pos and re.match(r"^\d+(\.\d+)?$", clean_pos):
             return clean_pos
 
     # Priority 2-4: Extract from title using patterns

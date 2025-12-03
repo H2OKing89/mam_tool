@@ -1003,9 +1003,12 @@ def build_mam_json(
 
     # Series - apply filter_series to remove format indicators and series suffixes
     # Series names should not have volume indicators
+    cleaned_series: str | None = None  # Initialize for use in filter_subtitle
     series_list = _build_series_list(audnex, naming_config=naming_config)
     if series_list:
         mam_json["series"] = series_list
+        # Extract cleaned_series from the first series entry for subtitle filtering
+        cleaned_series = series_list[0].get("name") if series_list else None
     elif release.series:
         cleaned_series = filter_series(
             release.series,
