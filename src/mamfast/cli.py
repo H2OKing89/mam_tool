@@ -310,6 +310,64 @@ Examples:
     )
     dry_run_parser.set_defaults(func=cmd_dry_run)
 
+    # -------------------------------------------------------------------------
+    # check-duplicates: Find potential duplicate releases
+    # -------------------------------------------------------------------------
+    duplicates_parser = subparsers.add_parser(
+        "check-duplicates",
+        help="Find potential duplicate releases in library using fuzzy matching",
+        epilog="Uses RapidFuzz to find near-duplicate titles.",
+    )
+    duplicates_parser.add_argument(
+        "--threshold",
+        type=int,
+        default=85,
+        help="Minimum similarity percentage to consider duplicate (default: 85)",
+    )
+    duplicates_parser.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="Maximum number of duplicate pairs to show (default: 20)",
+    )
+    duplicates_parser.add_argument(
+        "--include-processed",
+        action="store_true",
+        help="Include already processed releases in scan",
+    )
+    duplicates_parser.set_defaults(func=cmd_check_duplicates)
+
+    # -------------------------------------------------------------------------
+    # check-suspicious: Find over-aggressive title cleaning
+    # -------------------------------------------------------------------------
+    suspicious_parser = subparsers.add_parser(
+        "check-suspicious",
+        help="Check for over-aggressive title cleaning by naming rules",
+        epilog="Compares original titles to cleaned versions and flags significant changes.",
+    )
+    suspicious_parser.add_argument(
+        "--threshold",
+        type=int,
+        default=50,
+        help="Maximum similarity below which a change is suspicious (default: 50)",
+    )
+    suspicious_parser.add_argument(
+        "--asin",
+        type=str,
+        help="Check specific release by ASIN only",
+    )
+    suspicious_parser.add_argument(
+        "--include-processed",
+        action="store_true",
+        help="Include already processed releases in scan",
+    )
+    suspicious_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output results as JSON",
+    )
+    suspicious_parser.set_defaults(func=cmd_check_suspicious)
+
     return parser
 
 
@@ -1304,6 +1362,204 @@ def _detect_rule(original: str, filtered: str, naming_config: NamingConfig | Non
         return "volume_patterns"
 
     return "naming_rules"
+
+
+def cmd_check_duplicates(args: argparse.Namespace) -> int:
+    """Find potential duplicate releases in library."""
+    from mamfast.config import reload_settings
+    from mamfast.discovery import get_new_releases, scan_library
+    from mamfast.logging_setup import set_console_quiet
+    from mamfast.utils.fuzzy import find_duplicates
+
+    set_console_quiet(True)
+
+    try:
+        reload_settings(config_file=args.config)
+    except FileNotFoundError as e:
+        set_console_quiet(False)
+        fatal_error(str(e), "Check that config/config.yaml exists")
+        return 1
+
+    # Get releases - either all or just new
+    releases = scan_library() if args.include_processed else get_new_releases()
+
+    set_console_quiet(False)
+
+    if not releases:
+        console.print("[dim]No releases found to check[/]")
+        return 0
+
+    # Extract titles for duplicate detection
+    titles = [r.title for r in releases if r.title]
+    threshold = args.threshold
+
+    console.print(
+        f"[bold]Checking {len(releases)} releases for duplicates[/] "
+        f"[dim](threshold: {threshold}%)[/]\n"
+    )
+
+    # Find duplicates
+    duplicates = find_duplicates(titles, threshold=threshold)
+
+    if not duplicates:
+        console.print("[success]✓ No potential duplicates found[/]")
+        return 0
+
+    # Limit results
+    limit = args.limit
+    shown_duplicates = duplicates[:limit]
+
+    # Build Rich table
+    from rich.table import Table
+
+    table = Table(
+        title=f"[warning]Found {len(duplicates)} Potential Duplicate Pair(s)[/]",
+        show_header=True,
+        header_style="bold",
+    )
+    table.add_column("Release 1", style="cyan", overflow="fold")
+    table.add_column("Release 2", style="cyan", overflow="fold")
+    table.add_column("Similarity", style="yellow", justify="right")
+    table.add_column("ASINs", style="dim")
+
+    for dup in shown_duplicates:
+        # Find the actual releases to get ASINs
+        r1 = next((r for r in releases if r.title == dup.item1), None)
+        r2 = next((r for r in releases if r.title == dup.item2), None)
+
+        asin_info = ""
+        if r1 and r2:
+            if r1.asin == r2.asin:
+                asin_info = f"Same: {r1.asin}"
+            else:
+                asin_info = f"{r1.asin or '?'} / {r2.asin or '?'}"
+
+        table.add_row(
+            dup.item1[:50] + "..." if len(dup.item1) > 50 else dup.item1,
+            dup.item2[:50] + "..." if len(dup.item2) > 50 else dup.item2,
+            f"{dup.similarity:.0f}%",
+            asin_info,
+        )
+
+    console.print(table)
+
+    if len(duplicates) > limit:
+        console.print(
+            f"\n[dim]Showing {limit} of {len(duplicates)} pairs. " "Use --limit to show more.[/]"
+        )
+
+    return 0
+
+
+def cmd_check_suspicious(args: argparse.Namespace) -> int:
+    """Check for over-aggressive title cleaning by naming rules."""
+    import json as json_module
+
+    from mamfast.config import reload_settings
+    from mamfast.console import print_suspicious_changes
+    from mamfast.discovery import get_new_releases, get_release_by_asin, scan_library
+    from mamfast.logging_setup import set_console_quiet
+    from mamfast.utils.fuzzy import analyze_change
+    from mamfast.utils.naming import filter_title
+
+    set_console_quiet(True)
+
+    output_json = getattr(args, "json", False)
+
+    try:
+        reload_settings(config_file=args.config)
+    except FileNotFoundError as e:
+        set_console_quiet(False)
+        fatal_error(str(e), "Check that config/config.yaml exists")
+        return 1
+
+    # Get releases
+    if args.asin:
+        release = get_release_by_asin(args.asin)
+        if not release:
+            set_console_quiet(False)
+            print_error(f"Release not found: {args.asin}")
+            return 1
+        releases = [release]
+    elif args.include_processed:
+        releases = scan_library()
+    else:
+        releases = get_new_releases()
+
+    set_console_quiet(False)
+
+    if not releases:
+        if output_json:
+            console.print(json_module.dumps({"suspicious": [], "summary": {"total": 0}}))
+        else:
+            console.print("[dim]No releases found to check[/]")
+        return 0
+
+    threshold = args.threshold
+    if not output_json:
+        console.print(
+            f"[bold]Checking {len(releases)} releases for suspicious title changes[/] "
+            f"[dim](threshold: {threshold}% similarity)[/]\n"
+        )
+
+    # Check each release
+    suspicious: list[tuple[str, str, str, float]] = []
+
+    for release in releases:
+        if not release.title:
+            continue
+
+        original = release.title
+        cleaned = filter_title(original)
+
+        # Use fuzzy analysis to detect suspicious changes
+        # Pass CLI threshold so is_suspicious uses user-supplied value
+        analysis = analyze_change(original, cleaned, threshold=threshold)
+
+        if analysis.is_suspicious:
+            suspicious.append(
+                (
+                    release.asin or "",
+                    original,
+                    cleaned,
+                    analysis.similarity,
+                )
+            )
+
+    # Output results
+    if output_json:
+        output = {
+            "suspicious": [
+                {
+                    "asin": asin,
+                    "original": orig,
+                    "cleaned": clean,
+                    "similarity": sim,
+                }
+                for asin, orig, clean, sim in suspicious
+            ],
+            "summary": {
+                "total": len(releases),
+                "suspicious_count": len(suspicious),
+                "threshold": threshold,
+            },
+        }
+        console.print(json_module.dumps(output, indent=2))
+    else:
+        print_suspicious_changes(suspicious)
+
+        console.print()
+        if suspicious:
+            console.print(
+                f"[warning]Found {len(suspicious)} suspicious change(s)[/] "
+                f"out of {len(releases)} releases"
+            )
+        else:
+            console.print(
+                f"[success]✓ All {len(releases)} releases have safe title transformations[/]"
+            )
+
+    return 1 if suspicious else 0
 
 
 def cmd_config(args: argparse.Namespace) -> int:

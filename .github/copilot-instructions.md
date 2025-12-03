@@ -184,14 +184,26 @@ class TestFeatureName:
 - **Error formatting** - `print_exception()` with Rich Traceback, `print_error_summary()` for multiple errors
 - No new dependencies - uses existing `rich>=13.0`
 
-## Coming Soon (see docs/IMPROVEMENTS_PLAN.md)
-- **rapidfuzz** for fuzzy title matching and duplicate detection (Phase 4)
+## Phase 4 Complete: RapidFuzz Fuzzy Matching
+- **`src/mamfast/utils/fuzzy.py`** - Comprehensive fuzzy matching utilities (~500 lines)
+- **Core functions**: `similarity_ratio()`, `partial_ratio()`, `weighted_ratio()`
+- **Change detection**: `is_suspicious_change()`, `analyze_change()`, `ChangeAnalysis` dataclass
+- **Duplicate detection**: `find_duplicates()`, `find_duplicates_in_groups()`, `DuplicatePair` dataclass
+- **Name matching**: `find_best_match()`, `find_matches()`, `match_name()`, `normalize_author_name()`
+- **Series grouping**: `normalize_series_name()`, `group_similar_series()`
+- **CLI commands**: `mamfast check-duplicates`, `mamfast check-suspicious`
+- **Console helpers**: `print_duplicate_pairs()`, `print_suspicious_changes()`, `print_change_analysis()`
+- 65 new tests (55 fuzzy + 10 console helpers), total: 870 tests
+
+## All Priority A Improvements Complete!
+Phases 1-4 are now complete. See `docs/IMPROVEMENTS_PLAN.md` for future considerations (B-tier).
 
 ## Key Files Reference
 - `src/mamfast/workflow.py` - Pipeline orchestration
 - `src/mamfast/models.py` - `AudiobookRelease`, `ReleaseStatus`, `NormalizedBook`
 - `src/mamfast/config.py` - Config loading (~950 lines, complex precedence)
 - `src/mamfast/console.py` - Rich CLI output helpers (rule traces, validation reports, progress)
+- `src/mamfast/utils/fuzzy.py` - RapidFuzz utilities (duplicates, suspicious changes, matching)
 - `src/mamfast/schemas/naming.py` - Pydantic schema for naming.json validation
 - `src/mamfast/schemas/audnex.py` - Pydantic schemas for Audnex API responses
 - `src/mamfast/schemas/state.py` - Pydantic schema for processed.json state

@@ -1223,3 +1223,141 @@ class TestPrintDryRunSummary:
             assert "10 releases" in call_str
             assert "3" in call_str
             assert "7" in call_str
+
+
+class TestPrintDuplicatePairs:
+    """Tests for print_duplicate_pairs function."""
+
+    def test_empty_list_shows_success(self):
+        """Should show success message when no duplicates."""
+        from mamfast.console import print_duplicate_pairs
+
+        with patch.object(console, "print") as mock_print:
+            print_duplicate_pairs([])
+            call_str = str(mock_print.call_args)
+            assert "No potential duplicates" in call_str
+
+    def test_displays_pairs(self):
+        """Should display duplicate pairs in table."""
+        from mamfast.console import print_duplicate_pairs
+
+        duplicates = [
+            ("Title One", "Title 1", 92.5),
+            ("Another Book", "Anther Book", 95.0),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_duplicate_pairs(duplicates)
+            assert mock_print.called
+
+    def test_limits_output(self):
+        """Should respect limit parameter."""
+        from mamfast.console import print_duplicate_pairs
+
+        # Create 30 duplicates
+        duplicates = [(f"Title {i}", f"Titl {i}", 90.0) for i in range(30)]
+
+        with patch.object(console, "print") as mock_print:
+            print_duplicate_pairs(duplicates, limit=10)
+            call_str = str(mock_print.call_args_list)
+            assert "Showing 10 of 30" in call_str
+
+    def test_truncates_long_titles(self):
+        """Should truncate very long titles for display."""
+        from mamfast.console import print_duplicate_pairs
+
+        long_title = "A" * 100
+        duplicates = [(long_title, "Short", 80.0)]
+
+        with patch.object(console, "print") as mock_print:
+            print_duplicate_pairs(duplicates)
+            # Just verify it doesn't crash with long titles
+            assert mock_print.called
+
+
+class TestPrintSuspiciousChanges:
+    """Tests for print_suspicious_changes function."""
+
+    def test_empty_list_shows_success(self):
+        """Should show success message when no suspicious changes."""
+        from mamfast.console import print_suspicious_changes
+
+        with patch.object(console, "print") as mock_print:
+            print_suspicious_changes([])
+            call_str = str(mock_print.call_args)
+            assert "No suspicious" in call_str
+
+    def test_displays_changes(self):
+        """Should display suspicious changes in table."""
+        from mamfast.console import print_suspicious_changes
+
+        changes = [
+            ("B001234567", "Original Title: Unabridged", "Title", 45.0),
+            ("B009876543", "Very Long Original Name", "Short", 30.0),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_suspicious_changes(changes)
+            assert mock_print.called
+
+    def test_shows_tip(self):
+        """Should show naming.json tip when suspicious changes exist."""
+        from mamfast.console import print_suspicious_changes
+
+        changes = [("B001", "Original", "Changed", 50.0)]
+
+        with patch.object(console, "print") as mock_print:
+            print_suspicious_changes(changes)
+            call_str = str(mock_print.call_args_list)
+            assert "naming.json" in call_str
+
+
+class TestPrintChangeAnalysis:
+    """Tests for print_change_analysis function."""
+
+    def test_ok_change(self):
+        """Should display OK status for non-suspicious changes."""
+        from mamfast.console import print_change_analysis
+
+        with patch.object(console, "print") as mock_print:
+            print_change_analysis(
+                asin="B001234567",
+                original="Original Title",
+                cleaned="Original Title Cleaned",
+                similarity=85.0,
+                is_suspicious=False,
+            )
+            call_str = str(mock_print.call_args_list)
+            assert "OK" in call_str
+            assert "B001234567" in call_str
+
+    def test_suspicious_change(self):
+        """Should display warning for suspicious changes."""
+        from mamfast.console import print_change_analysis
+
+        with patch.object(console, "print") as mock_print:
+            print_change_analysis(
+                asin="B001234567",
+                original="Very Long Original Title Here",
+                cleaned="Short",
+                similarity=30.0,
+                is_suspicious=True,
+            )
+            call_str = str(mock_print.call_args_list)
+            assert "SUSPICIOUS" in call_str
+            assert "over-aggressive" in call_str
+
+    def test_handles_none_asin(self):
+        """Should handle None ASIN gracefully."""
+        from mamfast.console import print_change_analysis
+
+        with patch.object(console, "print") as mock_print:
+            print_change_analysis(
+                asin=None,
+                original="Title",
+                cleaned="Cleaned",
+                similarity=80.0,
+                is_suspicious=False,
+            )
+            call_str = str(mock_print.call_args_list)
+            assert "N/A" in call_str

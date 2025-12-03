@@ -776,3 +776,126 @@ def print_error_summary(errors: list[tuple[str, Exception]], title: str = "Error
 def status(message: str, style: str = "info") -> None:
     """Print a simple status message."""
     console.print(f"[{style}]{message}[/]")
+
+
+# -------------------------------------------------------------------------
+# Duplicate and Suspicious Change Display Helpers
+# -------------------------------------------------------------------------
+
+
+def print_duplicate_pairs(
+    duplicates: list[tuple[str, str, float]],
+    title: str = "Potential Duplicates",
+    limit: int = 20,
+) -> None:
+    """
+    Print a table of potential duplicate pairs.
+
+    Args:
+        duplicates: List of (item1, item2, similarity) tuples
+        title: Table title
+        limit: Maximum pairs to show
+    """
+    if not duplicates:
+        console.print("[success]✓ No potential duplicates found[/]")
+        return
+
+    shown = duplicates[:limit]
+
+    table = Table(
+        title=f"[warning]{title} ({len(duplicates)} pairs)[/]",
+        show_header=True,
+        header_style="bold",
+    )
+    table.add_column("Item 1", style="cyan", overflow="fold", ratio=1)
+    table.add_column("Item 2", style="cyan", overflow="fold", ratio=1)
+    table.add_column("Similarity", style="yellow", justify="right", width=10)
+
+    for item1, item2, similarity in shown:
+        # Truncate long titles for display
+        t1 = item1[:50] + "..." if len(item1) > 50 else item1
+        t2 = item2[:50] + "..." if len(item2) > 50 else item2
+        table.add_row(t1, t2, f"{similarity:.0f}%")
+
+    console.print(table)
+
+    if len(duplicates) > limit:
+        console.print(f"\n[dim]Showing {limit} of {len(duplicates)} pairs[/]")
+
+
+def print_suspicious_changes(
+    changes: list[tuple[str, str, str, float]],
+    title: str = "Suspicious Title Changes",
+) -> None:
+    """
+    Print a table of suspicious title transformations.
+
+    A suspicious change is one where the naming rules may have been
+    too aggressive, removing significant portions of the title.
+
+    Args:
+        changes: List of (asin, original, cleaned, similarity) tuples
+        title: Table title
+    """
+    if not changes:
+        console.print("[success]✓ No suspicious title changes detected[/]")
+        return
+
+    table = Table(
+        title=f"[warning]{title}[/]",
+        show_header=True,
+        header_style="bold",
+    )
+    table.add_column("ASIN", style="dim", width=12)
+    table.add_column("Original", style="red", overflow="fold", ratio=1)
+    table.add_column("Cleaned", style="green", overflow="fold", ratio=1)
+    table.add_column("Similarity", style="yellow", justify="right", width=10)
+
+    for asin, original, cleaned, similarity in changes:
+        table.add_row(
+            asin or "-",
+            original[:40] + "..." if len(original) > 40 else original,
+            cleaned[:40] + "..." if len(cleaned) > 40 else cleaned,
+            f"{similarity:.0f}%",
+        )
+
+    console.print(table)
+    console.print()
+    console.print(
+        "[dim]Tip: Low similarity may indicate over-aggressive title cleaning. "
+        "Review naming.json rules if needed.[/]"
+    )
+
+
+def print_change_analysis(
+    asin: str | None,
+    original: str,
+    cleaned: str,
+    similarity: float,
+    is_suspicious: bool,
+) -> None:
+    """
+    Print detailed analysis of a single title change.
+
+    Args:
+        asin: Release ASIN
+        original: Original title
+        cleaned: Cleaned title
+        similarity: Similarity percentage
+        is_suspicious: Whether the change is flagged as suspicious
+    """
+    status_icon = "[warning]⚠️[/]" if is_suspicious else "[success]✓[/]"
+    status_text = "SUSPICIOUS" if is_suspicious else "OK"
+
+    console.print(f"\n{status_icon} [{status_text}] Change Analysis")
+    console.print(f"  [dim]ASIN:[/] {asin or 'N/A'}")
+    console.print(f"  [dim]Original:[/] [red]{original}[/]")
+    console.print(f"  [dim]Cleaned:[/]  [green]{cleaned}[/]")
+    console.print(f"  [dim]Similarity:[/] {similarity:.1f}%")
+
+    if is_suspicious:
+        console.print()
+        console.print(
+            "  [warning]The cleaned title is significantly different from the original.[/]"
+        )
+        console.print("  [dim]This may indicate over-aggressive rule matching.[/]")

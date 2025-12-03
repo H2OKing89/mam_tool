@@ -24,7 +24,7 @@
 | **A1** | `pydantic` | Schema validation | Config, naming.json, API responses, state files | ✅ COMPLETE |
 | **A2** | `pathvalidate` | Cross-platform filename safety | Naming, hardlinker, torrent output | ✅ COMPLETE |
 | **A3** | `rich` (enhance) | Debug/dry-run output | CLI, workflow, validation | ✅ COMPLETE |
-| **A4** | `rapidfuzz` | Fuzzy matching & dedup | Naming validation, duplicate detection | ⬜ TODO |
+| **A4** | `rapidfuzz` | Fuzzy matching & dedup | Naming validation, duplicate detection | ✅ COMPLETE |
 | **B1** | `typer` | CLI improvements | All CLI commands | ⬜ Future |
 | **B2** | `tenacity` | Advanced retry logic | Audnex, qBittorrent, Docker calls | ⬜ Future |
 | **B3** | `orjson` | Performance for large JSON | State files, exports, metadata cache | ⬜ Future |
@@ -696,7 +696,9 @@ Already have `rich>=13.0`.
 
 ---
 
-## Phase 4: Smart Validation (RapidFuzz)
+## Phase 4: Smart Validation (RapidFuzz) ✅ COMPLETE
+
+> **Status**: Core fuzzy utilities, CLI commands for duplicate detection and suspicious change detection, and console output helpers all implemented. Tests: 55 fuzzy tests + 10 console tests = 65 new tests.
 
 ### Problem
 
@@ -972,11 +974,49 @@ dependencies = [
 
 ### Tests
 
-- [ ] `test_fuzzy_utils.py` - Core fuzzy functions
-- [ ] `test_suspicious_detection.py` - Various change scenarios
-- [ ] `test_duplicate_detection.py` - Duplicate finding
-- [ ] `test_author_matching.py` - Author name fuzzy match
-- [ ] `test_series_grouping.py` - Series name normalization
+- [x] `test_fuzzy.py` - Core fuzzy functions (55 tests)
+- [x] Suspicious change detection in `test_fuzzy.py`
+- [x] Duplicate detection in `test_fuzzy.py`
+- [x] Author name fuzzy match in `test_fuzzy.py`
+- [x] Series name normalization in `test_fuzzy.py`
+- [x] Console output helpers in `test_console.py` (10 tests)
+- [x] Workflow integration tests in `test_validation.py` and `test_discovery.py` (7 tests)
+
+### Implementation Status
+
+#### Completed ✅
+
+1. **Core Utilities** (`src/mamfast/utils/fuzzy.py`):
+   - `similarity_ratio()` - Basic string similarity
+   - `partial_ratio()` - Partial string matching
+   - `weighted_ratio()` - Combined scoring
+   - `is_suspicious_change()` - Detect over-aggressive cleaning
+   - `analyze_change()` - Detailed change analysis with ChangeAnalysis dataclass
+   - `find_best_match()` - Find best match from choices
+   - `find_matches()` - Find all matches above threshold
+   - `find_duplicates()` - Find duplicate pairs with DuplicatePair dataclass
+   - `find_duplicates_in_groups()` - Efficient duplicate detection for grouped items
+   - `match_name()` - Fuzzy name matching with mappings
+   - `normalize_author_name()` - Author name normalization
+   - `normalize_series_name()` - Series name normalization
+   - `group_similar_series()` - Group similar series names
+
+2. **CLI Commands**:
+   - `mamfast check-duplicates` - Find potential duplicate releases
+   - `mamfast check-suspicious` - Detect over-aggressive title cleaning
+
+3. **Console Helpers** (`src/mamfast/console.py`):
+   - `print_duplicate_pairs()` - Display duplicate pairs in Rich table
+   - `print_suspicious_changes()` - Display suspicious changes with tips
+   - `print_change_analysis()` - Detailed single change analysis
+
+4. **Workflow Integration**:
+   - `validation.py` - `_check_title_cleaning()` warns when naming rules are too aggressive
+   - `discovery.py` - `find_duplicate_releases()` detects near-duplicate titles with author/series signals
+   - `naming.py` - Fuzzy fallback for `author_map` lookups in `transliterate_text()`
+   - `workflow.py` - Warns when Audnex API title differs significantly from Libation folder name
+
+**Total Tests**: 877 (55 fuzzy + 10 console + 7 integration = 72 new tests)
 
 [↑ Back to top](#mamfast-improvements-plan)
 
