@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from mamfast.config import FiltersConfig, NamingConfig
+    from mamfast.models import NormalizedBook
 
 logger = logging.getLogger(__name__)
 
@@ -141,8 +142,9 @@ def _get_author_role_pattern() -> re.Pattern[str]:
                     role_words=naming.author_roles,
                     credit_words=naming.credit_roles,
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        # Config not available or invalid; fall back to default pattern
+        logger.debug("Failed to load author role pattern from config, using default: %r", e)
     return _AUTHOR_ROLE_PATTERN
 
 
@@ -199,6 +201,202 @@ def extract_translator(authors: list[dict[str, str]]) -> str | None:
             cleaned = re.sub(r"\s*-?\s*translator[s]?\s*$", "", name, flags=re.IGNORECASE)
             return cleaned.strip()
     return None
+
+
+# =============================================================================
+# Audnex Normalization (Title/Subtitle Swap Detection)
+# =============================================================================
+
+
+def detect_swapped_title_subtitle(
+    title: str,
+    subtitle: str | None,
+    series_name: str | None,
+    series_position: str | None,
+) -> tuple[str, str | None, bool]:
+    """
+    Detect and fix swapped title/subtitle using series data as ground truth.
+
+    Audible metadata is inconsistent - the same series can have different
+    title/subtitle arrangements. For example:
+    - SAO Vol 7: Title="Sword Art Online 7", Subtitle="Mother's Rosary" ✓
+    - SAO Vol 16: Title="Alicization Exploding", Subtitle="Sword Art Online 16" ✗
+
+    Uses seriesPrimary as the source of truth to detect when title/subtitle
+    are swapped.
+
+    Args:
+        title: Raw title from Audnex
+        subtitle: Raw subtitle from Audnex
+        series_name: Series name from seriesPrimary.name
+        series_position: Position from seriesPrimary.position
+
+    Returns:
+        Tuple of (corrected_title, corrected_subtitle, was_swapped)
+    """
+    # Can't detect swap without subtitle or series data
+    if not subtitle or not series_name:
+        return title, subtitle, False
+
+    title_lower = title.lower()
+    subtitle_lower = subtitle.lower()
+    series_lower = series_name.lower()
+
+    # Check if series name appears in title vs subtitle
+    subtitle_has_series = series_lower in subtitle_lower
+    title_has_series = series_lower in title_lower
+
+    # Heuristic 1: subtitle has series name, title doesn't → swapped
+    if subtitle_has_series and not title_has_series:
+        logger.debug(
+            "[normalize] Detected swap (series in subtitle): " "title=%r, subtitle=%r, series=%r",
+            title,
+            subtitle,
+            series_name,
+        )
+        return subtitle, title, True
+
+    # Heuristic 2: subtitle ends with series number, title doesn't have series
+    # This catches patterns like "Sword Art Online 16" as subtitle
+    if (
+        series_position
+        and not title_has_series
+        and re.search(rf"\b{re.escape(series_position)}\b", subtitle_lower)
+    ):
+        logger.debug(
+            "[normalize] Detected swap (position in subtitle): "
+            "title=%r, subtitle=%r, position=%r",
+            title,
+            subtitle,
+            series_position,
+        )
+        return subtitle, title, True
+
+    # No swap detected
+    return title, subtitle, False
+
+
+def extract_arc_name(
+    title: str,
+    subtitle: str | None,
+    series_name: str | None,
+) -> str | None:
+    """
+    Determine which field contains the arc name (e.g., "Alicization Exploding").
+
+    The arc name is the descriptive subtitle that isn't just series+number.
+    For example:
+    - "Mother's Rosary" (SAO Vol 7)
+    - "Alicization Exploding" (SAO Vol 16)
+    - "Early Years" (TBATE Vol 1)
+
+    Args:
+        title: Corrected title (after swap detection)
+        subtitle: Corrected subtitle (after swap detection)
+        series_name: Series name from seriesPrimary
+
+    Returns:
+        Arc name if found, None otherwise
+    """
+    if not series_name:
+        # No series → subtitle is arc (if any)
+        return subtitle if subtitle else None
+
+    series_lower = series_name.lower()
+
+    # If subtitle exists and doesn't contain series name, it's the arc
+    if subtitle:
+        subtitle_lower = subtitle.lower()
+        # Also filter out generic subtitles like "Light Novel"
+        if series_lower not in subtitle_lower and subtitle_lower not in (
+            "light novel",
+            "novel",
+            "a novel",
+        ):
+            return subtitle
+
+    # Check if title has the arc (uncommon, but possible if we didn't swap)
+    # This happens when title is like "Aincrad" but subtitle is "Sword Art Online 1"
+    title_lower = title.lower()
+    # Title doesn't have series name - it might be the arc itself
+    # But only if it's not empty/generic
+    if series_lower not in title_lower and title and title_lower not in ("light novel", "novel"):
+        return title
+
+    return None
+
+
+def normalize_audnex_book(
+    audnex_data: dict[str, Any],
+) -> NormalizedBook:
+    """
+    Normalize Audnex book data to fix title/subtitle inconsistencies.
+
+    This is the main entry point for Audnex normalization. It:
+    1. Extracts series info from seriesPrimary (source of truth)
+    2. Detects and fixes title/subtitle swaps
+    3. Extracts arc name from the appropriate field
+    4. Returns a NormalizedBook with canonical values
+
+    Args:
+        audnex_data: Raw Audnex API response for a book
+
+    Returns:
+        NormalizedBook with corrected/canonical metadata
+    """
+    from mamfast.models import NormalizedBook
+
+    asin = audnex_data.get("asin", "")
+    raw_title = audnex_data.get("title", "")
+    raw_subtitle = audnex_data.get("subtitle")
+
+    # Extract series info (source of truth)
+    series_primary = audnex_data.get("seriesPrimary") or {}
+    series_name = series_primary.get("name", "").strip() or None
+    series_position = series_primary.get("position")
+    if series_position is not None:
+        series_position = str(series_position)
+
+    # Detect and fix swapped title/subtitle
+    corrected_title, corrected_subtitle, was_swapped = detect_swapped_title_subtitle(
+        raw_title, raw_subtitle, series_name, series_position
+    )
+
+    # Extract arc name
+    arc_name = extract_arc_name(corrected_title, corrected_subtitle, series_name)
+
+    # Build display values
+    display_title = corrected_title
+    display_subtitle = arc_name
+
+    if was_swapped:
+        logger.info(
+            "[normalize] %s: Fixed swapped title/subtitle\n"
+            "  Raw: title=%r, subtitle=%r\n"
+            "  Series: %r #%s\n"
+            "  Fixed: title=%r, subtitle=%r\n"
+            "  Arc: %r",
+            asin,
+            raw_title,
+            raw_subtitle,
+            series_name,
+            series_position,
+            display_title,
+            display_subtitle,
+            arc_name,
+        )
+
+    return NormalizedBook(
+        asin=asin,
+        raw_title=raw_title,
+        raw_subtitle=raw_subtitle,
+        series_name=series_name,
+        series_position=series_position,
+        arc_name=arc_name,
+        display_title=display_title,
+        display_subtitle=display_subtitle,
+        was_swapped=was_swapped,
+    )
 
 
 def _build_mediainfo_role_pattern(
@@ -265,7 +463,9 @@ def extract_non_authors_from_mediainfo(mediainfo_data: dict[str, Any] | None) ->
             )
         else:
             role_pattern = _build_mediainfo_role_pattern()
-    except Exception:
+    except Exception as e:
+        # Config not available; fall back to default pattern
+        logger.debug("Failed to load mediainfo role pattern from config: %r", e)
         role_pattern = _build_mediainfo_role_pattern()
 
     try:
@@ -290,8 +490,9 @@ def extract_non_authors_from_mediainfo(mediainfo_data: dict[str, Any] | None) ->
                                     non_authors.add(cleaned)
                 break
 
-    except (TypeError, KeyError):
-        pass
+    except (TypeError, KeyError) as e:
+        # Failed to parse expected fields from MediaInfo; returning what we have
+        logger.debug("Error extracting non-authors from MediaInfo: %s", e)
 
     return non_authors
 
@@ -394,13 +595,21 @@ def filter_title(
     transformations: list[tuple[str, str, str]] = []  # (before, after, rule_id)
 
     # Step 1: Check preserve_exact - skip ALL cleaning if matched
+    # Use word-boundary matching to avoid false positives (e.g., "Zero" matching "Project Zero")
     if naming_config and naming_config.preserve_exact:
         for preserved in naming_config.preserve_exact:
-            if name == preserved or preserved in name:
+            # Exact match or word-boundary match (not substring)
+            if name == preserved:
                 if verbose:
                     logger.debug(
                         f"[filter_title] '{name}' -> '{name}' (preserved via preserve_exact)"
                     )
+                return name
+            # Check if preserved text appears as complete word/phrase
+            pattern = re.compile(rf"\b{re.escape(preserved)}\b", re.IGNORECASE)
+            if pattern.search(name):
+                if verbose:
+                    logger.debug(f"[filter_title] '{name}' -> '{name}' (preserved via word match)")
                 return name
 
     # Step 2: Apply pre-compiled hardcoded patterns (always applied)
@@ -510,10 +719,15 @@ def filter_series(
         keep_volume=keep_volume,
     )
 
-    # Check if preserved (already handled in filter_title, but double-check)
+    # Check if original name was preserved (filter_title already checked, but verify
+    # against original name since result may have been cleaned)
     if naming_config and naming_config.preserve_exact:
         for preserved in naming_config.preserve_exact:
-            if name == preserved or preserved in name:
+            # Use word-boundary matching to avoid false positives
+            if name == preserved:
+                return result  # Already preserved
+            pattern = re.compile(rf"\b{re.escape(preserved)}\b", re.IGNORECASE)
+            if pattern.search(name):
                 return result  # Already preserved
 
     transformations: list[tuple[str, str, str]] = []

@@ -191,6 +191,9 @@ class NamingConfig:
             "cover art",
         ]
     )
+    # Title/subtitle normalization settings
+    normalize_title_subtitle: bool = True  # Enable Audnex title/subtitle swap detection
+    log_normalization_swaps: bool = True  # Log when swaps are detected
 
 
 @dataclass
@@ -640,6 +643,11 @@ def _load_naming_config(config_dir: Path) -> NamingConfig:
             "credit_roles", ["afterword", "foreword", "introduction", "cover design", "cover art"]
         )
 
+        # Extract title/subtitle normalization settings
+        normalization_data = data.get("title_subtitle_normalization", {})
+        normalize_title_subtitle = normalization_data.get("enabled", True)
+        log_normalization_swaps = normalization_data.get("log_swaps", True)
+
         logger.debug(
             f"Loaded naming.json v{data.get('_version', '?')}: "
             f"{len(format_indicators)} format indicators, "
@@ -647,7 +655,8 @@ def _load_naming_config(config_dir: Path) -> NamingConfig:
             f"{len(publisher_tags)} publisher tags, {len(preserve_exact)} preserve_exact, "
             f"{len(subtitle_redundancy_rules)} redundancy rules, "
             f"{len(author_map)} author mappings, "
-            f"{len(author_roles)} author roles, {len(credit_roles)} credit roles"
+            f"{len(author_roles)} author roles, {len(credit_roles)} credit roles, "
+            f"normalize_title_subtitle={normalize_title_subtitle}"
         )
 
         return NamingConfig(
@@ -665,6 +674,8 @@ def _load_naming_config(config_dir: Path) -> NamingConfig:
             preserve_volume_in_json=preserve_volume_in_json,
             author_roles=author_roles,
             credit_roles=credit_roles,
+            normalize_title_subtitle=normalize_title_subtitle,
+            log_normalization_swaps=log_normalization_swaps,
         )
 
     except (json.JSONDecodeError, OSError) as e:

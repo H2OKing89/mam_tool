@@ -5,6 +5,8 @@ from mamfast.utils.naming import (
     build_release_dirname,
     ensure_unique_name,
     extract_translator,
+    # Using backward-compatible alias; function is now extract_non_authors_from_mediainfo
+    # but handles translators, illustrators, editors, etc.
     extract_translators_from_mediainfo,
     filter_authors,
     filter_series,

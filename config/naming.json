@@ -1,6 +1,12 @@
 {
   "_comment": "Naming rules for MAMFast. See docs/NAMING_PLAN.md for details.",
-  "_version": "1.4.0",
+  "_version": "1.5.0",
+
+  "title_subtitle_normalization": {
+    "_comment": "Fix Audible's inconsistent title/subtitle swaps using seriesPrimary as source of truth.",
+    "enabled": true,
+    "log_swaps": true
+  },
 
   "author_roles": {
     "_comment": "Non-author roles to filter from author lists. Names with these suffixes are not primary authors.",

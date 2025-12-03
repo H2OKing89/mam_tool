@@ -27,12 +27,14 @@ import httpx
 from jinja2 import Environment, PackageLoader
 
 from mamfast.config import get_settings
+from mamfast.models import NormalizedBook
 from mamfast.utils.naming import (
     extract_translators_from_mediainfo,
     filter_authors,
     filter_series,
     filter_subtitle,
     filter_title,
+    normalize_audnex_book,
     transliterate_text,
 )
 
@@ -975,10 +977,22 @@ def build_mam_json(
         filters = None
         naming_config = None
 
-    # Title - use Audnex title or fallback to release title
+    # Normalize Audnex data first to fix title/subtitle swaps
+    # This uses seriesPrimary as the source of truth
+    # Default to enabled if no config available
+    normalized: NormalizedBook | None = None
+    should_normalize = (
+        naming_config.normalize_title_subtitle
+        if naming_config is not None
+        else True  # Default to enabled
+    )
+    if audnex and should_normalize:
+        normalized = normalize_audnex_book(audnex)
+
+    # Title - use normalized title if available, else Audnex title or fallback to release title
     # Apply filter_title to remove format indicators, genre tags, etc.
     # keep_volume=True to preserve "Vol. X" for human-readable JSON
-    title = audnex.get("title") or release.title
+    title = normalized.display_title if normalized else audnex.get("title") or release.title
     if title:
         cleaned_title = filter_title(
             title,
@@ -1028,35 +1042,63 @@ def build_mam_json(
     # Series - apply filter_series to remove format indicators and series suffixes
     # Series names should not have volume indicators
     cleaned_series: str | None = None  # Initialize for use in filter_subtitle
-    series_list = _build_series_list(audnex, naming_config=naming_config)
-    if series_list:
-        mam_json["series"] = series_list
-        # Extract cleaned_series from the first series entry for subtitle filtering
-        cleaned_series = series_list[0].get("name") if series_list else None
-    elif release.series:
+
+    # Use normalized series if available
+    if normalized and normalized.series_name:
         cleaned_series = filter_series(
-            release.series,
+            normalized.series_name,
             naming_config=naming_config,
         )
+        series_number = normalized.series_position or ""
         mam_json["series"] = [
             {
                 "name": cleaned_series,
-                "number": release.series_position or "",
+                "number": series_number,
             }
         ]
+    else:
+        # Fallback to building from audnex seriesPrimary
+        series_list = _build_series_list(audnex, naming_config=naming_config)
+        if series_list:
+            mam_json["series"] = series_list
+            # Extract cleaned_series from the first series entry for subtitle filtering
+            cleaned_series = series_list[0].get("name") if series_list else None
+        elif release.series:
+            cleaned_series = filter_series(
+                release.series,
+                naming_config=naming_config,
+            )
+            mam_json["series"] = [
+                {
+                    "name": cleaned_series,
+                    "number": release.series_position or "",
+                }
+            ]
 
-    # Subtitle - apply filter_subtitle with full redundancy checking
-    # Use cleaned_title and cleaned_series for template substitution
-    subtitle = audnex.get("subtitle")
-    if subtitle:
+    # Subtitle - use normalized arc_name (from swap detection) or filter raw subtitle
+    # Arc name is the meaningful subtitle (e.g., "Alicization Exploding", "Mother's Rosary")
+    if normalized and normalized.arc_name:
+        # Use arc name directly as subtitle (it's already the "good" part)
         cleaned_subtitle = filter_subtitle(
-            subtitle,
+            normalized.arc_name,
             title=cleaned_title,
             series=cleaned_series if mam_json.get("series") else None,
             naming_config=naming_config,
         )
-        if cleaned_subtitle:  # Only add if non-empty after cleaning
+        if cleaned_subtitle:
             mam_json["subtitle"] = cleaned_subtitle
+    else:
+        # Fallback: apply filter_subtitle with full redundancy checking
+        subtitle = audnex.get("subtitle")
+        if subtitle:
+            cleaned_subtitle = filter_subtitle(
+                subtitle,
+                title=cleaned_title,
+                series=cleaned_series if mam_json.get("series") else None,
+                naming_config=naming_config,
+            )
+            if cleaned_subtitle:  # Only add if non-empty after cleaning
+                mam_json["subtitle"] = cleaned_subtitle
 
     # Thumbnail (cover image URL)
     image = audnex.get("image")

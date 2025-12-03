@@ -1,5 +1,56 @@
 # Naming & Cleaning Plan
 
+> **Document Version:** 1.5.0 | **Last Updated:** 2025-12-02 | **Status:** Implementation Complete ✅
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Architecture](#architecture)
+   - [Separate Naming Config](#separate-naming-config-confignamingjson)
+   - [Glossary of Actions](#glossary-of-actions)
+3. [Audnex Normalization Layer](#audnex-normalization-layer)
+   - [The Problem](#the-problem)
+   - [Solution: Rebuild from Series Data](#solution-rebuild-from-series-data)
+   - [Detection Logic](#detection-logic)
+   - [Arc Name Extraction](#arc-name-extraction)
+   - [Configuration](#configuration)
+   - [Edge Cases](#edge-cases)
+4. [Processing Pipeline](#full-processing-pipeline)
+   - [Pipeline Diagram](#full-processing-pipeline)
+   - [Cleaning Pipeline Order](#cleaning-pipeline-order)
+   - [What Gets Cleaned](#what-gets-cleaned)
+5. [Folder & File Naming](#folder--file-naming-schemas)
+   - [Audiobookshelf Library Structure](#audiobookshelf-library-structure-future-feature)
+   - [Book Folder Schema](#book-folder-schema-audiobookshelf)
+   - [MAM Staging Paths](#mam-staging-paths-torrent-uploads)
+   - [Character Limits & Truncation](#character-limits)
+   - [MAM JSON Output Schema](#mam-json-output-schema)
+6. [Matching Rules](#matching-rules-by-category)
+7. [Phrase Removal Rules](#phrase-removal-rules)
+   - [Format Indicators](#category-format-indicators)
+   - [Genre Tags](#category-genre-tags)
+   - [Series Suffixes](#category-series-suffixes)
+   - [Publisher Tags](#category-publisher-tags-new)
+   - [Preserve Exact](#category-preserve-exact-new)
+   - [Subtitle Patterns](#category-subtitle-patterns)
+   - [Subtitle Redundancy Rules](#category-subtitle-redundancy-rules-new)
+8. [Author Map & Transliteration](#author-map-transliteration)
+9. [Vol/Book Normalization](#volbook-normalization)
+10. [naming.json Schema](#namingjson-schema)
+11. [Sample Data Sources](#sample-data-sources)
+12. [Library Analysis Results](#library-analysis-results)
+    - [Audiobookshelf Library](#audiobookshelf-library-2025-12-02)
+    - [Libation Export](#libation-export-2025-12-01)
+13. [Implementation Phases](#implementation-phases)
+14. [Testing Strategy](#testing-strategy)
+15. [Questions Resolved](#questions-resolved)
+16. [Future Enhancements](#future-enhancements-nice-to-have)
+17. [Changelog](#changelog)
+
+---
+
 ## Overview
 
 This document tracks the naming/cleaning rules for MAMFast. The goal is consistent, clean naming across:
@@ -7,9 +58,12 @@ This document tracks the naming/cleaning rules for MAMFast. The goal is consiste
 - File names (staging)
 - MAM JSON output (title, subtitle, series, description)
 
-## Architecture Decision
+---
+
+## Architecture
 
 ### Separate Naming Config (`config/naming.json`)
+
 
 Instead of cluttering the main `config.yaml`, naming rules will live in a dedicated JSON file:
 
@@ -35,13 +89,234 @@ config/
 | **`filter_title`** | Remove configured phrases/tags/suffixes (format indicators, genre tags, subtitle patterns). Case-insensitive matching. |
 | **`transliterate`** | Normalize non-ASCII characters to ASCII. For **titles/series/folders**: generic transliteration only (pykakasi → unidecode). For **authors/narrators**: first check `author_map`, then fall back to transliteration. |
 | **`filter_series`** | Like `filter_title` but also removes series suffixes (e.g., " Series", " Trilogy"). |
+| **`normalize_audnex`** | Fix Audible's inconsistent title/subtitle and extract canonical series data. See [Audnex Normalization](#audnex-normalization-layer). |
 | **Keep Vol/Book** | Whether volume/book indicators stay as human-readable text (JSON) or are normalized to `vol_XX` format (folders/files). |
+
+---
+
+## Audnex Normalization Layer
+
+### The Problem
+
+Audible/Audnex metadata is notoriously inconsistent. The same series can have different title/subtitle arrangements across volumes:
+
+| ASIN | Title | Subtitle | Series | Problem |
+|------|-------|----------|--------|---------|
+| B0BHLHRMJH | `Sword Art Online 7` | `Mother's Rosary` | `Sword Art Online #7` | ✅ Correct |
+| B0D6C6H1LS | `Sword Art Online 14` | `Alicization Uniting` | `Sword Art Online #14` | ✅ Correct |
+| B0DK9TS6D9 | `Alicization Exploding` | `Sword Art Online 16` | `Sword Art Online #16` | ❌ **Swapped!** |
+
+**Key insight:** `seriesPrimary.name` and `seriesPrimary.position` are **always reliable**. The title/subtitle fields are the problem.
+
+### Solution: Rebuild from Series Data
+
+Instead of trying to detect and swap title/subtitle, we **rebuild canonical metadata from the authoritative source** (`seriesPrimary`):
+
+```
+Raw Audnex JSON
+    ↓
+normalize_audnex_book()  ← Fix swaps, derive series/vol, extract arc
+    ↓
+NormalizedBook (canonical view)
+    ↓
+Cleaning Pipeline (filter_title, transliterate, etc.)
+    ↓
+Folder/File/MAM JSON
+```
+
+### Normalized Book Structure
+
+```python
+@dataclass
+class NormalizedBook:
+    """Canonical book metadata after Audnex normalization."""
+    asin: str
+
+    # Raw values (preserved for debugging)
+    raw_title: str
+    raw_subtitle: str | None
+
+    # Canonical values (source of truth)
+    series_name: str | None      # From seriesPrimary.name
+    series_position: int | None  # From seriesPrimary.position
+    arc_name: str | None         # Extracted from title OR subtitle
+
+    # Constructed display values
+    display_title: str           # "{Series}, Vol. {N}" or raw_title if no series
+    display_subtitle: str | None # Arc name if exists, else None
+```
+
+### Detection Logic
+
+The normalization uses a hybrid approach:
+
+```python
+def detect_swapped_title_subtitle(data: dict) -> tuple[str, str | None]:
+    """Detect and fix swapped title/subtitle using series data as ground truth."""
+    title = data.get("title", "")
+    subtitle = data.get("subtitle")
+    series = data.get("seriesPrimary", {})
+    series_name = series.get("name", "").strip()
+    series_pos = series.get("position")
+
+    # Can't detect swap without series data or subtitle
+    if not subtitle or not series_name:
+        return title, subtitle
+
+    title_lower = title.lower()
+    subtitle_lower = subtitle.lower()
+    series_lower = series_name.lower()
+
+    subtitle_has_series = series_lower in subtitle_lower
+    title_has_series = series_lower in title_lower
+
+    # Heuristic 1: subtitle has series name, title doesn't → swapped
+    if subtitle_has_series and not title_has_series:
+        return subtitle, title
+
+    # Heuristic 2: subtitle ends with series number, title doesn't have series
+    if series_pos and not title_has_series:
+        if re.search(rf"\b{series_pos}\b", subtitle_lower):
+            return subtitle, title
+
+    # No swap detected
+    return title, subtitle
+```
+
+### Arc Name Extraction
+
+Once title/subtitle are corrected, extract the arc name:
+
+```python
+def extract_arc_name(title: str, subtitle: str | None, series_name: str | None) -> str | None:
+    """Determine which field contains the arc name (e.g., 'Alicization Exploding')."""
+    if not series_name:
+        return subtitle  # No series → subtitle is arc (if any)
+
+    series_lower = series_name.lower()
+
+    # If title doesn't have series name, title IS the arc
+    # (This happens when we didn't swap because both had series name)
+    if series_lower not in title.lower():
+        return clean_arc_name(title)
+
+    # Otherwise subtitle is the arc (if it exists and isn't just series info)
+    if subtitle and series_lower not in subtitle.lower():
+        return clean_arc_name(subtitle)
+
+    return None
+```
+
+### Resulting Field Mapping
+
+After normalization, downstream naming uses these canonical sources:
+
+| Output Field | Source | Example |
+|--------------|--------|---------|
+| Folder series | `series_name` | `Sword Art Online` |
+| Folder vol | `series_position` → `vol_16` | `vol_16` |
+| Folder arc | `arc_name` | `Alicization Exploding` |
+| MAM title | `display_title` | `Sword Art Online, Vol. 16` |
+| MAM subtitle | `arc_name` | `Alicization Exploding` |
+| MAM series | `series_name` | `Sword Art Online` |
+| MAM series_number | `series_position` | `16` |
+
+### Configuration
+
+```yaml
+# config.yaml
+audnex:
+  normalize_title_subtitle: true  # Use series data as source of truth (default: true)
+```
+
+Or in `naming.json`:
+
+```json
+"title_subtitle_normalization": {
+  "enabled": true,
+  "arc_whitelist": []  // Optional: known arc names for edge cases
+}
+```
+
+### Edge Cases
+
+| Case | Handling |
+|------|----------|
+| No `seriesPrimary` | Skip normalization, use title-based parsing |
+| Both title AND subtitle have series name | Don't swap, let cleaning rules handle |
+| Multi-series books (`seriesSecondary`) | Ignore secondary, use primary only |
+| Standalone books | No series data → use raw title/subtitle |
+
+### Test Fixtures
+
+Golden test data is available in `tests/fixtures/audnex_normalization_samples.json`:
+- **correct_mapping**: 5 SAO volumes with correct title/subtitle (no swap needed)
+- **swapped_mapping**: 6 real examples where Audnex has title/subtitle swapped
+- **no_series**: Standalone books without series data
+- **edge_cases**: Tricky patterns (both have series, short titles, "Light Novel" subtitles)
+
+All test data verified against live Audnex API on 2025-12-02.
+
+### Debug Logging
+
+When normalization detects a swap:
+
+```
+[normalize] B0DK9TS6D9: Detected swapped title/subtitle
+  - Raw: title="Alicization Exploding", subtitle="Sword Art Online 16"
+  - Series: "Sword Art Online #16"
+  - Fixed: title="Sword Art Online 16", subtitle="Alicization Exploding"
+  - Arc: "Alicization Exploding"
+```
+
+[↑ Back to top](#table-of-contents)
+
+---
+
+## Full Processing Pipeline
+
+The complete data flow from raw Audnex to final output:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            AUDNEX API RESPONSE                              │
+│  (title, subtitle, authors, narrators, seriesPrimary, genres, etc.)        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     0. AUDNEX NORMALIZATION (New!)                          │
+│  - Detect title/subtitle swaps using seriesPrimary as source of truth      │
+│  - Extract arc name from the "wrong" field                                 │
+│  - Build NormalizedBook with canonical title, subtitle, series_name, arc   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         PER-FIELD CLEANING PIPELINE                         │
+│  1. Preserve Check  → Skip cleaning if in `preserve_exact` list            │
+│  2. Author Map      → Replace known author names (exact match)             │
+│  3. Transliteration → Non-ASCII → ASCII (pykakasi → unidecode fallback)    │
+│  4. Phrase Removal  → Remove format indicators, genre tags, etc.           │
+│  5. Series Suffix   → Remove " Series", " Trilogy", etc. (series only)     │
+│  6. Vol/Book        → Normalize or remove based on context                 │
+│  7. Cleanup         → Fix double spaces, trim, dangling punctuation        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              OUTPUT GENERATION                              │
+│  - MAM JSON: Clean title, subtitle (arc), series, authors                  │
+│  - Folder name: {series}_vol_{position}_-_{arc}_-_{authors}_-_{year}       │
+│  - File names: {book_num}_{chapter_title}.m4b                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Cleaning Pipeline Order
 
-The cleaning steps are applied in this specific order to avoid issues (e.g., dangling commas, double spaces):
+Steps 1-7 are the per-field cleaning pipeline (after normalization):
 
 ```
 1. Preserve Check     → Skip cleaning if title/series is in `preserve_exact` list
@@ -92,6 +367,8 @@ Step 7: "Overlord vol_03"            (no changes needed)
 **Description cleaning policy:** Minimal - transliteration only, plus optional trailing format-stripping (e.g., "(Unabridged Audiobook)" at end). Description is **excluded** from `format_indicators`, `genre_tags`, `series_suffixes`, and subtitle redundancy rules. Only transliteration and very light trailing cruft removal are allowed.
 
 **Subtitle redundancy policy:** Drop subtitle entirely if it only contains "Series, Book X" or "Title, Book X" pattern - this info is already in the series/title fields.
+
+[↑ Back to top](#table-of-contents)
 
 ---
 
@@ -335,6 +612,8 @@ Project Hail Mary                     # Standalone
 Sword Art Online: Progressive, Vol. 2  # Nested series (colon preserved via preserve_exact)
 ```
 
+[↑ Back to top](#table-of-contents)
+
 ---
 
 ## Matching Rules by Category
@@ -574,6 +853,8 @@ Based on library analysis: **55 books** have subtitles that are just "Series, Bo
 
 **Applied to:** MAM JSON authors and narrators fields only (not folder/file names)
 
+[↑ Back to top](#table-of-contents)
+
 ---
 
 ## Vol/Book Normalization
@@ -658,11 +939,13 @@ Complete schema with version tracking:
 }
 ```
 
+[↑ Back to top](#table-of-contents)
+
 ---
 
-## Samples Needed
+## Sample Data Sources
 
-To refine these rules, we need real samples. Sources to check:
+To refine these rules, we collected real samples from these sources:
 
 ### 1. Export Libation Library
 ```bash
@@ -733,6 +1016,8 @@ Save raw responses from metadata fetches for analysis.
 | "Series, Book X" pattern | 53 | ❌ Drop subtitle |
 | Title in Subtitle | 7 | ❌ Strip title portion |
 
+[↑ Back to top](#table-of-contents)
+
 ---
 
 ## Implementation Phases
@@ -799,11 +1084,25 @@ Save raw responses from metadata fetches for analysis.
 - [x] Added 22 tests for folder/file generation
 - [x] **Integrated into hardlinker.py** - `stage_release()` now uses `build_mam_folder_name()` and `build_mam_file_name()`
 
+### Phase 7: Audnex Normalization ✅
+- [x] Created `NormalizedBook` dataclass in `models.py` with raw/display fields
+- [x] Implemented `detect_swapped_title_subtitle()` using seriesPrimary as source of truth
+- [x] Implemented `extract_arc_name()` for extracting arc from the "wrong" field
+- [x] Implemented `normalize_audnex_book()` main entry point in `naming.py`
+- [x] Added config option `title_subtitle_normalization.enabled` in `naming.json` (default: true)
+- [x] Updated `NamingConfig` with `normalize_title_subtitle` flag
+- [x] Wired normalization into `build_mam_json()` in `metadata.py`
+- [x] Created test fixtures (`tests/fixtures/audnex_normalization_samples.json`) with 18 verified samples
+- [x] Added 20 tests for normalization (`tests/test_normalization.py`)
+- [x] Verified against live Audnex API - SAO vol_16, TBATE vols 1-4, Multiverse vol_7 confirmed swapped
+
 ---
 
 ## Implementation Complete! 🎉
 
 All naming strategy phases are complete and integrated into the workflow.
+
+[↑ Back to top](#table-of-contents)
 
 ---
 
@@ -848,6 +1147,8 @@ When `LOG_LEVEL=DEBUG`, log with consistent rule IDs:
   - matched rule: subtitle_redundancy_rules.series_in_parens (strip_match)
 ```
 
+[↑ Back to top](#table-of-contents)
+
 ---
 
 ## Questions Resolved
@@ -864,6 +1165,8 @@ When `LOG_LEVEL=DEBUG`, log with consistent rule IDs:
 4. **Case sensitivity** → All phrase matching is case-insensitive except `preserve_exact` and `author_map`
 
 5. **Matching position** → Explicitly defined per category (anywhere vs suffix-only)
+
+[↑ Back to top](#table-of-contents)
 
 ---
 
@@ -890,6 +1193,8 @@ Eventually could extend naming.json to support context overrides:
 - Fetch remote naming.json updates
 - Merge community patterns with local overrides
 
+[↑ Back to top](#table-of-contents)
+
 ---
 
 ## Changelog
@@ -900,3 +1205,4 @@ Eventually could extend naming.json to support context overrides:
 - **2025-12-02**: Added folder/file naming schemas with real library examples (SAO, Mushoku Tensei, Skyward)
 - **2025-12-02**: Added `[{Tag}]` ripper tag component (e.g., `[H2OKing]`)
 - **2025-12-02**: Clarified standalone book layout (no separate book folder), pipeline field scope, truncation strategy, series_number source of truth, description exclusions, logging rule IDs, preserve-exact drift validation (ChatGPT review round 2)
+- **2025-12-02**: Implemented Phase 7 - Audnex Normalization Layer. Fixes title/subtitle swaps using `seriesPrimary` as source of truth. Added `NormalizedBook` dataclass, detection/extraction functions, 20 tests, and 18 verified API samples
