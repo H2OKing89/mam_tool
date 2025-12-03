@@ -32,11 +32,8 @@ ABS uses Bearer token authentication. The API token can be found in:
 Authorization: Bearer <API_TOKEN>
 ```
 
-### Alternative (GET requests only)
-
-```http
-GET /api/libraries?token=<API_TOKEN>
-```
+> **Security Note:** Authentication is only supported via the `Authorization: Bearer <API_TOKEN>` header.
+> Passing tokens in URL query strings is not supported due to security risks (tokens may leak via logs, browser history, or Referer headers).
 
 ### Token from Environment
 
