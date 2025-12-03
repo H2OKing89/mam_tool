@@ -20,6 +20,9 @@ This document outlines the comprehensive validation and verification strategy fo
 | Validation Reports | ✅ Complete | `ValidationReport` with JSON export |
 | Safety Utilities | ✅ Complete | Path sanitization, checksums, traversal protection |
 | Validate CLI | ✅ Complete | `mamfast validate` with `--json` output |
+| Naming Validation | ✅ Complete | 112 tests for title/series/subtitle cleaning |
+| Audnex Normalization | ✅ Complete | 20 tests for title/subtitle swap detection |
+| Golden File Tests | ✅ Complete | 68 tests for expected output comparisons |
 
 ---
 
@@ -42,7 +45,7 @@ This document outlines the comprehensive validation and verification strategy fo
 | `validation.py` | ✅ Complete | `tests/test_validation.py` |
 | `integration` | ✅ Complete | `tests/test_integration.py` |
 
-**Total: 469 tests passing**
+**Total: 655 tests passing**
 
 ### Test Structure
 
@@ -50,16 +53,18 @@ This document outlines the comprehensive validation and verification strategy fo
 tests/
 ├── __init__.py
 ├── conftest.py              # Shared fixtures
-├── test_config.py           # ✅ 29 tests
+├── test_config.py           # ✅ 41 tests
 ├── test_console.py          # ✅ 50 tests
 ├── test_discovery.py        # ✅ 42 tests
+├── test_golden.py           # ✅ 68 tests (golden file comparisons)
 ├── test_hardlinker.py       # ✅ 16 tests
 ├── test_integration.py      # ✅ 15 tests
 ├── test_libation.py         # ✅ 16 tests
-├── test_metadata.py         # ✅ 66 tests
+├── test_metadata.py         # ✅ 75 tests
 ├── test_mkbrr.py            # ✅ 28 tests
 ├── test_models.py           # ✅ 27 tests
-├── test_naming.py           # ✅ 35 tests
+├── test_naming.py           # ✅ 112 tests (title/series/subtitle cleaning)
+├── test_normalization.py    # ✅ 20 tests (Audnex title/subtitle swap detection)
 ├── test_paths.py            # ✅ 23 tests
 ├── test_qbittorrent.py      # ✅ 22 tests
 ├── test_retry.py            # ✅ 13 tests
@@ -401,7 +406,7 @@ Duration:       2m 34s
 3. ✅ **Basic Validation Framework** - `ValidationCheck`, `ValidationResult` classes
 
 ### Phase 2: Testing ✅ COMPLETE
-4. ✅ **Unit Tests** - 469 tests covering all modules
+4. ✅ **Unit Tests** - 655 tests covering all modules
 5. ✅ **Integration Tests** - 15 tests for end-to-end scenarios
 
 ### Phase 3: Runtime Validation ✅ COMPLETE
@@ -421,6 +426,15 @@ Duration:       2m 34s
 15. 📋 **Concurrent Processing Guard** - Prevent processing same release twice (future enhancement)
 16. 📋 **API Rate Limiting** - Add rate limiting for Audnex API calls (future enhancement)
 17. 📋 **Circuit Breaker** - Auto-disable failing services (future enhancement)
+
+### Phase 6: Naming Validation ✅ COMPLETE
+18. ✅ **Filename Length Check** - `PreUploadValidation._check_filename_length()` validates 225 char limit
+19. ✅ **Title/Series/Subtitle Cleaning** - 112 tests in `test_naming.py` covering all cleaning rules
+20. ✅ **Audnex Normalization** - 20 tests in `test_normalization.py` for title/subtitle swap detection
+21. ✅ **Author Filtering** - Tests for translator/illustrator/editor removal
+22. ✅ **Japanese Transliteration** - Tests for pykakasi transliteration
+23. ✅ **Preserve Exact** - Tests for bypass of cleaning rules
+24. ✅ **Subtitle Redundancy** - Tests for series-in-subtitle detection
 
 ---
 
@@ -443,8 +457,10 @@ mamfast validate --asin B0G4NFQDWR  # Validate specific release
 mamfast validate --json          # Output as JSON
 
 # Testing
-pytest                           # Run all tests (469 tests)
+pytest                           # Run all tests (655 tests)
 pytest tests/test_validation.py  # Run validation tests only (67 tests)
+pytest tests/test_naming.py      # Run naming tests only (112 tests)
+pytest tests/test_normalization.py  # Run normalization tests (20 tests)
 pytest --cov=src/mamfast         # With coverage
 ```
 
@@ -456,10 +472,13 @@ The validation system is complete when:
 
 - [x] `mamfast check` passes on a correctly configured system
 - [x] `mamfast --dry-run run` completes without errors
-- [x] Unit test coverage ≥ 80% for critical modules (469 tests)
+- [x] Unit test coverage ≥ 80% for critical modules (655 tests)
 - [x] Validation framework implemented (`validation.py`)
 - [x] Runtime validation checks at each pipeline stage
 - [x] Chapter integrity check detects the Libation bug scenario
 - [x] Clear error messages guide users to fix issues
 - [x] `mamfast validate` command for pre-flight checks
 - [x] JSON export for validation reports
+- [x] Naming validation: title/series/subtitle cleaning (112 tests)
+- [x] Audnex normalization: title/subtitle swap detection (20 tests)
+- [x] Filename length validation within 225 char MAM limit
