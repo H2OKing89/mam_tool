@@ -253,6 +253,101 @@ def fatal_error(message: str, hint: str | None = None) -> None:
 
 
 # =============================================================================
+# Dry Run Output (Phase 3)
+# =============================================================================
+
+
+@dataclass
+class DryRunTransform:
+    """A single field transformation shown in dry-run output."""
+
+    field: str
+    before: str
+    after: str
+    rule: str | None = None
+
+
+def print_dry_run_header(count: int) -> None:
+    """Print the dry-run panel header."""
+    console.print(
+        Panel(
+            f"Dry Run: Processing {count} release{'s' if count != 1 else ''}",
+            border_style="yellow",
+            padding=(0, 2),
+        )
+    )
+    console.print()
+
+
+def print_dry_run_release(
+    transforms: list[DryRunTransform],
+    release_title: str | None = None,
+) -> None:
+    """
+    Print a before/after table for a single release in dry-run mode.
+
+    Args:
+        transforms: List of field transformations to display
+        release_title: Optional release title to show above the table
+    """
+    if release_title:
+        console.print(f"[bold]{release_title}[/]")
+
+    # Filter to only transformations that actually changed something
+    changes = [t for t in transforms if t.before != t.after]
+
+    if not changes:
+        console.print("  [dim]No transformations applied[/]")
+        console.print()
+        return
+
+    table = Table(
+        show_header=True,
+        header_style="bold",
+        box=None,
+        padding=(0, 1),
+        expand=True,
+    )
+    table.add_column("Field", style="cyan", width=14)
+    table.add_column("Before", style="red", overflow="fold", ratio=1)
+    table.add_column("After", style="green", overflow="fold", ratio=1)
+
+    for t in changes:
+        table.add_row(t.field, t.before, t.after)
+        if t.rule:
+            # Add rule info as a dim row below
+            console.print(table)
+            console.print(f"  [dim]rule:[/] [yellow]{t.rule}[/]")
+            # Create new table for next transform
+            table = Table(
+                show_header=False,
+                box=None,
+                padding=(0, 1),
+                expand=True,
+            )
+            table.add_column("Field", style="cyan", width=14)
+            table.add_column("Before", style="red", overflow="fold", ratio=1)
+            table.add_column("After", style="green", overflow="fold", ratio=1)
+    else:
+        # Print the last table if no rule on last item
+        if changes and not changes[-1].rule:
+            console.print(table)
+        elif changes and changes[-1].rule:
+            pass  # Already printed above
+
+    console.print()
+
+
+def print_dry_run_summary(processed: int, would_change: int, no_change: int) -> None:
+    """Print a summary at the end of dry-run."""
+    console.print(
+        f"[dim]Summary:[/] {processed} releases checked, "
+        f"[green]{would_change}[/] would change, "
+        f"[dim]{no_change}[/] unchanged"
+    )
+
+
+# =============================================================================
 # Rule Trace Tables (Phase 3)
 # =============================================================================
 

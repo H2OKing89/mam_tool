@@ -1085,3 +1085,122 @@ class TestCreatePipelineProgress:
             task = progress.add_task("[cyan]Test", total=3)
             progress.update(task, advance=1)
             progress.update(task, advance=2)
+
+
+# =============================================================================
+# Dry Run Output Tests (Phase 3)
+# =============================================================================
+
+
+class TestDryRunTransform:
+    """Test DryRunTransform dataclass."""
+
+    def test_create_transform(self):
+        """DryRunTransform should store field transformation data."""
+        from mamfast.console import DryRunTransform
+
+        t = DryRunTransform(
+            field="title",
+            before="Overlord (Light Novel)",
+            after="Overlord",
+            rule="format_indicators",
+        )
+        assert t.field == "title"
+        assert t.before == "Overlord (Light Novel)"
+        assert t.after == "Overlord"
+        assert t.rule == "format_indicators"
+
+    def test_create_transform_without_rule(self):
+        """DryRunTransform should work without rule specified."""
+        from mamfast.console import DryRunTransform
+
+        t = DryRunTransform(field="author", before="John Smith", after="John Smith")
+        assert t.rule is None
+
+
+class TestPrintDryRunHeader:
+    """Test print_dry_run_header function."""
+
+    def test_single_release(self):
+        """print_dry_run_header should use singular for 1 release."""
+        from mamfast.console import print_dry_run_header
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_header(1)
+            # The Panel contains the text
+            assert mock_print.call_count >= 1
+            # Check that Panel was created with "1 release" (singular)
+            panel_arg = mock_print.call_args_list[0][0][0]
+            assert "1 release" in str(panel_arg.renderable)
+
+    def test_multiple_releases(self):
+        """print_dry_run_header should use plural for multiple releases."""
+        from mamfast.console import print_dry_run_header
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_header(5)
+            panel_arg = mock_print.call_args_list[0][0][0]
+            assert "5 releases" in str(panel_arg.renderable)
+
+
+class TestPrintDryRunRelease:
+    """Test print_dry_run_release function."""
+
+    def test_with_transforms(self):
+        """print_dry_run_release should display transforms table."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(
+                field="title",
+                before="Overlord (Light Novel)",
+                after="Overlord",
+                rule="format_indicators",
+            ),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(transforms, release_title="Overlord")
+            assert mock_print.called
+
+    def test_with_no_changes(self):
+        """print_dry_run_release should show 'no transformations' when unchanged."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(field="title", before="Same", after="Same"),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(transforms)
+            call_str = str(mock_print.call_args_list)
+            assert "No transformations" in call_str
+
+    def test_filters_unchanged_fields(self):
+        """print_dry_run_release should only show fields that changed."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(field="title", before="Same", after="Same"),
+            DryRunTransform(field="author", before="Old Author", after="New Author"),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(transforms)
+            # Should be called (table output) but only show changed fields
+            assert mock_print.called
+
+
+class TestPrintDryRunSummary:
+    """Test print_dry_run_summary function."""
+
+    def test_summary_output(self):
+        """print_dry_run_summary should display counts."""
+        from mamfast.console import print_dry_run_summary
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_summary(processed=10, would_change=3, no_change=7)
+            call_str = str(mock_print.call_args)
+            assert "10 releases" in call_str
+            assert "3" in call_str
+            assert "7" in call_str
