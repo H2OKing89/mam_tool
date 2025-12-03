@@ -554,3 +554,672 @@ class TestStatus:
         with patch.object(console, "print") as mock_print:
             status("Warning message", style="warning")
             mock_print.assert_called_once()
+
+
+# =============================================================================
+# Phase 3: Test Rule Trace Functions
+# =============================================================================
+
+
+class TestRuleTrace:
+    """Test RuleTrace dataclass and related functions."""
+
+    def test_rule_trace_dataclass(self):
+        """RuleTrace should store transformation data."""
+        from mamfast.console import RuleTrace
+
+        trace = RuleTrace(
+            field="title",
+            before="Original Title",
+            after="Cleaned Title",
+            rule_id="format_indicators",
+            rule_type="phrase_removal",
+        )
+        assert trace.field == "title"
+        assert trace.before == "Original Title"
+        assert trace.after == "Cleaned Title"
+        assert trace.rule_id == "format_indicators"
+        assert trace.rule_type == "phrase_removal"
+
+    def test_rule_trace_defaults(self):
+        """RuleTrace should have None defaults for optional fields."""
+        from mamfast.console import RuleTrace
+
+        trace = RuleTrace(field="title", before="Before", after="After")
+        assert trace.rule_id is None
+        assert trace.rule_type is None
+
+
+class TestLogTitleTransform:
+    """Test log_title_transform function."""
+
+    def test_no_output_when_not_verbose(self):
+        """log_title_transform should not print when verbose=False."""
+        from mamfast.console import log_title_transform
+
+        with patch.object(console, "print") as mock_print:
+            log_title_transform("title", "Before", "After", verbose=False)
+            mock_print.assert_not_called()
+
+    def test_no_output_when_no_change(self):
+        """log_title_transform should not print when before==after."""
+        from mamfast.console import log_title_transform
+
+        with patch.object(console, "print") as mock_print:
+            log_title_transform("title", "Same", "Same", verbose=True)
+            mock_print.assert_not_called()
+
+    def test_output_when_verbose_and_changed(self):
+        """log_title_transform should print table when verbose and changed."""
+        from mamfast.console import log_title_transform
+
+        with patch.object(console, "print") as mock_print:
+            log_title_transform("title", "Before", "After", verbose=True)
+            assert mock_print.call_count >= 1
+
+    def test_output_includes_rule_id(self):
+        """log_title_transform should show rule_id if provided."""
+        from mamfast.console import log_title_transform
+
+        with patch.object(console, "print") as mock_print:
+            log_title_transform("title", "Before", "After", rule_id="test_rule", verbose=True)
+            # Should have table + rule line
+            assert mock_print.call_count >= 2
+
+
+class TestPrintRuleTrace:
+    """Test print_rule_trace function."""
+
+    def test_empty_traces(self):
+        """print_rule_trace should handle empty list."""
+        from mamfast.console import print_rule_trace
+
+        with patch.object(console, "print") as mock_print:
+            print_rule_trace([])
+            mock_print.assert_called_once()
+            assert "No" in str(mock_print.call_args)
+
+    def test_no_changes_message(self):
+        """print_rule_trace should show message when no changes made."""
+        from mamfast.console import RuleTrace, print_rule_trace
+
+        traces = [
+            RuleTrace(field="title", before="Same", after="Same", rule_id="rule1"),
+            RuleTrace(field="subtitle", before="Same2", after="Same2", rule_id="rule2"),
+        ]
+        with patch.object(console, "print") as mock_print:
+            print_rule_trace(traces)
+            call_str = str(mock_print.call_args)
+            assert "No changes" in call_str
+
+    def test_shows_changes_only(self):
+        """print_rule_trace should only show traces where before != after."""
+        from mamfast.console import RuleTrace, print_rule_trace
+
+        traces = [
+            RuleTrace(field="title", before="Old", after="New", rule_id="rule1"),
+            RuleTrace(field="subtitle", before="Same", after="Same", rule_id="rule2"),
+        ]
+        with patch.object(console, "print") as mock_print:
+            print_rule_trace(traces)
+            # Should print table and summary
+            assert mock_print.call_count >= 2
+
+
+# =============================================================================
+# Phase 3: Test Validation Report Functions
+# =============================================================================
+
+
+class TestPrintValidationReport:
+    """Test print_validation_report function."""
+
+    def test_empty_result(self):
+        """print_validation_report should handle empty result."""
+        from mamfast.console import print_validation_report
+        from mamfast.validation import ValidationResult
+
+        result = ValidationResult()
+        with patch.object(console, "print") as mock_print:
+            print_validation_report(result)
+            assert mock_print.call_count >= 1
+
+    def test_shows_all_checks(self):
+        """print_validation_report should show all checks in table."""
+        from mamfast.console import print_validation_report
+        from mamfast.validation import CheckCategory, ValidationCheck, ValidationResult
+
+        result = ValidationResult()
+        result.add(
+            ValidationCheck(
+                name="test_check",
+                passed=True,
+                message="Test passed",
+                category=CheckCategory.CONFIG,
+            )
+        )
+        result.add(
+            ValidationCheck(
+                name="failed_check",
+                passed=False,
+                message="Test failed",
+                severity="error",
+                category=CheckCategory.PATHS,
+            )
+        )
+
+        with patch.object(console, "print") as mock_print:
+            print_validation_report(result)
+            # Should print table and summary
+            assert mock_print.call_count >= 2
+
+
+class TestPrintValidationSummary:
+    """Test print_validation_summary function."""
+
+    def test_all_passed(self):
+        """print_validation_summary should show checkmark when all passed."""
+        from mamfast.console import print_validation_summary
+        from mamfast.validation import CheckCategory, ValidationCheck, ValidationResult
+
+        result = ValidationResult()
+        result.add(
+            ValidationCheck(name="check1", passed=True, message="OK", category=CheckCategory.CONFIG)
+        )
+        result.add(
+            ValidationCheck(name="check2", passed=True, message="OK", category=CheckCategory.PATHS)
+        )
+
+        with patch.object(console, "print") as mock_print:
+            print_validation_summary(result)
+            call_str = str(mock_print.call_args)
+            assert "✓" in call_str
+            assert "2 passed" in call_str
+
+    def test_with_errors(self):
+        """print_validation_summary should show X when errors present."""
+        from mamfast.console import print_validation_summary
+        from mamfast.validation import CheckCategory, ValidationCheck, ValidationResult
+
+        result = ValidationResult()
+        result.add(
+            ValidationCheck(name="check1", passed=True, message="OK", category=CheckCategory.CONFIG)
+        )
+        result.add(
+            ValidationCheck(
+                name="check2",
+                passed=False,
+                message="Failed",
+                severity="error",
+                category=CheckCategory.PATHS,
+            )
+        )
+
+        with patch.object(console, "print") as mock_print:
+            print_validation_summary(result)
+            call_str = str(mock_print.call_args)
+            assert "✗" in call_str
+            assert "1 error" in call_str
+
+    def test_pluralization_multiple_errors_and_warnings(self):
+        """print_validation_summary should use plural form for multiple errors/warnings."""
+        from mamfast.console import print_validation_summary
+        from mamfast.validation import CheckCategory, ValidationCheck, ValidationResult
+
+        result = ValidationResult()
+        # Add 2 errors
+        result.add(
+            ValidationCheck(
+                name="err1",
+                passed=False,
+                message="Fail",
+                severity="error",
+                category=CheckCategory.CONFIG,
+            )
+        )
+        result.add(
+            ValidationCheck(
+                name="err2",
+                passed=False,
+                message="Fail",
+                severity="error",
+                category=CheckCategory.PATHS,
+            )
+        )
+        # Add 3 warnings
+        result.add(
+            ValidationCheck(
+                name="warn1",
+                passed=False,
+                message="Warn",
+                severity="warning",
+                category=CheckCategory.CONFIG,
+            )
+        )
+        result.add(
+            ValidationCheck(
+                name="warn2",
+                passed=False,
+                message="Warn",
+                severity="warning",
+                category=CheckCategory.PATHS,
+            )
+        )
+        result.add(
+            ValidationCheck(
+                name="warn3",
+                passed=False,
+                message="Warn",
+                severity="warning",
+                category=CheckCategory.SERVICES,
+            )
+        )
+
+        with patch.object(console, "print") as mock_print:
+            print_validation_summary(result)
+            call_str = str(mock_print.call_args)
+            assert "2 errors" in call_str  # Plural
+            assert "3 warnings" in call_str  # Plural
+
+
+class TestPrintCheckCategory:
+    """Test print_check_category function."""
+
+    def test_prints_category_checks(self):
+        """print_check_category should print checks for given category."""
+        from mamfast.console import print_check_category
+        from mamfast.validation import CheckCategory, ValidationCheck, ValidationResult
+
+        result = ValidationResult()
+        result.add(
+            ValidationCheck(name="check1", passed=True, message="OK", category=CheckCategory.CONFIG)
+        )
+        result.add(
+            ValidationCheck(
+                name="check2", passed=False, message="Failed", category=CheckCategory.CONFIG
+            )
+        )
+
+        with patch.object(console, "print") as mock_print:
+            print_check_category(result, CheckCategory.CONFIG)
+            # Should print title + 2 check lines
+            assert mock_print.call_count == 3
+
+    def test_skips_empty_category(self):
+        """print_check_category should not print if category has no checks."""
+        from mamfast.console import print_check_category
+        from mamfast.validation import CheckCategory, ValidationCheck, ValidationResult
+
+        result = ValidationResult()
+        result.add(
+            ValidationCheck(name="check1", passed=True, message="OK", category=CheckCategory.CONFIG)
+        )
+
+        with patch.object(console, "print") as mock_print:
+            print_check_category(result, CheckCategory.PATHS)
+            mock_print.assert_not_called()
+
+
+# =============================================================================
+# Phase 3: Test Workflow Progress Functions
+# =============================================================================
+
+
+class TestPrintWorkflowSummary:
+    """Test print_workflow_summary function."""
+
+    def test_basic_stats(self):
+        """print_workflow_summary should display stats table."""
+        from mamfast.console import print_workflow_summary
+
+        stats = {
+            "discovered": 10,
+            "staged": 8,
+            "metadata": 8,
+            "torrents": 7,
+            "uploaded": 7,
+            "skipped": 2,
+            "errors": 1,
+        }
+        with patch.object(console, "print") as mock_print:
+            print_workflow_summary(stats)
+            assert mock_print.call_count >= 1
+
+    def test_with_duration(self):
+        """print_workflow_summary should show duration if provided."""
+        from mamfast.console import print_workflow_summary
+
+        stats = {"discovered": 5, "errors": 0}
+        with patch.object(console, "print") as mock_print:
+            print_workflow_summary(stats, duration=12.5)
+            # Should print table + duration line
+            assert mock_print.call_count >= 2
+            call_str = str(mock_print.call_args)
+            assert "12.5s" in call_str
+
+
+class TestPrintReleaseDetails:
+    """Test print_release_details function."""
+
+    def test_basic_release(self):
+        """print_release_details should show release in panel."""
+        from mamfast.console import print_release_details
+
+        @dataclass
+        class MockRelease:
+            asin: str = "B001234567"
+            title: str = "Test Book"
+            author: str = "Test Author"
+            series: str = "Test Series"
+
+        release = MockRelease()
+        with patch.object(console, "print") as mock_print:
+            print_release_details(release)
+            mock_print.assert_called_once()
+
+    def test_verbose_mode(self):
+        """print_release_details should show extra fields in verbose mode."""
+        from pathlib import Path
+
+        from mamfast.console import print_release_details
+
+        @dataclass
+        class MockRelease:
+            asin: str = "B001234567"
+            title: str = "Test Book"
+            source_dir: Path = Path("/source")
+            staged_dir: Path = Path("/staged")
+
+        release = MockRelease()
+        with patch.object(console, "print") as mock_print:
+            print_release_details(release, verbose=True)
+            mock_print.assert_called_once()
+
+
+class TestPrintPipelineProgress:
+    """Test print_pipeline_progress function."""
+
+    def test_basic_progress(self):
+        """print_pipeline_progress should show stage progress."""
+        from mamfast.console import print_pipeline_progress
+
+        with patch.object(console, "print") as mock_print:
+            print_pipeline_progress("Staging", 3, 10)
+            mock_print.assert_called_once()
+            call_str = str(mock_print.call_args)
+            assert "3/10" in call_str
+            assert "Staging" in call_str
+
+    def test_with_release_name(self):
+        """print_pipeline_progress should show release name."""
+        from mamfast.console import print_pipeline_progress
+
+        with patch.object(console, "print") as mock_print:
+            print_pipeline_progress("Metadata", 1, 5, "Test Book Title")
+            call_str = str(mock_print.call_args)
+            assert "Test Book Title" in call_str
+
+    def test_truncates_long_name(self):
+        """print_pipeline_progress should truncate very long names."""
+        from mamfast.console import print_pipeline_progress
+
+        long_name = "A" * 100  # Very long name
+        with patch.object(console, "print") as mock_print:
+            print_pipeline_progress("Staging", 1, 1, long_name)
+            call_str = str(mock_print.call_args)
+            assert "..." in call_str
+
+
+# =============================================================================
+# Phase 3: Test Error Formatting Functions
+# =============================================================================
+
+
+class TestPrintException:
+    """Test print_exception function."""
+
+    def test_basic_exception(self):
+        """print_exception should show error message."""
+        from mamfast.console import err_console, print_exception
+
+        error = ValueError("Test error message")
+        with patch.object(err_console, "print") as mock_print:
+            print_exception(error)
+            assert mock_print.call_count >= 2  # Title + message
+            call_str = str(mock_print.call_args_list)
+            assert "ValueError" in call_str
+            assert "Test error message" in call_str
+
+    def test_with_context(self):
+        """print_exception should show context dict."""
+        from mamfast.console import err_console, print_exception
+
+        error = RuntimeError("Failed")
+        context = {"asin": "B001234567", "file": "/path/to/file"}
+        with patch.object(err_console, "print") as mock_print:
+            print_exception(error, context=context)
+            call_str = str(mock_print.call_args_list)
+            assert "asin" in call_str
+            assert "B001234567" in call_str
+
+    def test_without_traceback(self):
+        """print_exception should skip traceback if requested."""
+        from mamfast.console import err_console, print_exception
+
+        error = ValueError("Test")
+        with patch.object(err_console, "print") as mock_print:
+            print_exception(error, show_traceback=False)
+            # Should only have title + message, no traceback
+            assert mock_print.call_count == 2
+
+
+class TestPrintErrorSummary:
+    """Test print_error_summary function."""
+
+    def test_empty_errors(self):
+        """print_error_summary should handle empty list."""
+        from mamfast.console import err_console, print_error_summary
+
+        with patch.object(err_console, "print") as mock_print:
+            print_error_summary([])
+            mock_print.assert_not_called()
+
+    def test_multiple_errors(self):
+        """print_error_summary should show table of errors."""
+        from mamfast.console import err_console, print_error_summary
+
+        errors = [
+            ("Book 1", ValueError("Error 1")),
+            ("Book 2", RuntimeError("Error 2")),
+        ]
+        with patch.object(err_console, "print") as mock_print:
+            print_error_summary(errors)
+            mock_print.assert_called_once()
+
+
+# =============================================================================
+# Phase 3: Test Progress Context Manager
+# =============================================================================
+
+
+class TestProgressContext:
+    """Test progress_context context manager."""
+
+    def test_progress_context_creates_progress(self):
+        """progress_context should yield a Progress and TaskID."""
+        from mamfast.console import progress_context
+
+        with progress_context("Test task", total=5) as (progress, task):
+            assert progress is not None
+            assert task is not None
+            # Advance and verify no errors
+            progress.update(task, advance=1)
+
+    def test_progress_context_with_none_total(self):
+        """progress_context should work with indeterminate total."""
+        from mamfast.console import progress_context
+
+        with progress_context("Indeterminate task", total=None) as (progress, task):
+            assert progress is not None
+            # Update description
+            progress.update(task, description="Still working...")
+
+
+class TestCreatePipelineProgress:
+    """Test create_pipeline_progress function."""
+
+    def test_creates_progress_instance(self):
+        """create_pipeline_progress should return a Progress instance."""
+        from rich.progress import Progress
+
+        from mamfast.console import create_pipeline_progress
+
+        progress = create_pipeline_progress()
+        assert isinstance(progress, Progress)
+
+    def test_can_use_as_context_manager(self):
+        """create_pipeline_progress result should work as context manager."""
+        from mamfast.console import create_pipeline_progress
+
+        with create_pipeline_progress() as progress:
+            task = progress.add_task("[cyan]Test", total=3)
+            progress.update(task, advance=1)
+            progress.update(task, advance=2)
+
+
+# =============================================================================
+# Dry Run Output Tests (Phase 3)
+# =============================================================================
+
+
+class TestDryRunTransform:
+    """Test DryRunTransform dataclass."""
+
+    def test_create_transform(self):
+        """DryRunTransform should store field transformation data."""
+        from mamfast.console import DryRunTransform
+
+        t = DryRunTransform(
+            field="title",
+            before="Overlord (Light Novel)",
+            after="Overlord",
+            rule="format_indicators",
+        )
+        assert t.field == "title"
+        assert t.before == "Overlord (Light Novel)"
+        assert t.after == "Overlord"
+        assert t.rule == "format_indicators"
+
+    def test_create_transform_without_rule(self):
+        """DryRunTransform should work without rule specified."""
+        from mamfast.console import DryRunTransform
+
+        t = DryRunTransform(field="author", before="John Smith", after="John Smith")
+        assert t.rule is None
+
+
+class TestPrintDryRunHeader:
+    """Test print_dry_run_header function."""
+
+    def test_single_release(self):
+        """print_dry_run_header should use singular for 1 release."""
+        from mamfast.console import print_dry_run_header
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_header(1)
+            # The Panel contains the text
+            assert mock_print.call_count >= 1
+            # Check that Panel was created with "1 release" (singular)
+            panel_arg = mock_print.call_args_list[0][0][0]
+            assert "1 release" in str(panel_arg.renderable)
+
+    def test_multiple_releases(self):
+        """print_dry_run_header should use plural for multiple releases."""
+        from mamfast.console import print_dry_run_header
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_header(5)
+            panel_arg = mock_print.call_args_list[0][0][0]
+            assert "5 releases" in str(panel_arg.renderable)
+
+
+class TestPrintDryRunRelease:
+    """Test print_dry_run_release function."""
+
+    def test_with_transforms(self):
+        """print_dry_run_release should display transforms table."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(
+                field="title",
+                before="Overlord (Light Novel)",
+                after="Overlord",
+                rule="format_indicators",
+            ),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(transforms, release_title="Overlord")
+            assert mock_print.called
+
+    def test_with_no_changes(self):
+        """print_dry_run_release should show source/target when paths provided."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(field="title", before="Same", after="Same"),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(transforms, source_path="My Folder", target_path="My Folder")
+            call_str = str(mock_print.call_args_list)
+            assert "Source" in call_str
+            assert "unchanged" in call_str
+
+    def test_shows_different_target(self):
+        """print_dry_run_release should highlight different target path."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(field="title", before="Old", after="New"),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(
+                transforms,
+                source_path="Old Folder",
+                target_path="New Folder",
+            )
+            call_str = str(mock_print.call_args_list)
+            assert "Source" in call_str
+            assert "Target" in call_str
+
+    def test_filters_unchanged_fields(self):
+        """print_dry_run_release should only show fields that changed."""
+        from mamfast.console import DryRunTransform, print_dry_run_release
+
+        transforms = [
+            DryRunTransform(field="title", before="Same", after="Same"),
+            DryRunTransform(field="author", before="Old Author", after="New Author"),
+        ]
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_release(transforms)
+            # Should be called (table output) but only show changed fields
+            assert mock_print.called
+
+
+class TestPrintDryRunSummary:
+    """Test print_dry_run_summary function."""
+
+    def test_summary_output(self):
+        """print_dry_run_summary should display counts."""
+        from mamfast.console import print_dry_run_summary
+
+        with patch.object(console, "print") as mock_print:
+            print_dry_run_summary(processed=10, would_change=3, no_change=7)
+            call_str = str(mock_print.call_args)
+            assert "10 releases" in call_str
+            assert "3" in call_str
+            assert "7" in call_str

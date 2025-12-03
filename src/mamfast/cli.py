@@ -5,14 +5,23 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mamfast.config import NamingConfig
 
 from mamfast import __version__
 from mamfast.console import (
+    DryRunTransform,
     console,
     fatal_error,
+    print_check_category,
     print_config_section,
     print_directory_status,
     print_dry_run,
+    print_dry_run_header,
+    print_dry_run_release,
+    print_dry_run_summary,
     print_error,
     print_header,
     print_info,
@@ -21,6 +30,7 @@ from mamfast.console import (
     print_step,
     print_success,
     print_summary,
+    print_validation_summary,
     print_warning,
 )
 
@@ -272,6 +282,33 @@ Examples:
         epilog="Validates JSON structure, regex patterns, and required fields.",
     )
     validate_config_parser.set_defaults(func=cmd_validate_config)
+
+    # -------------------------------------------------------------------------
+    # dry-run: Preview naming transformations
+    # -------------------------------------------------------------------------
+    dry_run_parser = subparsers.add_parser(
+        "dry-run",
+        help="Preview naming transformations without making changes",
+        epilog="Shows before/after for title filtering and folder renaming.",
+    )
+    dry_run_parser.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Maximum number of releases to process (default: 10)",
+    )
+    dry_run_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show all fields, including unchanged ones",
+    )
+    dry_run_parser.add_argument(
+        "--asin",
+        type=str,
+        help="Preview specific release by ASIN only",
+    )
+    dry_run_parser.set_defaults(func=cmd_dry_run)
 
     return parser
 
@@ -837,6 +874,8 @@ def cmd_check(args: argparse.Namespace) -> int:
     """Run health checks to verify environment setup."""
     from mamfast.config import reload_settings
     from mamfast.validation import (
+        CheckCategory,
+        ValidationResult,
         check_categories,
         check_config,
         check_paths,
@@ -860,62 +899,35 @@ def cmd_check(args: argparse.Namespace) -> int:
     run_services = args.services_only or not (args.config_only or args.paths_only)
     run_categories = not (args.config_only or args.paths_only or args.services_only)
 
-    from mamfast.validation import ValidationResult
-
     result = ValidationResult()
 
-    # Run selected checks
+    # Run selected checks using print_check_category helper
     if run_config:
-        console.print("\n[title]Configuration[/]")
         config_result = check_config(settings)
-        for check in config_result.checks:
-            console.print(f"  {check.icon} {check.message}")
         result.merge(config_result)
+        print_check_category(result, CheckCategory.CONFIG, "Configuration")
 
     if run_paths:
-        console.print("\n[title]Paths[/]")
         paths_result = check_paths(settings)
-        for check in paths_result.checks:
-            console.print(f"  {check.icon} {check.message}")
         result.merge(paths_result)
+        print_check_category(result, CheckCategory.PATHS, "Paths")
 
     if run_services:
-        console.print("\n[title]Services[/]")
         print_info("Checking connectivity (this may take a moment)...")
         services_result = check_services(settings)
-        for check in services_result.checks:
-            console.print(f"  {check.icon} {check.message}")
         result.merge(services_result)
+        print_check_category(result, CheckCategory.SERVICES, "Services")
 
     if run_categories:
-        console.print("\n[title]Categories[/]")
         cat_result = check_categories(settings)
-        for check in cat_result.checks:
-            console.print(f"  {check.icon} {check.message}")
         result.merge(cat_result)
+        print_check_category(result, CheckCategory.CATEGORIES, "Categories")
 
-    # Summary
+    # Summary using print_validation_summary helper
     console.print()
-    total = len(result.checks)
-    passed = result.passed_count
-    errors = result.error_count
-    warnings = result.warning_count
+    print_validation_summary(result)
 
-    if result.passed:
-        if warnings > 0:
-            console.print(
-                f"[success]Summary:[/] {passed}/{total} checks passed, "
-                f"[warning]{warnings} warning(s)[/] ⚠️"
-            )
-        else:
-            console.print(f"[success]Summary:[/] All {total} checks passed ✅")
-        return 0
-    else:
-        console.print(
-            f"[error]Summary:[/] {passed}/{total} checks passed, "
-            f"[error]{errors} error(s)[/], [warning]{warnings} warning(s)[/]"
-        )
-        return 1
+    return 0 if result.passed else 1
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -1149,6 +1161,151 @@ def cmd_validate_config(args: argparse.Namespace) -> int:
         return 0
 
 
+def cmd_dry_run(args: argparse.Namespace) -> int:
+    """Preview naming transformations without making changes."""
+    from mamfast.config import reload_settings
+    from mamfast.discovery import get_new_releases, get_release_by_asin
+    from mamfast.logging_setup import set_console_quiet
+    from mamfast.utils.naming import filter_title, transliterate_text
+
+    set_console_quiet(True)
+
+    try:
+        settings = reload_settings(config_file=args.config)
+    except FileNotFoundError as e:
+        set_console_quiet(False)
+        fatal_error(str(e), "Check that config/config.yaml exists")
+        return 1
+
+    naming_config = settings.naming
+
+    # Get releases to process
+    if args.asin:
+        release = get_release_by_asin(args.asin)
+        if not release:
+            set_console_quiet(False)
+            fatal_error(f"Release not found with ASIN: {args.asin}")
+            return 1
+        releases = [release]
+    else:
+        releases = get_new_releases()
+        if args.limit and args.limit > 0:
+            releases = releases[: args.limit]
+
+    set_console_quiet(False)
+
+    if not releases:
+        console.print("[dim]No new releases to preview[/]")
+        return 0
+
+    # Print header
+    print_dry_run_header(len(releases))
+
+    # Track stats
+    would_change = 0
+    no_change = 0
+
+    # Process each release
+    for release in releases:
+        transforms: list[DryRunTransform] = []
+
+        # Original folder name from source
+        original_name = release.source_dir.name if release.source_dir else release.title
+        final_name = original_name
+
+        # Step 1: filter_title removes phrases
+        filtered_name = filter_title(
+            original_name,
+            settings.filters.remove_phrases,
+            naming_config=naming_config,
+        )
+
+        if original_name != filtered_name:
+            # Determine which rule caused the change by re-running with verbose
+            # For now, detect the rule type heuristically
+            rule = _detect_rule(original_name, filtered_name, naming_config)
+            transforms.append(
+                DryRunTransform(
+                    field="title",
+                    before=original_name,
+                    after=filtered_name,
+                    rule=rule,
+                )
+            )
+            final_name = filtered_name
+
+        # Step 2: transliterate (Japanese characters, etc.)
+        transliterated = transliterate_text(filtered_name, settings.filters)
+        if filtered_name != transliterated:
+            transforms.append(
+                DryRunTransform(
+                    field="title",
+                    before=filtered_name,
+                    after=transliterated,
+                    rule="transliteration",
+                )
+            )
+            final_name = transliterated
+
+        # Track stats
+        if transforms:
+            would_change += 1
+        else:
+            no_change += 1
+
+        # Always print release info (show what we're checking)
+        release_label = f"{release.title}" if release.title else original_name
+        if release.asin:
+            release_label += f" [dim]({release.asin})[/dim]"
+
+        print_dry_run_release(
+            transforms,
+            release_title=release_label,
+            source_path=original_name,
+            target_path=final_name,
+        )
+
+    # Print summary
+    print_dry_run_summary(len(releases), would_change, no_change)
+    return 0
+
+
+def _detect_rule(original: str, filtered: str, naming_config: NamingConfig | None) -> str | None:
+    """Detect which naming rule caused a transformation."""
+    if not naming_config:
+        return None
+
+    # Check format indicators (e.g., "(Light Novel)")
+    for phrase in naming_config.format_indicators:
+        if phrase.lower() in original.lower() and phrase.lower() not in filtered.lower():
+            return f"format_indicators: {phrase}"
+
+    # Check genre tags
+    for phrase in naming_config.genre_tags:
+        if phrase.lower() in original.lower() and phrase.lower() not in filtered.lower():
+            return f"genre_tags: {phrase}"
+
+    # Check publisher tags
+    for phrase in naming_config.publisher_tags:
+        if phrase.lower() in original.lower() and phrase.lower() not in filtered.lower():
+            return f"publisher_tags: {phrase}"
+
+    # Check hardcoded patterns (Book XX, Vol XX, etc.)
+    import re
+
+    if re.search(r"\bBook\s+\d+", original, re.IGNORECASE) and not re.search(
+        r"\bBook\s+\d+", filtered, re.IGNORECASE
+    ):
+        return "hardcoded_patterns: Book N"
+
+    if re.search(r"\bVol(?:ume)?\.?\s+\d+", original, re.IGNORECASE) and not re.search(
+        r"\bVol(?:ume)?\.?\s+\d+", filtered, re.IGNORECASE
+    ):
+        return "volume_patterns"
+
+    return "naming_rules"
+
+
 def cmd_config(args: argparse.Namespace) -> int:
     """Print loaded configuration."""
     from mamfast.config import reload_settings
@@ -1236,8 +1393,13 @@ def main() -> int:
     except Exception:
         pass
 
-    # Use non-rich console for logging (file-focused)
-    setup_logging(log_level=log_level, log_file=log_file, rich_console=False)
+    # Use Rich console logging for readable output, but keep it quiet unless verbose
+    setup_logging(
+        log_level=log_level,
+        log_file=log_file,
+        rich_console=True,
+        quiet_console=not args.verbose,
+    )
 
     # No command - show help
     if args.command is None:

@@ -31,6 +31,7 @@ from mamfast.console import (
     print_success,
     print_summary,
     print_warning,
+    print_workflow_summary,
 )
 from mamfast.hardlinker import stage_release
 from mamfast.libation import run_liberate, run_scan
@@ -609,7 +610,22 @@ def full_run(
         skipped=skipped,
     )
 
+    # Print both summary formats - simple line + detailed table
     print_summary(successful, failed, skipped, duration)
+
+    # Also show detailed workflow stats table
+    print_workflow_summary(
+        {
+            "discovered": len(releases),
+            "staged": successful,
+            "metadata": successful if not skip_metadata else 0,
+            "torrents": successful,
+            "uploaded": successful,
+            "skipped": skipped,
+            "errors": failed,
+        },
+        duration=duration,
+    )
 
     return PipelineResult(
         total=len(releases),
