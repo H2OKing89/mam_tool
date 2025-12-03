@@ -686,7 +686,7 @@ Already have `rich>=13.0`.
 
 ### Tests
 
-- [x] `test_console.py` - Comprehensive tests (27 new tests for Phase 3) ✅
+- [x] `test_console.py` - Comprehensive tests (31 new tests for Phase 3) ✅
   - RuleTrace dataclass and logging
   - Validation report and summary tables
   - Workflow progress helpers
