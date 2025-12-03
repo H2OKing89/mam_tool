@@ -502,7 +502,7 @@ dependencies = [
 
 ## Phase 3: Visibility & Debugging (Rich Enhancements) ✅ COMPLETE
 
-> **Status**: All Rich enhancements implemented in `console.py`. 27 new tests added.
+> **Status**: All Rich enhancements implemented in `console.py`. 31 new tests added.
 
 ### Current State
 

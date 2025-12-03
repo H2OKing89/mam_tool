@@ -1393,8 +1393,13 @@ def main() -> int:
     except Exception:
         pass
 
-    # Use non-rich console for logging (file-focused)
-    setup_logging(log_level=log_level, log_file=log_file, rich_console=False)
+    # Use Rich console logging for readable output, but keep it quiet unless verbose
+    setup_logging(
+        log_level=log_level,
+        log_file=log_file,
+        rich_console=True,
+        quiet_console=not args.verbose,
+    )
 
     # No command - show help
     if args.command is None:

@@ -773,7 +773,6 @@ def print_error_summary(errors: list[tuple[str, Exception]], title: str = "Error
     err_console.print(table)
 
 
-# Convenience function for quick messages
 def status(message: str, style: str = "info") -> None:
     """Print a simple status message."""
     console.print(f"[{style}]{message}[/]")
