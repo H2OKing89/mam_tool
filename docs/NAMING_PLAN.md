@@ -1,6 +1,6 @@
 yoy# Naming & Cleaning Plan
 
-> **Document Version:** 1.5.0 | **Last Updated:** 2025-12-02 | **Status:** Implementation Complete ✅
+> **Document Version:** 1.6.0 | **Last Updated:** 2025-12-03 | **Status:** Phase 8 Pending (Full Path Truncation Fix) 🔧
 
 ---
 
@@ -567,16 +567,29 @@ MAM torrent staging uses a **flat folder structure** (no Author/Series nesting) 
 
 ### Character Limits
 
-- MAM filename limit: **225 characters max**
+- MAM path limit: **225 characters max** for the **full relative path** (`folder/filename`)
+- This is NOT per-component - it's the combined `{folder}/{filename}` length
 - Truncation priority (preserve most important first):
   1. `{Series}` + `vol_{NN}` (identity - NEVER drop)
   2. `{ASIN.xxxxx}` (lookup key - NEVER drop)
-  3. `[{Tag}]` (ripper credit - drop 4th)
+  3. `[{Tag}]` (ripper credit - drop 4th, folder only)
   4. `({Year})` (sorting - drop 3rd)
   5. `({Author})` (attribution - drop 2nd)
   6. `{Arc}` (subtitle/arc - drop 1st)
 
-**Truncation strategy:** Components are dropped right-to-left by priority. `{Arc}` is dropped first, then `({Author})`, then `({Year})`, then `[{Tag}]`. **`{Series}`, `vol_{NN}`, and `{ASIN}` are never dropped.** If the name is still too long after dropping all optional components, truncate `{Series}` with `...` but never break the ASIN.
+**Why full path matters:** MAM validates the torrent's internal path structure. The path `folder/filename.m4b` must be ≤225 chars total.
+
+**Path structure:**
+```
+{Folder Name} [Tag]/
+└── {Filename}.m4b
+
+Example:
+Trapped in a Dating Sim vol_01 ... [H2OKing]/Trapped in a Dating Sim vol_01 ....m4b
+└─────────────────────── Full path must be ≤225 chars ───────────────────────────┘
+```
+
+**Truncation strategy:** Components are dropped from BOTH folder and filename simultaneously. `{Arc}` is dropped first, then `({Author})`, then `({Year})`, then `[{Tag}]` (folder only). **`{Series}`, `vol_{NN}`, and `{ASIN}` are never dropped.** If the path is still too long after dropping all optional components, truncate `{Series}` with `...` but never break the ASIN.
 
 #### Truncation Examples
 
@@ -1238,11 +1251,54 @@ Save raw responses from metadata fetches for analysis.
 - [x] Added 20 tests for normalization (`tests/test_normalization.py`)
 - [x] Verified against live Audnex API - SAO vol_16, TBATE vols 1-4, Multiverse vol_7 confirmed swapped
 
+### Phase 8: Full Path Truncation (BUG FIX) 🔧
+**Status:** TODO
+
+**Problem discovered:** The 225-char limit applies to the **full relative path** (`folder/filename`), not individual components. Current implementation truncates folder and filename separately, which can result in paths exceeding 225 chars.
+
+**Example of the bug:**
+```
+Trapped in a Dating Sim vol_01 The World of Otome Games is Tough for Mobs (2024) (Yomu Mishima) {ASIN.B0DK27WWT8} [H2OKing]/Trapped in a Dating Sim vol_01 The World of Otome Games is Tough for Mobs (2024) (Yomu Mishima) {ASIN.B0DK27WWT8}.m4b
+└─ 241 chars ❌ EXCEEDS 225
+```
+
+**Fix required:**
+- [ ] Add `build_mam_path()` function that coordinates folder + filename truncation
+- [ ] Calculate combined length: `len(folder) + 1 + len(filename)` (the `1` is for `/`)
+- [ ] Truncate based on combined length, not individually
+- [ ] Since folder has `[Tag]` and filename has `.m4b`, they differ by ~`len(tag) + 2 - 4` chars
+- [ ] Update `hardlinker.py` to use new `build_mam_path()` function
+- [ ] Add tests for full path length validation
+- [ ] Update existing truncation tests to use full path logic
+
+**Implementation approach:**
+```python
+def build_mam_path(
+    *,
+    series: str | None,
+    title: str,
+    volume_number: str | None,
+    arc: str | None,
+    year: str | None,
+    author: str | None,
+    asin: str | None,
+    ripper_tag: str | None,
+    extension: str = ".m4b",
+    max_path_length: int = 225,
+) -> tuple[str, str]:
+    """Build folder and filename ensuring combined path ≤ max_path_length."""
+    # 1. Build base name (without tag or extension)
+    # 2. Calculate: folder = base + tag, filename = base + ext
+    # 3. Combined = len(folder) + 1 + len(filename)
+    # 4. If exceeds, progressively drop components from base
+    # 5. Return (folder_name, filename)
+```
+
 ---
 
-## Implementation Complete! 🎉
+## Current Status 🔧
 
-All naming strategy phases are complete and integrated into the workflow.
+Phase 8 (Full Path Truncation) is required before the naming implementation is complete.
 
 [↑ Back to top](#table-of-contents)
 
@@ -1348,3 +1404,5 @@ Eventually could extend naming.json to support context overrides:
 - **2025-12-02**: Added `[{Tag}]` ripper tag component (e.g., `[H2OKing]`)
 - **2025-12-02**: Clarified standalone book layout (no separate book folder), pipeline field scope, truncation strategy, series_number source of truth, description exclusions, logging rule IDs, preserve-exact drift validation (ChatGPT review round 2)
 - **2025-12-02**: Implemented Phase 7 - Audnex Normalization Layer. Fixes title/subtitle swaps using `seriesPrimary` as source of truth. Added `NormalizedBook` dataclass, detection/extraction functions, 20 tests, and 18 verified API samples
+- **2025-12-03**: Added real-world truncation examples from `samples/library_full.json` (I Parry Everything, Campfire Cooking, Space Mercenary)
+- **2025-12-03**: **BUG DISCOVERED** - 225-char limit applies to full path (`folder/filename`), not individual components. Added Phase 8 to fix truncation logic. Example: "Trapped in a Dating Sim" path is 241 chars, exceeds limit. Updated Character Limits section with correct path calculation.
