@@ -1,6 +1,6 @@
 yoy# Naming & Cleaning Plan
 
-> **Document Version:** 1.6.0 | **Last Updated:** 2025-12-03 | **Status:** Phase 8 Pending (Full Path Truncation Fix) 🔧
+> **Document Version:** 1.7.0 | **Last Updated:** 2025-01-10 | **Status:** Phase 8 Complete ✅
 
 ---
 
@@ -88,7 +88,8 @@ config/
 |--------|-------------|
 | **`filter_title`** | Remove configured phrases/tags/suffixes (format indicators, genre tags, subtitle patterns). Case-insensitive matching. |
 | **`transliterate`** | Normalize non-ASCII characters to ASCII. For **titles/series/folders**: generic transliteration only (pykakasi → unidecode). For **authors/narrators**: first check `author_map`, then fall back to transliteration. |
-| **`filter_series`** | Like `filter_title` but also removes series suffixes (e.g., " Series", " Trilogy"). |
+| **`filter_series`** | Like `filter_title` but also removes series suffixes (e.g., " Series", " Trilogy", "[publication order]"). |
+| **`inherit_the_prefix`** | Inherit "The" prefix from title to series if series lacks it (e.g., title="The Great Cleric", series="Great Cleric" → series="The Great Cleric"). |
 | **`normalize_audnex`** | Fix Audible's inconsistent title/subtitle and extract canonical series data. See [Audnex Normalization](#audnex-normalization-layer). |
 | **Keep Vol/Book** | Whether volume/book indicators stay as human-readable text (JSON) or are normalized to `vol_XX` format (folders/files). |
 
@@ -841,7 +842,8 @@ Each category has specific matching behavior:
       "[\\s—-]?[Ss]aga$",
       "[\\s—-]?[Cc]hronicles$",
       "\\s*\\([Ll]ight [Nn]ovel\\)$",
-      "\\s+[Ll]ight [Nn]ovel$"
+      "\\s+[Ll]ight [Nn]ovel$",
+      "\\s*\\[[^\\]]*[Oo]rder\\]$"
     ]
   }
 }
@@ -850,7 +852,23 @@ Each category has specific matching behavior:
 **Examples:**
 - `"A Most Unlikely Hero Series"` → `"A Most Unlikely Hero"`
 - `"Kuma Kuma Kuma Bear Light Novel"` → `"Kuma Kuma Kuma Bear"`
+- `"Ascend Online [publication order]"` → `"Ascend Online"` (NEW - sorting tags)
+- `"Epic Fantasy [chronological order]"` → `"Epic Fantasy"` (NEW - sorting tags)
 - `"The Stormlight Archive"` → Keep (no suffix match)
+
+### "The" Prefix Inheritance (NEW)
+
+When the title starts with "The {series}" but the API series name lacks the "The" prefix, the prefix is inherited from the title. This ensures consistency in folder/file naming.
+
+**Logic in `inherit_the_prefix()`:**
+1. If series already starts with "The", no change
+2. If title starts with "The " followed by the series name, add "The " to series
+3. Otherwise, no change
+
+**Examples:**
+- Title: `"The Great Cleric: Volume 1"`, Series: `"Great Cleric"` → Series becomes `"The Great Cleric"`
+- Title: `"Ascend Online"`, Series: `"Ascend Online"` → No change (title doesn't start with "The")
+- Title: `"The Stormlight Archive"`, Series: `"The Stormlight Archive"` → No change (already has "The")
 
 ### Category: Publisher Tags (NEW)
 **Matching:** Case-insensitive, anywhere in string
@@ -1621,6 +1639,8 @@ Eventually could extend naming.json to support context overrides:
 
 ## Changelog
 
+- **2025-01-10**: **BUG FIX** - Fixed series name cleaning in folder names. `build_mam_folder_name()` and `build_mam_path()` now use `filter_series()` instead of `filter_title()` to apply series-specific suffix removal patterns (e.g., " Series", " Trilogy", "[publication order]"). Added `inherit_the_prefix()` function to inherit "The" prefix from title when API series lacks it.
+- **2025-01-10**: Added sorting tag removal pattern `\s*\[[^\]]*[Oo]rder\]$` to `series_suffixes` - removes "[publication order]", "[chronological order]", "[reading order]" from series names.
 - **2025-12-02**: Initial planning document created
 - **2025-12-02**: Added pipeline order, matching rules, glossary, preserve_exact, publisher_tags, testing strategy (feedback from ChatGPT/Claude review)
 - **2025-12-02**: Added subtitle_redundancy_rules with template-based patterns ({{series}}/{{title}}) to remove "Series, Book X" redundancy - affects 55+ books

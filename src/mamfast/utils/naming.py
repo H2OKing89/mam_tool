@@ -915,6 +915,52 @@ def filter_subtitle(
     return result if result else None
 
 
+def inherit_the_prefix(series: str | None, title: str | None) -> str | None:
+    """
+    Inherit "The" prefix from title to series if series lacks it.
+
+    Some audiobooks (especially light novels) have inconsistent API data where
+    the title includes "The" but the series name doesn't. For example:
+    - Title: "The Great Cleric: Volume 1"
+    - Series (API): "Great Cleric"
+    - Series (desired): "The Great Cleric"
+
+    This function checks if the title starts with "The {series}" and if so,
+    adds "The " prefix to the series name.
+
+    Args:
+        series: Series name (may be None for standalone books)
+        title: Book title
+
+    Returns:
+        Series name with "The" prefix added if inherited, otherwise unchanged
+    """
+    if not series or not title:
+        return series
+
+    # Check if title starts with "The " followed by the series name
+    # Case-insensitive comparison
+    title_lower = title.lower()
+    series_lower = series.lower()
+
+    # Already has "The" prefix
+    if series_lower.startswith("the "):
+        return series
+
+    # Check if title starts with "The {series}"
+    the_prefix = "the "
+    if title_lower.startswith(the_prefix):
+        # Extract potential series portion from title
+        title_without_the = title_lower[len(the_prefix) :]
+
+        # Check if title (without "The") starts with the series name
+        if title_without_the.startswith(series_lower):
+            # The title starts with "The {series}", so inherit the prefix
+            return f"The {series}"
+
+    return series
+
+
 def _cleanup_string(text: str) -> str:
     """
     Clean up whitespace and punctuation artifacts from string.
@@ -1248,13 +1294,17 @@ def build_mam_folder_name(
     Returns:
         Sanitized folder name within length limit
     """
-    # Clean inputs
-    clean_series = (
-        filter_title(series, naming_config=naming_config, keep_volume=False) if series else None
-    )
+    # Clean inputs - use filter_series() for series to apply series-specific patterns
+    # (e.g., remove " Series", " Trilogy", "[publication order]" suffixes)
+    clean_series = filter_series(series, naming_config=naming_config) if series else None
     clean_title = (
         filter_title(title, naming_config=naming_config, keep_volume=False) if title else ""
     )
+
+    # Inherit "The" prefix from title to series if series lacks it
+    # (e.g., title="The Great Cleric", series="Great Cleric" -> series="The Great Cleric")
+    clean_series = inherit_the_prefix(clean_series, clean_title)
+
     clean_arc = filter_title(arc, naming_config=naming_config, keep_volume=False) if arc else None
     clean_author = sanitize_filename(author) if author else None
 
@@ -1812,13 +1862,17 @@ def build_mam_path(
     if extension and not extension.startswith("."):
         extension = f".{extension}"
 
-    # Clean inputs
-    clean_series = (
-        filter_title(series, naming_config=naming_config, keep_volume=False) if series else None
-    )
+    # Clean inputs - use filter_series() for series to apply series-specific patterns
+    # (e.g., remove " Series", " Trilogy", "[publication order]" suffixes)
+    clean_series = filter_series(series, naming_config=naming_config) if series else None
     clean_title = (
         filter_title(title, naming_config=naming_config, keep_volume=False) if title else ""
     )
+
+    # Inherit "The" prefix from title to series if series lacks it
+    # (e.g., title="The Great Cleric", series="Great Cleric" -> series="The Great Cleric")
+    clean_series = inherit_the_prefix(clean_series, clean_title)
+
     clean_arc = filter_title(arc, naming_config=naming_config, keep_volume=False) if arc else None
     clean_author = sanitize_filename(author) if author else None
 

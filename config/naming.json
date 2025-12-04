@@ -81,7 +81,8 @@
       "[\\s—-]?[Cc]hronicles$",
       "\\s*\\([Ll]ight [Nn]ovel\\)$",
       "\\s+[Ll]ight [Nn]ovel$",
-      "\\s+[Ll]ight [Nn]ovel [Ss]eries$"
+      "\\s+[Ll]ight [Nn]ovel [Ss]eries$",
+      "\\s*\\[[^\\]]*[Oo]rder\\]$"
     ]
   },
 
