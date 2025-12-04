@@ -32,6 +32,7 @@ from mamfast.console import (
     print_summary,
     print_warning,
     print_workflow_summary,
+    render_libation_status,
 )
 from mamfast.hardlinker import stage_release
 from mamfast.libation import get_libation_status, run_liberate, run_scan
@@ -504,11 +505,7 @@ def full_run(
             # Step 1b: Check how many books are pending download
             try:
                 status = get_libation_status()
-                print_info(
-                    f"Library status: {status.liberated} liberated, "
-                    f"{status.not_liberated} pending, "
-                    f"{status.error} errors"
-                )
+                render_libation_status(status)
 
                 # Step 1c: Only run liberate if there are pending books
                 if status.has_pending:
@@ -521,18 +518,21 @@ def full_run(
                     else:
                         print_success("Liberate complete")
 
-                        # Optional: Show updated status after liberate
+                        # Optional: Show updated status after liberate (only if something changed)
                         try:
                             new_status = get_libation_status()
                             if new_status.liberated > status.liberated:
                                 downloaded = new_status.liberated - status.liberated
                                 print_success(f"Downloaded {downloaded} new book(s)")
+                                render_libation_status(
+                                    new_status,
+                                    title="Libation Status (Post-Liberate)",
+                                )
                         except Exception:
                             pass  # Non-critical, don't fail if post-check fails
                 else:
                     print_info(
-                        "No audiobooks staged for download (NotLiberated=0). "
-                        "Skipping liberate."
+                        "No audiobooks staged for download (NotLiberated=0). " "Skipping liberate."
                     )
 
             except Exception as e:
