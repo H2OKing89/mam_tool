@@ -1689,6 +1689,18 @@ When `LOG_LEVEL=DEBUG`, log with consistent rule IDs:
 
 ## Future Enhancements (Nice-to-Have)
 
+### Fuzzy Subtitle Matching (TODO)
+Currently subtitle redundancy rules require exact series/title match. Some edge cases (~47 books) have mismatched "The" prefix:
+- Subtitle: `"The F-Rank Foot Soldier Became..."`
+- Series: `"F-Rank Foot Soldier Became..."`
+
+**Proposed solution**: Use `rapidfuzz` similarity matching in `filter_subtitle()` when exact match fails:
+1. If subtitle contains series (exact) → apply rule
+2. Else if `similarity_ratio(subtitle_prefix, series) > 90%` → apply rule
+3. Log fuzzy matches for review
+
+This would require code changes to `filter_subtitle()` in `naming.py`. Separate PR recommended.
+
 ### Context-Based Rules
 Eventually could extend naming.json to support context overrides:
 ```json
@@ -1716,6 +1728,12 @@ Eventually could extend naming.json to support context overrides:
 
 ## Changelog
 
+- **2025-12-04**: **Phase 11 - Additional Subtitle Redundancy Rules**. Added 3 new rules to `naming.json` v1.7.0:
+  - `series_suffix_book`: Matches `"Series Series, Book N"` (series name + " Series" suffix)
+  - `series_omnibus`: Matches `"Series, Books N-M"` (omnibus/box set ranges)
+  - `series_vol_in_parens`: Matches `"(Series, Vol N)"` suffix (strip parens, keep rest)
+  - Improves subtitle redundancy coverage from 87% to ~90% (~13 more books)
+  - Added fuzzy matching TODO to Future Enhancements for remaining edge cases
 - **2025-12-04**: **Phase 10 - Author Name Normalization Analysis**. Validated existing author handling infrastructure:
   - Analyzed 276 authors with role suffixes from 1,272 golden samples
   - `filter_authors()` correctly removes translators (242), illustrators (33), editors (1)
