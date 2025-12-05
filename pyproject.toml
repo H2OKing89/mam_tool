@@ -54,6 +54,11 @@ strict = true
 module = "pykakasi"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "tests.*"
+# Relax the 'no-untyped-def' checks for tests so tests can be more flexible while
+# keeping strict typing for library code in `src/`.
+disable_error_code = ["no-untyped-def"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
