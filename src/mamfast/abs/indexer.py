@@ -151,6 +151,11 @@ class AbsIndex:
     """SQLite index for ABS library items.
 
     Provides fast ASIN lookups and author variant reporting.
+
+    Note:
+        This class is NOT thread-safe. Each thread should use its own
+        AbsIndex instance. The underlying SQLite connection is created
+        lazily and shared across all operations on a single instance.
     """
 
     def __init__(self, db_path: Path) -> None:
@@ -598,13 +603,16 @@ class AbsIndex:
         # Extract author folder from path
         # Path structure: /root/Author/[Series/]Book
         # We want the Author folder name
-        path_parts = host_path_str.strip("/").split("/")
+        # Use Path.parts for robust parsing (handles trailing slashes, redundant separators)
+        path_obj = Path(host_path_str)
+        path_parts = path_obj.parts  # e.g., ('/', 'mnt', 'data', 'Author', 'Series', 'Book')
         # Find author folder - it's typically 2nd level under library root
         # But we'll use a simpler approach: get parent of series or book folder
         # Validate path structure before extracting author folder
         author_folder = "Unknown"
         if series_name:
-            if len(path_parts) >= 3:
+            # With series: /root/Author/Series/Book → need at least 4 parts (/, root, Author, ...)
+            if len(path_parts) >= 4:
                 author_folder = path_parts[-3]
             else:
                 logger.warning(
@@ -614,7 +622,8 @@ class AbsIndex:
                     path_parts,
                 )
         else:
-            if len(path_parts) >= 2:
+            # Standalone: /root/Author/Book → need at least 3 parts (/, root, Author, Book)
+            if len(path_parts) >= 3:
                 author_folder = path_parts[-2]
             else:
                 logger.warning(

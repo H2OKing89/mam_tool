@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from mamfast.abs.asin import (
+    AUDIO_EXTENSIONS,
     AsinSource,
     extract_all_asins,
     extract_asin,
@@ -31,6 +32,7 @@ from mamfast.abs.paths import PathMapper, abs_path_to_host, host_path_to_abs
 
 __all__ = [
     # ASIN extraction
+    "AUDIO_EXTENSIONS",
     "AsinSource",
     "extract_asin",
     "extract_asin_from_abs_item",

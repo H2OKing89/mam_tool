@@ -136,11 +136,15 @@ class PathMapper:
         self._mappings: list[tuple[str, str]] = []
 
         if mappings:
-            # Multiple mappings mode - validate required keys first
+            # Multiple mappings mode - validate required keys and non-empty values
             for i, m in enumerate(mappings):
                 if "container" not in m or "host" not in m:
                     raise ValueError(
                         f"Mapping at index {i} missing required 'container' or 'host' key: {m}"
+                    )
+                if not m["container"] or not m["host"]:
+                    raise ValueError(
+                        f"Mapping at index {i} has empty 'container' or 'host' value: {m}"
                     )
             for m in mappings:
                 self._mappings.append((m["container"].rstrip("/"), m["host"].rstrip("/")))

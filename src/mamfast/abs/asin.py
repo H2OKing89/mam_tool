@@ -11,9 +11,15 @@ Also extracts ASINs from ABS metadata when available.
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# Supported audio file extensions for ASIN extraction from filenames
+AUDIO_EXTENSIONS = (".m4b", ".mp3", ".m4a", ".opus", ".flac")
 
 # Pattern cascade for ASIN extraction (most specific → least specific)
 ASIN_PATTERNS = [
@@ -141,7 +147,7 @@ def extract_asin_from_abs_item(item: dict[str, Any]) -> AsinSource | None:
         if not file_name:
             continue
         # Only check audio files
-        if file_name.lower().endswith((".m4b", ".mp3", ".m4a", ".opus", ".flac")):
+        if file_name.lower().endswith(AUDIO_EXTENSIONS):
             result = extract_asin_with_source(file_name, "file_name")
             if result:
                 return result

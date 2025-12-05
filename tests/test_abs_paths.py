@@ -208,6 +208,16 @@ class TestPathMapper:
         with pytest.raises(ValueError, match="missing required 'container' or 'host' key"):
             PathMapper(mappings=[{}])
 
+    def test_mappings_validation_empty_container_value(self) -> None:
+        """Test that mappings validation catches empty container string."""
+        with pytest.raises(ValueError, match="empty 'container' or 'host' value"):
+            PathMapper(mappings=[{"container": "", "host": "/data"}])
+
+    def test_mappings_validation_empty_host_value(self) -> None:
+        """Test that mappings validation catches empty host string."""
+        with pytest.raises(ValueError, match="empty 'container' or 'host' value"):
+            PathMapper(mappings=[{"container": "/audiobooks", "host": ""}])
+
     def test_round_trip_container_to_host_to_container(self, mapper: PathMapper) -> None:
         """Test round-trip: container → host → container."""
         original = "/audiobooks/Author/Series/Book (2024)"
