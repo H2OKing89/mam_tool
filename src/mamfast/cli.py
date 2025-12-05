@@ -2149,7 +2149,16 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                     rel_path = r.target_path.relative_to(abs_library_root)
                 except ValueError:
                     rel_path = r.target_path
-                console.print(f"  └─ {status_text} → [dim]{rel_path}[/dim]")
+                console.print(f"  ├─ {status_text} → [dim]{rel_path}[/dim]")
+
+                # List files in the folder (for dry-run, use staging; for actual, use target)
+                source_folder = r.staging_path if args.dry_run else r.target_path
+                if source_folder.exists():
+                    files = sorted(f.name for f in source_folder.iterdir() if f.is_file())
+                    for i, filename in enumerate(files):
+                        is_last = i == len(files) - 1
+                        prefix = "  └─" if is_last else "  ├─"
+                        console.print(f"{prefix} [dim]{filename}[/dim]")
             elif r.status == "duplicate" and r.error:
                 # Extract path from "Already exists at {path}" message
                 if "Already exists at " in r.error:
