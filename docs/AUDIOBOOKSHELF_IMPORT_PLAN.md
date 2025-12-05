@@ -1,6 +1,6 @@
 # Audiobookshelf Import Plan
 
-> **Document Version:** 3.6.0 | **Last Updated:** 2025-01-06 | **Status:** PR 3 Complete ✅
+> **Document Version:** 3.7.0 | **Last Updated:** 2025-01-07 | **Status:** PR 4 In Progress 🔧
 
 ---
 
@@ -10,8 +10,8 @@
 |----|--------|--------|-------------|
 | **PR 1** | `feature/abs-import-foundations` | ✅ Merged (#15) | Config, schemas, CLI stubs, test fixtures |
 | **PR 2** | `feature/abs-import-client` | ✅ Merged (#16) | `AbsClient`, path mapping, `abs-init` wired |
-| **PR 3** | `feature/abs-import-index` | ✅ Complete (#19) | SQLite indexer, `abs-index` wired |
-| **PR 4** | `feature/abs-import-workflow` | 🔲 Next | Workflow integration |
+| **PR 3** | `feature/abs-import-index` | ✅ Merged (#19) | SQLite indexer, `abs-index` wired |
+| **PR 4** | `feature/abs-import-workflow` | 🔧 In Progress | Workflow integration |
 
 ### PR 1 Deliverables (Merged)
 - [x] `docs/AUDIOBOOKSHELF_API.md` - API reference
@@ -61,6 +61,29 @@
   - Filters to managed libraries from config
 - [x] `PathMapper` updated with `mappings` parameter for multi-path support
 - [x] 51 new tests (26 ASIN + 25 indexer)
+
+### PR 4 Deliverables (In Progress)
+- [x] `src/mamfast/abs/importer.py` - Import workflow implementation
+  - `ParsedFolderName` dataclass for parsing MAM-style folder names
+  - `ImportResult`, `BatchImportResult` result types
+  - `parse_mam_folder_name()` - Extract author/series/ASIN from folder names
+  - `build_target_path()` - Build ABS library target path
+  - `validate_import_prerequisites()` - Pre-flight checks
+  - `import_single()` - Single book import with duplicate detection
+  - `import_batch()` - Batch import with results tracking
+  - `discover_staged_books()` - Find audiobooks in staging directory
+  - `trigger_scan_safe()` - Safe ABS scan trigger
+- [x] `mamfast abs-import` CLI command wired
+  - `--dry-run` support for preview
+  - `--duplicate-policy` override (skip/warn/overwrite)
+  - `--no-scan` to skip ABS scan trigger
+  - Rich table output for results
+- [x] `mamfast abs-check-duplicate` CLI command
+  - Quick ASIN lookup against index
+  - Shows existing path if found
+- [x] Updated `abs/__init__.py` exports
+- [x] 40 new tests in `tests/test_abs_importer.py`
+- [ ] CLI tests for abs-import and abs-check-duplicate
 
 ---
 

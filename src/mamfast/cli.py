@@ -399,6 +399,49 @@ Examples:
     )
     abs_index_parser.set_defaults(func=cmd_abs_index)
 
+    # -------------------------------------------------------------------------
+    # abs-import: Import staged books to Audiobookshelf library
+    # -------------------------------------------------------------------------
+    abs_import_parser = subparsers.add_parser(
+        "abs-import",
+        help="Import staged audiobooks to Audiobookshelf library",
+        epilog="Moves staged books to ABS library structure with duplicate detection.",
+    )
+    abs_import_parser.add_argument(
+        "paths",
+        nargs="*",
+        type=Path,
+        help="Specific folder(s) to import (default: all in staging)",
+    )
+    abs_import_parser.add_argument(
+        "-d",
+        "--duplicate-policy",
+        choices=["skip", "warn", "overwrite"],
+        default=None,
+        help="Override duplicate handling policy (default: from config)",
+    )
+    abs_import_parser.add_argument(
+        "--no-scan",
+        action="store_true",
+        help="Don't trigger ABS library scan after import",
+    )
+    abs_import_parser.set_defaults(func=cmd_abs_import)
+
+    # -------------------------------------------------------------------------
+    # abs-check-duplicate: Check if ASIN exists in library
+    # -------------------------------------------------------------------------
+    abs_check_parser = subparsers.add_parser(
+        "abs-check-duplicate",
+        help="Check if an ASIN already exists in the library index",
+        epilog="Quick lookup to check for duplicates before importing.",
+    )
+    abs_check_parser.add_argument(
+        "asin",
+        type=str,
+        help="ASIN to check (e.g., B0DK27WWT8)",
+    )
+    abs_check_parser.set_defaults(func=cmd_abs_check_duplicate)
+
     return parser
 
 
@@ -1951,6 +1994,259 @@ def cmd_abs_index(args: argparse.Namespace) -> int:
     print_info(f"Index saved to: {db_path}")
 
     return 0
+
+
+def cmd_abs_import(args: argparse.Namespace) -> int:
+    """Import staged audiobooks to Audiobookshelf library.
+
+    Moves staged books to ABS library structure with duplicate detection.
+    Uses atomic rename to preserve hardlinks to seed folder.
+    """
+    from pathlib import Path
+
+    from rich.table import Table
+
+    from mamfast.abs import (
+        AbsClient,
+        AbsIndex,
+        discover_staged_books,
+        import_batch,
+        trigger_scan_safe,
+        validate_import_prerequisites,
+    )
+    from mamfast.config import reload_settings
+
+    print_header("Audiobookshelf Import", dry_run=args.dry_run)
+
+    try:
+        settings = reload_settings(config_file=args.config)
+    except FileNotFoundError as e:
+        fatal_error(str(e), "Check that config/config.yaml exists")
+        return 1
+
+    # Check if ABS is enabled
+    if not hasattr(settings, "audiobookshelf") or not settings.audiobookshelf.enabled:
+        print_warning("Audiobookshelf integration is not enabled in config")
+        print_info("Set audiobookshelf.enabled: true in config.yaml")
+        return 1
+
+    abs_config = settings.audiobookshelf
+
+    # Get managed library (for now, use first managed library)
+    managed_libs = [lib for lib in abs_config.libraries if lib.mamfast_managed]
+    if not managed_libs:
+        fatal_error("No mamfast_managed libraries configured")
+        print_info("Set mamfast_managed: true on a library in config.yaml")
+        return 1
+
+    # Use first managed library
+    target_library = managed_libs[0]
+
+    # Get library root from path_map
+    if not abs_config.path_map:
+        fatal_error("No path_map configured for Audiobookshelf")
+        return 1
+
+    # Use first path map's host path as library root
+    library_root = Path(abs_config.path_map[0].host)
+
+    # Get staging root
+    staging_root = settings.paths.seed_root
+
+    # Get index database path
+    db_path = Path(abs_config.index_db)
+    if not db_path.is_absolute():
+        db_path = Path.cwd() / db_path
+
+    # Validate prerequisites
+    print_step(1, 4, "Validating prerequisites")
+    errors = validate_import_prerequisites(staging_root, library_root, db_path)
+    if errors:
+        for err in errors:
+            print_error(err)
+        return 1
+    print_success("Prerequisites validated")
+
+    # Discover books to import
+    print_step(2, 4, "Discovering staged books")
+    if args.paths:
+        # Specific paths provided
+        staging_folders = [p for p in args.paths if p.is_dir()]
+        if not staging_folders:
+            print_warning("No valid directories in provided paths")
+            return 1
+    else:
+        staging_folders = discover_staged_books(staging_root)
+
+    if not staging_folders:
+        print_info("No staged books to import")
+        return 0
+
+    print_info(f"Found {len(staging_folders)} audiobook(s) to import")
+
+    # Determine duplicate policy
+    dup_policy = args.duplicate_policy or abs_config.import_settings.duplicate_policy
+
+    # Open index and perform import
+    print_step(3, 4, "Importing to library")
+    print_info(f"Target: {library_root}")
+    print_info(f"Duplicate policy: {dup_policy}")
+
+    if args.dry_run:
+        print_dry_run(f"Would import {len(staging_folders)} book(s)")
+
+    try:
+        with AbsIndex(db_path) as index:
+            result = import_batch(
+                staging_folders=staging_folders,
+                library_root=library_root,
+                index=index,
+                library_id=target_library.id,
+                duplicate_policy=dup_policy,
+                dry_run=args.dry_run,
+            )
+    except Exception as e:
+        fatal_error(f"Import failed: {e}")
+        return 1
+
+    # Display results table
+    if result.results:
+        table = Table(title="Import Results", show_header=True)
+        table.add_column("Folder", style="cyan", no_wrap=True, max_width=50)
+        table.add_column("ASIN", style="yellow")
+        table.add_column("Status", style="green")
+        table.add_column("Target/Error", style="dim", max_width=40)
+
+        for r in result.results:
+            folder_name = (
+                r.staging_path.name[:47] + "..."
+                if len(r.staging_path.name) > 50
+                else r.staging_path.name
+            )
+            status_style = {
+                "success": "[green]✓ Ready[/green]"
+                if args.dry_run
+                else "[green]✓ Imported[/green]",
+                "duplicate": "[yellow]⏭ Exists[/yellow]",
+                "skipped": "[yellow]⏭ Skipped[/yellow]",
+                "failed": "[red]✗ Failed[/red]",
+            }.get(r.status, r.status)
+
+            detail = ""
+            if r.status == "success" and r.target_path:
+                detail = str(r.target_path.relative_to(library_root))[:37] + "..."
+            elif r.error:
+                detail = r.error[:37] + "..." if len(r.error) > 40 else r.error
+
+            table.add_row(
+                folder_name,
+                r.asin or "—",
+                status_style,
+                detail,
+            )
+
+        console.print(table)
+        console.print()
+
+    # Summary
+    print_step(4, 4, "Import complete")
+
+    if args.dry_run:
+        print_dry_run(f"Would import {result.success_count} book(s)")
+        if result.duplicate_count > 0:
+            print_info(f"  • {result.duplicate_count} duplicate(s) would be skipped")
+    else:
+        print_success(f"Imported {result.success_count} book(s)")
+        if result.duplicate_count > 0:
+            print_info(f"  • Duplicates skipped: {result.duplicate_count}")
+        if result.failed_count > 0:
+            print_warning(f"  • Failed: {result.failed_count}")
+
+    # Trigger ABS scan (if not dry run and not --no-scan)
+    if not args.dry_run and not args.no_scan and result.success_count > 0:
+        trigger_mode = abs_config.import_settings.trigger_scan
+        if trigger_mode != "none":
+            try:
+                client = AbsClient(
+                    host=abs_config.host,
+                    api_key=abs_config.api_key,
+                    timeout=abs_config.timeout_seconds,
+                )
+                if trigger_scan_safe(client, target_library.id):
+                    print_success("Triggered ABS library scan")
+                else:
+                    print_warning(
+                        "Failed to trigger ABS scan (files will appear on next scheduled scan)"
+                    )
+            except Exception as e:
+                print_warning(f"Could not trigger ABS scan: {e}")
+
+    return 1 if result.failed_count > 0 else 0
+
+
+def cmd_abs_check_duplicate(args: argparse.Namespace) -> int:
+    """Check if an ASIN already exists in the library index.
+
+    Quick lookup for duplicate detection.
+    """
+    from pathlib import Path
+
+    from mamfast.abs import AbsIndex, is_valid_asin
+    from mamfast.config import reload_settings
+
+    asin = args.asin.upper().strip()
+
+    # Validate ASIN format
+    if not is_valid_asin(asin):
+        print_error(f"Invalid ASIN format: {asin}")
+        print_info("ASIN should be 10 characters starting with B0")
+        return 1
+
+    try:
+        settings = reload_settings(config_file=args.config)
+    except FileNotFoundError as e:
+        fatal_error(str(e), "Check that config/config.yaml exists")
+        return 1
+
+    # Check if ABS is enabled
+    if not hasattr(settings, "audiobookshelf") or not settings.audiobookshelf.enabled:
+        print_warning("Audiobookshelf integration is not enabled in config")
+        return 1
+
+    abs_config = settings.audiobookshelf
+
+    # Get index database path
+    db_path = Path(abs_config.index_db)
+    if not db_path.is_absolute():
+        db_path = Path.cwd() / db_path
+
+    if not db_path.exists():
+        fatal_error(f"Index database not found: {db_path}")
+        print_info("Run 'mamfast abs-index' first to build the library index")
+        return 1
+
+    # Check index
+    try:
+        with AbsIndex(db_path) as index:
+            book = index.get_book_by_asin(asin)
+    except Exception as e:
+        fatal_error(f"Failed to query index: {e}")
+        return 1
+
+    if book:
+        print_warning(f"ASIN {asin} already exists:")
+        print_info(f"  Title: {book.title}")
+        if book.subtitle:
+            print_info(f"  Subtitle: {book.subtitle}")
+        print_info(f"  Author: {book.author_display}")
+        if book.series_name:
+            pos = f" #{book.series_position}" if book.series_position else ""
+            print_info(f"  Series: {book.series_name}{pos}")
+        print_info(f"  Path: {book.folder_path_host}")
+        return 1
+    else:
+        print_success(f"ASIN {asin} not found in library - safe to import")
+        return 0
 
 
 def main() -> int:
