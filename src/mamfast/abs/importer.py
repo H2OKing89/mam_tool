@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mamfast.abs.asin import extract_asin
+from mamfast.utils.naming import clean_series_name
 
 if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
@@ -205,6 +206,90 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     )
 
 
+def _normalize_folder_name(name: str) -> str:
+    """Normalize folder name for comparison.
+
+    Normalizes:
+    - Lowercase
+    - Remove common suffixes: " Series", " Trilogy", " Saga"
+    - Collapse whitespace
+    - Remove punctuation
+
+    Args:
+        name: Folder name
+
+    Returns:
+        Normalized name for comparison
+    """
+    result = name.lower()
+    # Remove common suffixes
+    result = re.sub(r"\s+(series|trilogy|saga)\s*$", "", result)
+    # Replace punctuation with spaces
+    result = re.sub(r"[.,;:/\-_]+", " ", result)
+    # Collapse whitespace
+    result = re.sub(r"\s+", " ", result)
+    return result.strip()
+
+
+def _find_matching_author_folder(library_root: Path, author: str) -> Path | None:
+    """Find existing author folder with case-insensitive/normalized matching.
+
+    Args:
+        library_root: ABS library root
+        author: Author name to match
+
+    Returns:
+        Path to existing author folder if found, else None
+    """
+    if not library_root.exists():
+        return None
+
+    normalized_author = _normalize_folder_name(author)
+    for folder in library_root.iterdir():
+        if not folder.is_dir():
+            continue
+        if _normalize_folder_name(folder.name) == normalized_author:
+            logger.debug("Matched author '%s' to existing folder '%s'", author, folder.name)
+            return folder
+    return None
+
+
+def _find_matching_series_folder(
+    author_folder: Path, series: str, book_title: str | None = None
+) -> Path | None:
+    """Find existing series folder with normalized matching.
+
+    Handles:
+    - Case-insensitive matching
+    - " Series" suffix differences (e.g., "A Most Unlikely Hero" vs "A Most Unlikely Hero Series")
+    - Cleaned series name matching
+
+    Args:
+        author_folder: Author folder to search in
+        series: Series name to match
+        book_title: Optional book title for " The" prefix inheritance
+
+    Returns:
+        Path to existing series folder if found, else None
+    """
+    if not author_folder.exists():
+        return None
+
+    # Clean and normalize the input series name
+    cleaned_series = clean_series_name(series, book_title) or series
+    normalized_series = _normalize_folder_name(cleaned_series)
+
+    for folder in author_folder.iterdir():
+        if not folder.is_dir():
+            continue
+        # Try normalized match against cleaned folder name
+        folder_cleaned = clean_series_name(folder.name) or folder.name
+        if _normalize_folder_name(folder_cleaned) == normalized_series:
+            logger.debug("Matched series '%s' to existing folder '%s'", series, folder.name)
+            return folder
+    return None
+
+
 def _same_filesystem(path1: Path, path2: Path) -> bool:
     """Check if two paths are on the same filesystem.
 
@@ -290,8 +375,8 @@ def build_target_path(
 ) -> Path:
     """Build the target path in ABS library structure.
 
-    If the staging folder is already in an Author/Series structure relative to
-    staging_root, preserve that structure. Otherwise, use parsed author/series.
+    Matches existing author/series folders to avoid creating duplicates.
+    Cleans series names (removes " Series" suffix) before matching.
 
     Structure:
     - Series: Library/Author/Series/FolderName/
@@ -301,30 +386,60 @@ def build_target_path(
         library_root: ABS library root path
         parsed: Parsed folder name components
         staging_folder: Original staging folder (for folder name)
-        staging_root: Root of staging directory (to calculate relative path)
+        staging_root: Root of staging directory (to extract author/series from path)
 
     Returns:
         Target path for the audiobook
     """
-    # If staging_root is provided and folder is nested, preserve structure
+    # Extract author and series from staging path structure if available
+    staging_author = None
+    staging_series = None
+
     if staging_root and staging_folder != staging_root:
         try:
             relative_path = staging_folder.relative_to(staging_root)
-            # If there's a parent structure (Author/Series/Book), use it
-            if len(relative_path.parts) > 1:
-                return library_root / relative_path
+            parts = relative_path.parts
+            # Structure: Author/Series/Book or Author/Book
+            if len(parts) >= 3:
+                staging_author = parts[0]
+                staging_series = parts[1]
+            elif len(parts) == 2:
+                staging_author = parts[0]
         except ValueError:
-            pass  # Not relative to staging_root, fall through
+            pass
 
-    # Fall back to parsed author/series
-    author_folder = parsed.author
+    # Determine author - prefer staging path, fall back to parsed
+    author_name = staging_author or parsed.author
 
-    if parsed.series and not parsed.is_standalone:
-        # Series book: Author/Series/Book
-        return library_root / author_folder / parsed.series / staging_folder.name
+    # Find existing author folder or use author name
+    existing_author = _find_matching_author_folder(library_root, author_name)
+    author_folder = existing_author or (library_root / author_name)
+
+    # Determine series - prefer staging path, fall back to parsed
+    series_name = staging_series or parsed.series
+
+    # Use series folder if we have a series name from staging path
+    # OR from parsed (and not standalone)
+    has_series = staging_series or (parsed.series and not parsed.is_standalone)
+
+    if has_series and series_name:
+        # Clean the series name (remove " Series" suffix, etc.)
+        cleaned_series = clean_series_name(series_name, parsed.title) or series_name
+
+        # Find existing series folder
+        existing_series = _find_matching_series_folder(
+            author_folder if existing_author else library_root / author_name,
+            cleaned_series,
+            parsed.title,
+        )
+
+        # Use existing series folder or create new with cleaned name
+        series_folder = existing_series or (author_folder / cleaned_series)
+
+        return series_folder / staging_folder.name
     else:
         # Standalone: Author/Title (using full folder name)
-        return library_root / author_folder / staging_folder.name
+        return author_folder / staging_folder.name
 
 
 def import_single(
