@@ -261,7 +261,7 @@ class TestRealWorldPaths:
 
     def test_project_hail_mary_path(self, mam_mapper: PathMapper) -> None:
         """Test with standalone book path."""
-        abs_path = "/audiobooks/Andy Weir/Project Hail Mary (2021) " "(Andy Weir) {ASIN.B08G9PRS1K}"
+        abs_path = "/audiobooks/Andy Weir/Project Hail Mary (2021) (Andy Weir) {ASIN.B08G9PRS1K}"
         host = mam_mapper.to_host(abs_path)
         expected = Path(
             "/mnt/user/data/audio/audiobooks/Andy Weir/Project Hail Mary (2021) "

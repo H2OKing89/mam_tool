@@ -320,10 +320,9 @@ class TestNormalizationFixtures:
                 f"ASIN {sample['asin']}: expected title={expected['title']!r}, "
                 f"got {result.display_title!r}"
             )
-            assert result.arc_name == expected["arc"], (
-                f"ASIN {sample['asin']}: expected arc={expected['arc']!r}, "
-                f"got {result.arc_name!r}"
-            )
+            assert (
+                result.arc_name == expected["arc"]
+            ), f"ASIN {sample['asin']}: expected arc={expected['arc']!r}, got {result.arc_name!r}"
 
     def test_no_series_samples(self, normalization_samples: dict[str, Any]) -> None:
         """Books without series should pass through unchanged."""

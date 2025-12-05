@@ -1526,7 +1526,7 @@ def cmd_check_duplicates(args: argparse.Namespace) -> int:
 
     if len(duplicates) > limit:
         console.print(
-            f"\n[dim]Showing {limit} of {len(duplicates)} pairs. " "Use --limit to show more.[/]"
+            f"\n[dim]Showing {limit} of {len(duplicates)} pairs. Use --limit to show more.[/]"
         )
 
     return 0

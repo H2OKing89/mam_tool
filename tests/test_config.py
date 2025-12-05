@@ -227,7 +227,7 @@ environment:
             # Create .env with required values
             env_path = Path(tmpdir) / ".env"
             env_path.write_text(
-                "QB_HOST=http://localhost:8080\n" "QB_USERNAME=admin\n" "QB_PASSWORD=secret\n"
+                "QB_HOST=http://localhost:8080\nQB_USERNAME=admin\nQB_PASSWORD=secret\n"
             )
 
             # validate=False since we're testing config loading, not path validation
@@ -265,7 +265,7 @@ paths:
 
             env_path = config_dir / ".env"
             env_path.write_text(
-                "QB_HOST=http://found:8080\n" "QB_USERNAME=admin\n" "QB_PASSWORD=secret\n"
+                "QB_HOST=http://found:8080\nQB_USERNAME=admin\nQB_PASSWORD=secret\n"
             )
 
             # Clear any existing env vars and reload
@@ -300,7 +300,7 @@ paths:
             config_path.write_text(yaml_content)
 
             env_path = Path(tmpdir) / ".env"
-            env_path.write_text("QB_HOST=localhost\n" "QB_USERNAME=admin\n" "QB_PASSWORD=secret\n")
+            env_path.write_text("QB_HOST=localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
 
             settings = reload_settings(env_file=env_path, config_file=config_path, validate=False)
 
@@ -392,7 +392,7 @@ paths:
             config_path.write_text(yaml_content)
 
             env_path = Path(tmpdir) / ".env"
-            env_path.write_text("QB_HOST=localhost\n" "QB_USERNAME=admin\n" "QB_PASSWORD=secret\n")
+            env_path.write_text("QB_HOST=localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
 
             # Load settings
             reload_settings(env_file=env_path, config_file=config_path, validate=False)
@@ -417,7 +417,7 @@ paths:
             config_path.write_text(yaml_content)
 
             env_path = Path(tmpdir) / ".env"
-            env_path.write_text("QB_HOST=localhost\n" "QB_USERNAME=admin\n" "QB_PASSWORD=secret\n")
+            env_path.write_text("QB_HOST=localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
 
             settings1 = reload_settings(env_file=env_path, config_file=config_path, validate=False)
             assert settings1.paths.library_root == Path("/tmp/library-v1")

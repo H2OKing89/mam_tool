@@ -348,8 +348,7 @@ def validate_path_exists(path: Path, field_name: str, *, required: bool = True) 
     if not path or str(path) == ".":
         if required:
             raise ConfigurationError(
-                f"{field_name} is required but not set\n"
-                f"Fix: Set {field_name} in config/config.yaml"
+                f"{field_name} is required but not set\nFix: Set {field_name} in config/config.yaml"
             )
         return
 
@@ -528,8 +527,7 @@ def validate_settings(settings: Settings) -> list[str]:
     # Check for empty credentials
     if not settings.qbittorrent.username or not settings.qbittorrent.password:
         warnings.append(
-            "qBittorrent credentials are empty. "
-            "Fix: Set QB_USERNAME and QB_PASSWORD in config/.env"
+            "qBittorrent credentials are empty. Fix: Set QB_USERNAME and QB_PASSWORD in config/.env"
         )
 
     # Validate file extensions format
