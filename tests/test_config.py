@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -183,7 +184,7 @@ class TestGetEnvInt:
 class TestLoadSettings:
     """Tests for load_settings function."""
 
-    def test_loads_settings_from_yaml(self, caplog) -> None:
+    def test_loads_settings_from_yaml(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test loading settings from config file."""
         yaml_content = """
 paths:
@@ -468,7 +469,9 @@ class TestValidateSameFilesystem:
 
             original_stat = os.stat
 
-            def mock_stat(p, *args, **kwargs):
+            def mock_stat(
+                p: os.PathLike[str] | str | bytes | int, *args: Any, **kwargs: Any
+            ) -> object:
                 result = original_stat(p, *args, **kwargs)
 
                 class MockStatResult:
