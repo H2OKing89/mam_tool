@@ -425,6 +425,11 @@ Examples:
         action="store_true",
         help="Don't trigger ABS library scan after import",
     )
+    abs_import_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview imports without making changes",
+    )
     abs_import_parser.set_defaults(func=cmd_abs_import)
 
     # -------------------------------------------------------------------------

@@ -255,7 +255,7 @@ class AbsClient:
         """
         logger.debug("Testing authorization with ABS server")
         try:
-            response = self._request("GET", "/api/authorize")
+            response = self._request("GET", "/api/me")
         except httpx.ConnectError as e:
             raise AbsConnectionError(f"Failed to connect to {self.host}: {e}") from e
         except httpx.TimeoutException as e:
@@ -264,7 +264,8 @@ class AbsClient:
         data = response.json()
 
         # Validate response structure using Pydantic schema
-        validated = validate_authorize_response(data)
+        # /api/me returns user object directly (not wrapped in {"user": ...})
+        validated = validate_authorize_response({"user": data})
         user = validated.user
 
         return AbsUser(
