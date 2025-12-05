@@ -197,6 +197,18 @@ class AudiobookshelfImportSchema(BaseModel):
             raise ValueError(f"Invalid unknown_asin_policy '{v}'. Must be one of: {valid}")
         return v.lower()
 
+    @field_validator("quarantine_path")
+    @classmethod
+    def validate_quarantine_path_absolute(cls, v: str | None) -> str | None:
+        """Ensure quarantine_path is absolute when provided."""
+        if v is not None and v.strip():
+            if not v.startswith("/"):
+                raise ValueError(
+                    f"quarantine_path must be an absolute path (start with /), got: {v}"
+                )
+            return v.rstrip("/")  # Normalize: remove trailing slash
+        return v
+
     @model_validator(mode="after")
     def validate_quarantine_requires_path(self) -> AudiobookshelfImportSchema:
         """Ensure quarantine_path is set when policy is quarantine."""

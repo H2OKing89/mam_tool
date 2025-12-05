@@ -497,6 +497,29 @@ class TestAudiobookshelfSchema:
         schema = AudiobookshelfImportSchema(unknown_asin_policy="skip")
         assert schema.quarantine_path is None
 
+    def test_quarantine_path_must_be_absolute(self) -> None:
+        """Test quarantine_path must be an absolute path."""
+        from mamfast.schemas.config import AudiobookshelfImportSchema
+
+        # Relative path fails
+        with pytest.raises(ValidationError) as exc_info:
+            AudiobookshelfImportSchema(
+                unknown_asin_policy="quarantine", quarantine_path="data/quarantine"
+            )
+        assert "must be an absolute path" in str(exc_info.value)
+
+        # Absolute path succeeds
+        schema = AudiobookshelfImportSchema(
+            unknown_asin_policy="quarantine", quarantine_path="/mnt/quarantine"
+        )
+        assert schema.quarantine_path == "/mnt/quarantine"
+
+        # Trailing slash normalized
+        schema = AudiobookshelfImportSchema(
+            unknown_asin_policy="quarantine", quarantine_path="/mnt/quarantine/"
+        )
+        assert schema.quarantine_path == "/mnt/quarantine"
+
     def test_full_config_with_audiobookshelf(self) -> None:
         """Test complete config including audiobookshelf section."""
         data = {
