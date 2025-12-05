@@ -136,7 +136,12 @@ class PathMapper:
         self._mappings: list[tuple[str, str]] = []
 
         if mappings:
-            # Multiple mappings mode
+            # Multiple mappings mode - validate required keys first
+            for i, m in enumerate(mappings):
+                if "container" not in m or "host" not in m:
+                    raise ValueError(
+                        f"Mapping at index {i} missing required 'container' or 'host' key: {m}"
+                    )
             for m in mappings:
                 self._mappings.append((m["container"].rstrip("/"), m["host"].rstrip("/")))
             # Sort by container prefix length (longest first) for best match

@@ -601,14 +601,28 @@ class AbsIndex:
         path_parts = host_path_str.strip("/").split("/")
         # Find author folder - it's typically 2nd level under library root
         # But we'll use a simpler approach: get parent of series or book folder
+        # Validate path structure before extracting author folder
         author_folder = "Unknown"
-        if len(path_parts) >= 2:
-            # If has series: /root/Author/Series/Book → Author is at -3
-            # If standalone: /root/Author/Book → Author is at -2
-            if series_name and len(path_parts) >= 3:
+        if series_name:
+            if len(path_parts) >= 3:
                 author_folder = path_parts[-3]
             else:
+                logger.warning(
+                    "Cannot reliably extract author folder for path '%s' "
+                    "(series_name present, path_parts=%s). Setting author_folder='Unknown'.",
+                    host_path_str,
+                    path_parts,
+                )
+        else:
+            if len(path_parts) >= 2:
                 author_folder = path_parts[-2]
+            else:
+                logger.warning(
+                    "Cannot reliably extract author folder for path '%s' "
+                    "(no series_name, path_parts=%s). Setting author_folder='Unknown'.",
+                    host_path_str,
+                    path_parts,
+                )
 
         # Size and duration from AbsLibraryItem
         size_bytes = item.size if item.size > 0 else None

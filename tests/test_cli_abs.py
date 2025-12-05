@@ -256,16 +256,15 @@ class TestAbsIndexCommand:
         mock_lib_config = MagicMock()
         mock_lib_config.id = "lib_test"
         mock_lib_config.mamfast_managed = True
-        mock_lib_config.path_map = []
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf.enabled = True
         mock_settings.audiobookshelf.host = "http://localhost:13378"
         mock_settings.audiobookshelf.api_key = "test-key"
-        mock_settings.audiobookshelf.timeout = 30.0
+        mock_settings.audiobookshelf.timeout_seconds = 30
         mock_settings.audiobookshelf.libraries = [mock_lib_config]
+        mock_settings.audiobookshelf.path_map = []  # path_map is on AudiobookshelfConfig
         mock_settings.audiobookshelf.index_db = str(tmp_path / "abs_index.db")
-        mock_settings.paths.config_dir = str(tmp_path)
 
         mock_user = AbsUser(
             id="user_123",
@@ -318,16 +317,15 @@ class TestAbsIndexCommand:
         mock_lib_config = MagicMock()
         mock_lib_config.id = "lib_test"
         mock_lib_config.mamfast_managed = True
-        mock_lib_config.path_map = []
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf.enabled = True
         mock_settings.audiobookshelf.host = "http://localhost:13378"
         mock_settings.audiobookshelf.api_key = "test-key"
-        mock_settings.audiobookshelf.timeout = 30.0
+        mock_settings.audiobookshelf.timeout_seconds = 30
         mock_settings.audiobookshelf.libraries = [mock_lib_config]
+        mock_settings.audiobookshelf.path_map = []  # path_map is on AudiobookshelfConfig
         mock_settings.audiobookshelf.index_db = str(tmp_path / "abs_index.db")
-        mock_settings.paths.config_dir = str(tmp_path)
 
         mock_user = AbsUser(
             id="user_123",
@@ -384,16 +382,15 @@ class TestAbsIndexCommand:
         mock_lib_config = MagicMock()
         mock_lib_config.id = "lib_specific123"
         mock_lib_config.mamfast_managed = True
-        mock_lib_config.path_map = []
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf.enabled = True
         mock_settings.audiobookshelf.host = "http://localhost:13378"
         mock_settings.audiobookshelf.api_key = "test-key"
-        mock_settings.audiobookshelf.timeout = 30.0
+        mock_settings.audiobookshelf.timeout_seconds = 30
         mock_settings.audiobookshelf.libraries = [mock_lib_config]
+        mock_settings.audiobookshelf.path_map = []  # path_map is on AudiobookshelfConfig
         mock_settings.audiobookshelf.index_db = str(tmp_path / "abs_index.db")
-        mock_settings.paths.config_dir = str(tmp_path)
 
         mock_user = AbsUser(
             id="user_123",
