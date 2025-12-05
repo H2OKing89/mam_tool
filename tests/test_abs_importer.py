@@ -171,7 +171,7 @@ class TestBuildTargetPath:
     """Tests for target path building."""
 
     def test_series_book_path(self, temp_library: Path) -> None:
-        """Build path for series book: Author/Series/Book."""
+        """Build path for series book: Author/Series/CleanedFolderName."""
         parsed = ParsedFolderName(
             author="Brandon Sanderson",
             title="The Final Empire",
@@ -187,10 +187,15 @@ class TestBuildTargetPath:
 
         target = build_target_path(temp_library, parsed, staging_folder)
 
-        assert target == temp_library / "Brandon Sanderson" / "Mistborn" / staging_folder.name
+        # Folder name is cleaned using build_mam_folder_name()
+        # Expected: Mistborn vol_01 (2006) (Michael Kramer) {ASIN.B0123456789} [H2OKing]
+        assert target.parent == temp_library / "Brandon Sanderson" / "Mistborn"
+        assert "Mistborn vol_01" in target.name
+        assert "{ASIN.B0123456789}" in target.name
+        assert "[H2OKing]" in target.name
 
     def test_standalone_book_path(self, temp_library: Path) -> None:
-        """Build path for standalone book: Author/Book."""
+        """Build path for standalone book: Author/CleanedFolderName."""
         parsed = ParsedFolderName(
             author="Andy Weir",
             title="Project Hail Mary",
@@ -206,7 +211,10 @@ class TestBuildTargetPath:
 
         target = build_target_path(temp_library, parsed, staging_folder)
 
-        assert target == temp_library / "Andy Weir" / staging_folder.name
+        # Standalone uses title-based naming
+        assert target.parent == temp_library / "Andy Weir"
+        assert "Project Hail Mary" in target.name
+        assert "{ASIN.B08G9PRS1K}" in target.name
 
 
 # =============================================================================
@@ -539,8 +547,9 @@ class TestImportBatch:
         self, temp_staging: Path, temp_library: Path, mock_index: AbsIndex
     ) -> None:
         """Import multiple books in batch."""
+        # Use valid ASIN format (10 chars starting with B0)
         folders = [
-            create_audiobook_folder(temp_staging, f"Author - Book {i} [B0{i:09d}]")
+            create_audiobook_folder(temp_staging, f"Author - Book {i} [B0ABC{i:05d}]")
             for i in range(1, 4)
         ]
 
@@ -670,11 +679,14 @@ class TestEdgeCases:
         self, temp_staging: Path, temp_library: Path, mock_index: AbsIndex
     ) -> None:
         """Handle target path already existing on disk."""
-        folder_name = "Author - Title [B0123456789]"
+        # Use valid ASIN format (B0 + 8 alphanumeric chars)
+        folder_name = "Author - Title {ASIN.B0ABCDEFGH}"
         staging_folder = create_audiobook_folder(temp_staging, folder_name)
 
-        # Create target path
-        target = temp_library / "Author" / folder_name
+        # Create target path with cleaned name (what build_clean_folder_name returns)
+        # For standalone: "Title (Author) {ASIN.xxx}"
+        clean_name = "Title (Author) {ASIN.B0ABCDEFGH}"
+        target = temp_library / "Author" / clean_name
         target.mkdir(parents=True)
         (target / "existing.m4b").write_text("existing")
 
@@ -693,7 +705,7 @@ class TestEdgeCases:
         self, temp_staging: Path, temp_library: Path, mock_index: AbsIndex
     ) -> None:
         """Handle special characters in author name."""
-        folder_name = "O'Brien & Sons - Book [B0123456789]"
+        folder_name = "O'Brien & Sons - Book {ASIN.B0ABCDEFGH}"
         staging_folder = create_audiobook_folder(temp_staging, folder_name)
 
         result = import_single(
@@ -710,7 +722,7 @@ class TestEdgeCases:
     ) -> None:
         """Handle long folder names."""
         long_title = "A" * 100
-        folder_name = f"Author - {long_title} [B0123456789]"
+        folder_name = f"Author - {long_title} {{ASIN.B0ABCDEFGH}}"
         staging_folder = create_audiobook_folder(temp_staging, folder_name)
 
         result = import_single(

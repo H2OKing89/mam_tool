@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from mamfast.abs.asin import extract_asin
-from mamfast.utils.naming import clean_series_name
+from mamfast.utils.naming import build_mam_file_name, build_mam_folder_name, clean_series_name
 
 if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
@@ -127,8 +127,10 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     clean_name = re.sub(r"\s*\[ASIN\.[A-Z0-9]+\]\s*$", "", clean_name)
     clean_name = re.sub(r"\s*\[B0[A-Z0-9]{8,9}\]\s*$", "", clean_name)
 
-    # Extract ripper tag if present (e.g., {H2OKing})
-    ripper_match = re.search(r"\{([^}]+)\}\s*$", clean_name)
+    # Extract ripper tag if present - can be [Tag] or {Tag} format
+    ripper_match = re.search(r"\[([^\]]+)\]\s*$", clean_name)
+    if not ripper_match:
+        ripper_match = re.search(r"\{([^}]+)\}\s*$", clean_name)
     ripper_tag = ripper_match.group(1) if ripper_match else None
     if ripper_match:
         clean_name = clean_name[: ripper_match.start()].strip()
@@ -158,17 +160,44 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     # Split by " - " to get author and rest
     parts = clean_name.split(" - ", 1)
     if len(parts) < 2:
-        # No separator found - treat whole thing as title
+        # No separator found - this is likely Libation format: "Title vol_XX ... "
+        # Try to extract series/volume from the title
+        title = clean_name
+
+        # Look for vol_XX or vol.XX pattern in title
+        vol_match = re.search(r"\bvol[_.]?\s*(\d+)\b", title, re.IGNORECASE)
+        if vol_match:
+            series_position = vol_match.group(1)
+            # Extract series name (everything before vol_XX pattern)
+            vol_pattern_match = re.search(
+                r"^(.+?)\s+(?:Vol\.?\s*\d+\s+)?vol[_.]?\s*\d+", title, re.IGNORECASE
+            )
+            if vol_pattern_match:
+                series = vol_pattern_match.group(1).strip()
+                # Clean "Vol. X" from series name if present
+                series = re.sub(r"\s+Vol\.?\s*\d+\s*$", "", series, flags=re.IGNORECASE)
+            else:
+                series = None
+            is_standalone = False
+        else:
+            series = None
+            series_position = None
+            is_standalone = True
+
+        # narrator field actually contains the author in Libation format
+        author = narrator if narrator else "Unknown"
+        narrator = None  # Reset narrator since it was misidentified
+
         return ParsedFolderName(
-            author="Unknown",
-            title=clean_name,
-            series=None,
-            series_position=None,
+            author=author,
+            title=title,
+            series=series,
+            series_position=series_position,
             asin=asin,
             year=year,
             narrator=narrator,
             ripper_tag=ripper_tag,
-            is_standalone=True,
+            is_standalone=is_standalone,
         )
 
     author = parts[0].strip()
@@ -204,6 +233,153 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
         ripper_tag=ripper_tag,
         is_standalone=is_standalone,
     )
+
+
+def build_clean_folder_name(parsed: ParsedFolderName) -> str:
+    """Build a clean MAM-compliant folder name from parsed components.
+
+    Uses the naming module's build_mam_folder_name() to apply all cleaning:
+    - Volume normalization (Vol. 7 → vol_07)
+    - Series suffix removal
+    - Phrase filtering
+    - Sanitization
+
+    Args:
+        parsed: ParsedFolderName from parse_mam_folder_name()
+
+    Returns:
+        Clean folder name following MAM naming convention
+    """
+    return build_mam_folder_name(
+        series=parsed.series,
+        title=parsed.title,
+        volume_number=parsed.series_position,
+        arc=None,  # Arc is part of title for now
+        year=parsed.year,
+        author=parsed.narrator or parsed.author,  # Use narrator if available
+        asin=parsed.asin,
+        ripper_tag=parsed.ripper_tag,
+    )
+
+
+def build_clean_file_name(parsed: ParsedFolderName, extension: str = ".m4b") -> str:
+    """Build a clean MAM-compliant file name from parsed components.
+
+    Uses the naming module's build_mam_file_name() which:
+    - Applies same cleaning as folder name
+    - Excludes ripper tag (tag is folder-only)
+    - Includes file extension
+
+    Args:
+        parsed: ParsedFolderName from parse_mam_folder_name()
+        extension: File extension (default: ".m4b")
+
+    Returns:
+        Clean filename following MAM naming convention
+    """
+    return build_mam_file_name(
+        series=parsed.series,
+        title=parsed.title,
+        volume_number=parsed.series_position,
+        arc=None,  # Arc is part of title for now
+        year=parsed.year,
+        author=parsed.narrator or parsed.author,  # Use narrator if available
+        asin=parsed.asin,
+        extension=extension,
+    )
+
+
+def rename_files_in_folder(
+    folder_path: Path,
+    parsed: ParsedFolderName,
+    *,
+    dry_run: bool = False,
+) -> list[tuple[str, str]]:
+    """Rename files in folder to match clean MAM naming convention.
+
+    Renames audio files (.m4b, .mp3, etc.), cue sheets, cover images,
+    and metadata files to use the clean base name.
+
+    Special handling:
+    - cover.jpg is kept as-is (standard ABS naming)
+    - Files already matching clean name are skipped
+    - Compound extensions like .metadata.json are preserved
+
+    Args:
+        folder_path: Path to folder containing files
+        parsed: ParsedFolderName with extracted metadata
+        dry_run: If True, only log what would happen
+
+    Returns:
+        List of (old_name, new_name) tuples for renamed files
+    """
+    renamed: list[tuple[str, str]] = []
+
+    # Extensions to rename (audio, cue, images, metadata)
+    rename_extensions = {
+        ".m4b",
+        ".m4a",
+        ".mp3",
+        ".ogg",
+        ".flac",
+        ".opus",  # Audio
+        ".cue",  # Cue sheets
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",  # Images
+        ".json",  # Metadata
+    }
+
+    # Compound extensions to check first (order matters)
+    compound_extensions = [".metadata.json"]
+
+    # Files to skip renaming (keep original names)
+    skip_names = {"cover.jpg", "cover.jpeg", "cover.png", "folder.jpg", "folder.png"}
+
+    for file_path in folder_path.iterdir():
+        if not file_path.is_file():
+            continue
+
+        # Skip special files
+        if file_path.name.lower() in skip_names:
+            continue
+
+        # Check for compound extensions first
+        ext = None
+        for compound_ext in compound_extensions:
+            if file_path.name.lower().endswith(compound_ext):
+                ext = compound_ext
+                break
+
+        # Fall back to simple extension
+        if ext is None:
+            ext = file_path.suffix.lower()
+            if ext not in rename_extensions:
+                continue
+
+        # Build the clean filename
+        new_name = build_clean_file_name(parsed, extension=ext)
+
+        # Skip if already has the correct name
+        if file_path.name == new_name:
+            continue
+
+        new_path = file_path.parent / new_name
+
+        if dry_run:
+            logger.info("[DRY RUN] Would rename: %s → %s", file_path.name, new_name)
+        else:
+            try:
+                file_path.rename(new_path)
+                logger.info("Renamed: %s → %s", file_path.name, new_name)
+            except OSError as e:
+                logger.warning("Failed to rename %s: %s", file_path.name, e)
+                continue
+
+        renamed.append((file_path.name, new_name))
+
+    return renamed
 
 
 def _normalize_folder_name(name: str) -> str:
@@ -422,6 +598,9 @@ def build_target_path(
     # OR from parsed (and not standalone)
     has_series = staging_series or (parsed.series and not parsed.is_standalone)
 
+    # Build clean folder name using naming module
+    clean_folder_name = build_clean_folder_name(parsed)
+
     if has_series and series_name:
         # Clean the series name (remove " Series" suffix, etc.)
         cleaned_series = clean_series_name(series_name, parsed.title) or series_name
@@ -436,10 +615,10 @@ def build_target_path(
         # Use existing series folder or create new with cleaned name
         series_folder = existing_series or (author_folder / cleaned_series)
 
-        return series_folder / staging_folder.name
+        return series_folder / clean_folder_name
     else:
-        # Standalone: Author/Title (using full folder name)
-        return author_folder / staging_folder.name
+        # Standalone: Author/Title (using cleaned folder name)
+        return author_folder / clean_folder_name
 
 
 def import_single(
@@ -533,6 +712,8 @@ def import_single(
 
     if dry_run:
         logger.info("[DRY RUN] Would move %s → %s", staging_folder, target_path)
+        # Preview file renames
+        rename_files_in_folder(staging_folder, parsed, dry_run=True)
         return ImportResult(
             staging_path=staging_folder,
             target_path=target_path,
@@ -564,6 +745,9 @@ def import_single(
             status="failed",
             error=f"Move failed: {e}",
         )
+
+    # Rename files to match clean MAM naming convention
+    rename_files_in_folder(target_path, parsed)
 
     # Log import to database
     if asin:
