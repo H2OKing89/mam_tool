@@ -11,10 +11,13 @@ See docs/UNKNOWN_ASIN_HANDLING.md for unknown ASIN handling design (Phase 1+).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +28,24 @@ if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
 
 logger = logging.getLogger(__name__)
+
+# Audio extensions recognized by the importer
+AUDIO_EXTENSIONS = frozenset({".m4b", ".m4a", ".mp3", ".ogg", ".flac", ".opus", ".wav"})
+
+
+class UnknownAsinPolicy(str, Enum):
+    """Policy for handling audiobooks without ASIN."""
+
+    IMPORT = "import"  # Default - import to Unknown/ or Author/ (homebrew)
+    QUARANTINE = "quarantine"  # Move to quarantine folder for manual review
+    SKIP = "skip"  # Leave in staging, log warning only
+
+
+class UnknownAsinContentType(str, Enum):
+    """Classification of why ASIN is unknown."""
+
+    MISSING_ASIN = "missing_asin"  # Likely Audible content, ASIN just not found yet
+    HOMEBREW = "homebrew"  # No ASIN expected (self-pub, personal rips, podcasts)
 
 
 class ImportError(Exception):
@@ -76,6 +97,26 @@ class BatchImportResult:
             self.duplicate_count += 1
         elif result.status == "failed":
             self.failed_count += 1
+
+
+@dataclass
+class UnknownAsinContext:
+    """Context for handling audiobooks without ASIN.
+
+    Captures both the content type (why is ASIN unknown?) and structural
+    information (how many files?) for routing decisions.
+    """
+
+    folder: Path
+    parsed: ParsedFolderName
+    content_type: UnknownAsinContentType
+    file_count: int
+    original_folder_name: str  # For collision-safe destination naming
+
+    @property
+    def is_multi_file(self) -> bool:
+        """True if folder contains multiple audio files."""
+        return self.file_count > 1
 
 
 @dataclass
@@ -418,6 +459,284 @@ def rename_files_in_folder(
     return renamed
 
 
+# =============================================================================
+# Phase 2: Unknown ASIN Policy Handling
+# =============================================================================
+
+
+def matches_homebrew_pattern(folder_name: str, parsed: ParsedFolderName) -> bool:
+    """Detect 'Author - Title' pattern suggesting homebrew/self-pub content.
+
+    Homebrew content typically follows the simple pattern "Author - Title" without
+    the metadata markers (year, ASIN, ripper tag) that MAM-compliant folders have.
+
+    Args:
+        folder_name: Original folder name
+        parsed: ParsedFolderName from parsing
+
+    Returns:
+        True if folder matches homebrew pattern
+    """
+    # Explicit author AND no ASIN AND no year suggests homebrew
+    # These often come from personal rips: "Joe Smith - My Podcast"
+    if parsed.author and not parsed.asin and not parsed.year:
+        # Simple heuristic: folder starts with "Author - " or "Author_-_"
+        normalized = folder_name.replace("_", " ").strip()
+        author_prefix = f"{parsed.author.lower()} - "
+        return normalized.lower().startswith(author_prefix)
+    return False
+
+
+def classify_unknown_asin(
+    folder: Path,
+    parsed: ParsedFolderName,
+) -> UnknownAsinContext:
+    """Classify an unknown-ASIN folder for routing decisions.
+
+    Determines:
+    - Content type: MISSING_ASIN (likely Audible) vs HOMEBREW (no ASIN expected)
+    - File count: For multi-file protection decisions
+
+    Args:
+        folder: Path to the audiobook folder
+        parsed: ParsedFolderName from parse_mam_folder_name()
+
+    Returns:
+        UnknownAsinContext with classification and metadata
+    """
+    # Count audio files
+    audio_files = [
+        f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
+    ]
+    file_count = len(audio_files)
+
+    # Classify content type using homebrew heuristic
+    if matches_homebrew_pattern(folder.name, parsed):
+        content_type = UnknownAsinContentType.HOMEBREW
+    else:
+        content_type = UnknownAsinContentType.MISSING_ASIN
+
+    return UnknownAsinContext(
+        folder=folder,
+        parsed=parsed,
+        content_type=content_type,
+        file_count=file_count,
+        original_folder_name=folder.name,
+    )
+
+
+def get_unique_destination(base_path: Path) -> Path:
+    """Get a unique destination path, appending suffix if needed.
+
+    Prevents collision when two books have similar names.
+
+    Args:
+        base_path: Desired destination path
+
+    Returns:
+        base_path if it doesn't exist, otherwise base_path with _N suffix
+    """
+    if not base_path.exists():
+        return base_path
+
+    # Append suffix: "My Book (2020)" → "My Book (2020)_2"
+    counter = 2
+    while True:
+        candidate = base_path.parent / f"{base_path.name}_{counter}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def build_unknown_target_path(
+    library_root: Path,
+    ctx: UnknownAsinContext,
+) -> Path:
+    """Build target path for unknown-ASIN content.
+
+    Routing:
+    - MISSING_ASIN → Unknown/<OriginalFolderName>/
+    - HOMEBREW → <Author>/<Title (Author)>/
+
+    Args:
+        library_root: ABS library root
+        ctx: Unknown ASIN context with classification
+
+    Returns:
+        Target path for the audiobook
+    """
+    if ctx.content_type == UnknownAsinContentType.HOMEBREW:
+        # Homebrew: route to Author/Title structure
+        author = ctx.parsed.author or "Unknown"
+        title = ctx.parsed.title or ctx.original_folder_name
+
+        # Build folder name: "Title (Author)" format
+        folder_name = f"{title} ({author})"
+        base_path = library_root / author / folder_name
+    else:
+        # Missing ASIN: route to Unknown/<OriginalFolderName>
+        base_path = library_root / "Unknown" / ctx.original_folder_name
+
+    return get_unique_destination(base_path)
+
+
+def write_unknown_asin_sidecar(
+    dst_folder: Path,
+    ctx: UnknownAsinContext,
+    policy: str,
+) -> Path | None:
+    """Write metadata sidecar for unknown-ASIN import.
+
+    Creates _mamfast_unknown_asin.json with import metadata for future
+    batch resolution tools.
+
+    Args:
+        dst_folder: Destination folder (after move)
+        ctx: Unknown ASIN context
+        policy: Policy used ("import" or "quarantine")
+
+    Returns:
+        Path to sidecar file, or None if write failed
+    """
+    sidecar_path = dst_folder / "_mamfast_unknown_asin.json"
+
+    payload = {
+        "content_type": ctx.content_type.value,
+        "is_multi_file": ctx.is_multi_file,
+        "original_folder": ctx.original_folder_name,
+        "file_count": ctx.file_count,
+        "imported_at": datetime.now(UTC).isoformat(),
+        "policy": policy,
+        "parsed": {
+            "author": ctx.parsed.author,
+            "title": ctx.parsed.title,
+            "series": ctx.parsed.series,
+            "year": ctx.parsed.year,
+        },
+    }
+
+    try:
+        sidecar_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+        logger.debug("Wrote unknown ASIN sidecar: %s", sidecar_path)
+        return sidecar_path
+    except OSError as e:
+        logger.warning("Failed to write sidecar %s: %s", sidecar_path, e)
+        return None
+
+
+def handle_unknown_asin(
+    ctx: UnknownAsinContext,
+    library_root: Path,
+    *,
+    unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
+    quarantine_path: Path | None = None,
+    dry_run: bool = False,
+) -> ImportResult:
+    """Handle import of audiobook without ASIN.
+
+    Behavior depends on policy:
+    - IMPORT: Move to Unknown/ or Author/ (homebrew), create sidecar
+    - QUARANTINE: Move to quarantine folder, no renames
+    - SKIP: Leave in staging, return skipped result
+
+    Args:
+        ctx: Unknown ASIN context with classification
+        library_root: ABS library root
+        unknown_asin_policy: How to handle (import/quarantine/skip)
+        quarantine_path: Path for quarantine (required if policy=QUARANTINE)
+        dry_run: If True, don't actually move files
+
+    Returns:
+        ImportResult with status and details
+    """
+    if unknown_asin_policy == UnknownAsinPolicy.SKIP:
+        logger.warning(
+            "Skipping import for unknown ASIN (policy=skip): %s (type=%s, files=%d)",
+            ctx.folder.name,
+            ctx.content_type.value,
+            ctx.file_count,
+        )
+        return ImportResult(
+            staging_path=ctx.folder,
+            target_path=None,
+            asin=None,
+            status="skipped",
+            error="Unknown ASIN (policy=skip)",
+        )
+
+    if unknown_asin_policy == UnknownAsinPolicy.QUARANTINE:
+        if not quarantine_path:
+            return ImportResult(
+                staging_path=ctx.folder,
+                target_path=None,
+                asin=None,
+                status="failed",
+                error="Quarantine policy requires quarantine_path",
+            )
+        target_path = get_unique_destination(quarantine_path / ctx.original_folder_name)
+    else:
+        # Default: IMPORT
+        target_path = build_unknown_target_path(library_root, ctx)
+
+    if dry_run:
+        logger.info(
+            "[DRY RUN] Would import unknown ASIN (%s): %s → %s",
+            ctx.content_type.value,
+            ctx.folder.name,
+            target_path,
+        )
+        return ImportResult(
+            staging_path=ctx.folder,
+            target_path=target_path,
+            asin=None,
+            status="success",
+        )
+
+    # Create parent directories
+    try:
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return ImportResult(
+            staging_path=ctx.folder,
+            target_path=target_path,
+            asin=None,
+            status="failed",
+            error=f"Failed to create directories: {e}",
+        )
+
+    # Atomic move
+    try:
+        ctx.folder.rename(target_path)
+        logger.info(
+            "Imported unknown ASIN (%s): %s → %s",
+            ctx.content_type.value,
+            ctx.original_folder_name,
+            target_path,
+        )
+    except OSError as e:
+        return ImportResult(
+            staging_path=ctx.folder,
+            target_path=target_path,
+            asin=None,
+            status="failed",
+            error=f"Move failed: {e}",
+        )
+
+    # Rename files (respects multi-file protection from Phase 1)
+    rename_files_in_folder(target_path, ctx.parsed)
+
+    # Write sidecar for future resolution
+    policy_str = "quarantine" if unknown_asin_policy == UnknownAsinPolicy.QUARANTINE else "import"
+    write_unknown_asin_sidecar(target_path, ctx, policy_str)
+
+    return ImportResult(
+        staging_path=ctx.folder,
+        target_path=target_path,
+        asin=None,
+        status="success",
+    )
+
+
 def _normalize_folder_name(name: str) -> str:
     """Normalize folder name for comparison.
 
@@ -654,6 +973,8 @@ def import_single(
     *,
     staging_root: Path | None = None,
     duplicate_policy: str = "skip",
+    unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
+    quarantine_path: Path | None = None,
     dry_run: bool = False,
 ) -> ImportResult:
     """Import a single audiobook from staging to library.
@@ -664,6 +985,8 @@ def import_single(
         asin_index: In-memory ASIN index from build_asin_index()
         staging_root: Root of staging directory (to preserve nested structure)
         duplicate_policy: "skip", "warn", or "overwrite"
+        unknown_asin_policy: How to handle books without ASIN
+        quarantine_path: Path for quarantine (required if policy=QUARANTINE)
         dry_run: If True, don't actually move files
 
     Returns:
@@ -685,32 +1008,40 @@ def import_single(
 
     asin = parsed.asin
 
-    # Check for duplicates if we have an ASIN
-    if asin:
-        is_dup, existing_path = asin_exists(asin_index, asin)
-        if is_dup:
-            if duplicate_policy == "skip":
-                return ImportResult(
-                    staging_path=staging_folder,
-                    target_path=None,
-                    asin=asin,
-                    status="duplicate",
-                    error=f"Already exists at {existing_path}",
-                )
-            elif duplicate_policy == "warn":
-                logger.warning("Duplicate ASIN %s exists at %s, skipping", asin, existing_path)
-                return ImportResult(
-                    staging_path=staging_folder,
-                    target_path=None,
-                    asin=asin,
-                    status="duplicate",
-                    error=f"Already exists at {existing_path}",
-                )
-            elif duplicate_policy == "overwrite":
-                # For overwrite, we proceed but note the existing path
-                logger.info("Duplicate ASIN %s, will overwrite at %s", asin, existing_path)
-    else:
-        logger.warning("No ASIN found in folder name: %s", folder_name)
+    # No ASIN → delegate to unknown ASIN handler
+    if not asin:
+        ctx = classify_unknown_asin(staging_folder, parsed)
+        return handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=unknown_asin_policy,
+            quarantine_path=quarantine_path,
+            dry_run=dry_run,
+        )
+
+    # Check for duplicates (we have ASIN)
+    is_dup, existing_path = asin_exists(asin_index, asin)
+    if is_dup:
+        if duplicate_policy == "skip":
+            return ImportResult(
+                staging_path=staging_folder,
+                target_path=None,
+                asin=asin,
+                status="duplicate",
+                error=f"Already exists at {existing_path}",
+            )
+        elif duplicate_policy == "warn":
+            logger.warning("Duplicate ASIN %s exists at %s, skipping", asin, existing_path)
+            return ImportResult(
+                staging_path=staging_folder,
+                target_path=None,
+                asin=asin,
+                status="duplicate",
+                error=f"Already exists at {existing_path}",
+            )
+        elif duplicate_policy == "overwrite":
+            # For overwrite, we proceed but note the existing path
+            logger.info("Duplicate ASIN %s, will overwrite at %s", asin, existing_path)
 
     # Build target path (preserves nested structure if present)
     target_path = build_target_path(library_root, parsed, staging_folder, staging_root)
@@ -796,6 +1127,8 @@ def import_batch(
     *,
     staging_root: Path | None = None,
     duplicate_policy: str = "skip",
+    unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
+    quarantine_path: Path | None = None,
     dry_run: bool = False,
 ) -> BatchImportResult:
     """Import multiple audiobooks from staging to library.
@@ -806,6 +1139,8 @@ def import_batch(
         asin_index: In-memory ASIN index from build_asin_index()
         staging_root: Root staging directory (for resolving author from path)
         duplicate_policy: "skip", "warn", or "overwrite"
+        unknown_asin_policy: How to handle books without ASIN
+        quarantine_path: Path for quarantine (required if policy=QUARANTINE)
         dry_run: If True, don't actually move files
 
     Returns:
@@ -820,6 +1155,8 @@ def import_batch(
             asin_index=asin_index,
             staging_root=staging_root,
             duplicate_policy=duplicate_policy,
+            unknown_asin_policy=unknown_asin_policy,
+            quarantine_path=quarantine_path,
             dry_run=dry_run,
         )
         batch_result.add(result)

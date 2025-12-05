@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,12 +12,21 @@ from mamfast.abs.importer import (
     BatchImportResult,
     ImportResult,
     ParsedFolderName,
+    UnknownAsinContentType,
+    UnknownAsinContext,
+    UnknownAsinPolicy,
     build_target_path,
+    build_unknown_target_path,
+    classify_unknown_asin,
     discover_staged_books,
+    get_unique_destination,
+    handle_unknown_asin,
     import_batch,
     import_single,
+    matches_homebrew_pattern,
     parse_mam_folder_name,
     validate_import_prerequisites,
+    write_unknown_asin_sidecar,
 )
 
 # =============================================================================
@@ -448,18 +458,13 @@ class TestImportSingle:
         assert result.status == "success"
         assert not staging_folder.exists()
 
-    def test_no_asin_warning(
+    def test_no_asin_homebrew_imports_to_author(
         self,
         temp_staging: Path,
         temp_library: Path,
         empty_asin_index: dict[str, AsinEntry],
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Warn when no ASIN in folder name."""
-        import logging
-
-        caplog.set_level(logging.WARNING)
-
+        """Books with homebrew pattern (Author - Title, no ASIN) go to Author/."""
         folder_name = "Author - Book Without ASIN"
         staging_folder = create_audiobook_folder(temp_staging, folder_name)
 
@@ -469,9 +474,11 @@ class TestImportSingle:
             asin_index=empty_asin_index,
         )
 
+        # Homebrew pattern routes to Author/ folder
         assert result.status == "success"
         assert result.asin is None
-        assert "No ASIN" in caplog.text
+        assert "Author" in str(result.target_path)
+        assert "Unknown" not in str(result.target_path)
 
 
 # =============================================================================
@@ -745,3 +752,483 @@ class TestMultiFileProtection:
 
         # Even in dry-run, should recognize this is unsafe
         assert renamed == []
+
+
+# =============================================================================
+# Phase 2: Unknown ASIN Policy Tests
+# =============================================================================
+
+
+class TestUnknownAsinClassification:
+    """Tests for unknown ASIN classification logic."""
+
+    def test_matches_homebrew_pattern_basic(self) -> None:
+        """'Author - Title' pattern is detected as homebrew."""
+        parsed = ParsedFolderName(
+            author="Joe Smith",
+            title="My Podcast",
+            series=None,
+            series_position=None,
+            asin=None,
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+        assert matches_homebrew_pattern("Joe Smith - My Podcast", parsed) is True
+
+    def test_matches_homebrew_pattern_with_underscore(self) -> None:
+        """Homebrew pattern with underscores is detected."""
+        parsed = ParsedFolderName(
+            author="Joe Smith",
+            title="My Podcast",
+            series=None,
+            series_position=None,
+            asin=None,
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+        assert matches_homebrew_pattern("Joe_Smith_-_My_Podcast", parsed) is True
+
+    def test_not_homebrew_with_asin(self) -> None:
+        """Folder with ASIN is not homebrew even if pattern matches."""
+        parsed = ParsedFolderName(
+            author="Joe Smith",
+            title="My Book",
+            series=None,
+            series_position=None,
+            asin="B0123456789",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+        assert matches_homebrew_pattern("Joe Smith - My Book", parsed) is False
+
+    def test_not_homebrew_with_year(self) -> None:
+        """Folder with year is not homebrew (likely MAM-style)."""
+        parsed = ParsedFolderName(
+            author="Joe Smith",
+            title="My Book",
+            series=None,
+            series_position=None,
+            asin=None,
+            year="2024",
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+        assert matches_homebrew_pattern("Joe Smith - My Book (2024)", parsed) is False
+
+    def test_classify_single_file_missing_asin(self, tmp_path: Path) -> None:
+        """Single-file without ASIN is classified as MISSING_ASIN."""
+        folder = tmp_path / "Unknown Book (2024)"
+        folder.mkdir()
+        (folder / "book.m4b").touch()
+
+        parsed = parse_mam_folder_name(folder.name)
+        ctx = classify_unknown_asin(folder, parsed)
+
+        assert ctx.content_type == UnknownAsinContentType.MISSING_ASIN
+        assert ctx.file_count == 1
+        assert ctx.is_multi_file is False
+
+    def test_classify_multi_file_missing_asin(self, tmp_path: Path) -> None:
+        """Multi-file without ASIN is classified as MISSING_ASIN."""
+        folder = tmp_path / "Unknown Book (2024)"
+        folder.mkdir()
+        (folder / "part1.m4b").touch()
+        (folder / "part2.m4b").touch()
+        (folder / "part3.m4b").touch()
+
+        parsed = parse_mam_folder_name(folder.name)
+        ctx = classify_unknown_asin(folder, parsed)
+
+        assert ctx.content_type == UnknownAsinContentType.MISSING_ASIN
+        assert ctx.file_count == 3
+        assert ctx.is_multi_file is True
+
+    def test_classify_homebrew_pattern(self, tmp_path: Path) -> None:
+        """Homebrew pattern is classified as HOMEBREW."""
+        folder = tmp_path / "Joe Smith - My Podcast"
+        folder.mkdir()
+        (folder / "episode1.mp3").touch()
+
+        parsed = parse_mam_folder_name(folder.name)
+        ctx = classify_unknown_asin(folder, parsed)
+
+        assert ctx.content_type == UnknownAsinContentType.HOMEBREW
+        assert ctx.file_count == 1
+
+
+class TestUnknownAsinTargetPath:
+    """Tests for unknown ASIN target path building."""
+
+    def test_missing_asin_routes_to_unknown(self, tmp_path: Path) -> None:
+        """MISSING_ASIN content routes to Unknown/ folder."""
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = UnknownAsinContext(
+            folder=tmp_path / "My Book (2024)",
+            parsed=ParsedFolderName(
+                author="Unknown",
+                title="My Book",
+                series=None,
+                series_position=None,
+                asin=None,
+                year="2024",
+                narrator=None,
+                ripper_tag=None,
+                is_standalone=True,
+            ),
+            content_type=UnknownAsinContentType.MISSING_ASIN,
+            file_count=1,
+            original_folder_name="My Book (2024)",
+        )
+
+        target = build_unknown_target_path(library_root, ctx)
+        assert target == library_root / "Unknown" / "My Book (2024)"
+
+    def test_homebrew_routes_to_author(self, tmp_path: Path) -> None:
+        """HOMEBREW content routes to Author/Title (Author)."""
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = UnknownAsinContext(
+            folder=tmp_path / "Joe Smith - My Podcast",
+            parsed=ParsedFolderName(
+                author="Joe Smith",
+                title="My Podcast",
+                series=None,
+                series_position=None,
+                asin=None,
+                year=None,
+                narrator=None,
+                ripper_tag=None,
+                is_standalone=True,
+            ),
+            content_type=UnknownAsinContentType.HOMEBREW,
+            file_count=1,
+            original_folder_name="Joe Smith - My Podcast",
+        )
+
+        target = build_unknown_target_path(library_root, ctx)
+        assert target == library_root / "Joe Smith" / "My Podcast (Joe Smith)"
+
+    def test_unique_destination_no_collision(self, tmp_path: Path) -> None:
+        """get_unique_destination returns same path when no collision."""
+        path = tmp_path / "My Book"
+        assert get_unique_destination(path) == path
+
+    def test_unique_destination_with_collision(self, tmp_path: Path) -> None:
+        """get_unique_destination appends suffix on collision."""
+        (tmp_path / "My Book").mkdir()
+        path = tmp_path / "My Book"
+
+        unique = get_unique_destination(path)
+        assert unique == tmp_path / "My Book_2"
+
+    def test_unique_destination_multiple_collisions(self, tmp_path: Path) -> None:
+        """get_unique_destination increments suffix."""
+        (tmp_path / "My Book").mkdir()
+        (tmp_path / "My Book_2").mkdir()
+        (tmp_path / "My Book_3").mkdir()
+
+        path = tmp_path / "My Book"
+        unique = get_unique_destination(path)
+        assert unique == tmp_path / "My Book_4"
+
+
+class TestUnknownAsinSidecar:
+    """Tests for unknown ASIN sidecar writing."""
+
+    def test_sidecar_written_correctly(self, tmp_path: Path) -> None:
+        """Sidecar is written with correct fields."""
+        folder = tmp_path / "My Book"
+        folder.mkdir()
+
+        ctx = UnknownAsinContext(
+            folder=tmp_path / "staging" / "My Book (2024)",
+            parsed=ParsedFolderName(
+                author="Test Author",
+                title="My Book",
+                series="My Series",
+                series_position="1",
+                asin=None,
+                year="2024",
+                narrator="Test Narrator",
+                ripper_tag=None,
+                is_standalone=False,
+            ),
+            content_type=UnknownAsinContentType.MISSING_ASIN,
+            file_count=3,
+            original_folder_name="My Book (2024)",
+        )
+
+        sidecar_path = write_unknown_asin_sidecar(folder, ctx, "import")
+
+        assert sidecar_path is not None
+        assert sidecar_path.exists()
+        assert sidecar_path.name == "_mamfast_unknown_asin.json"
+
+        data = json.loads(sidecar_path.read_text())
+        assert data["content_type"] == "missing_asin"
+        assert data["is_multi_file"] is True
+        assert data["original_folder"] == "My Book (2024)"
+        assert data["file_count"] == 3
+        assert data["policy"] == "import"
+        assert "imported_at" in data
+        assert data["parsed"]["author"] == "Test Author"
+        assert data["parsed"]["title"] == "My Book"
+        assert data["parsed"]["series"] == "My Series"
+
+
+class TestUnknownAsinPolicyHandler:
+    """Tests for handle_unknown_asin with different policies."""
+
+    def test_policy_skip_returns_skipped(self, tmp_path: Path) -> None:
+        """Policy SKIP leaves folder in place and returns skipped."""
+        staging_folder = tmp_path / "staging" / "Unknown Book"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = classify_unknown_asin(staging_folder, parse_mam_folder_name(staging_folder.name))
+
+        result = handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=UnknownAsinPolicy.SKIP,
+        )
+
+        assert result.status == "skipped"
+        assert "policy=skip" in result.error
+        assert staging_folder.exists()  # Not moved
+
+    def test_policy_quarantine_moves_to_quarantine_path(self, tmp_path: Path) -> None:
+        """Policy QUARANTINE moves to quarantine path."""
+        # Use a folder name that won't match homebrew pattern
+        staging_folder = tmp_path / "staging" / "Unknown Book vol_01 (2024)"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        quarantine = tmp_path / "quarantine"
+        quarantine.mkdir()
+
+        ctx = classify_unknown_asin(staging_folder, parse_mam_folder_name(staging_folder.name))
+
+        result = handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=UnknownAsinPolicy.QUARANTINE,
+            quarantine_path=quarantine,
+        )
+
+        assert result.status == "success"
+        assert result.target_path == quarantine / "Unknown Book vol_01 (2024)"
+        assert not staging_folder.exists()  # Moved
+        assert result.target_path.exists()  # Target folder exists
+        # Has audio file (may be renamed)
+        audio_files = list(result.target_path.glob("*.m4b"))
+        assert len(audio_files) == 1
+        # Sidecar written
+        assert (result.target_path / "_mamfast_unknown_asin.json").exists()
+
+    def test_policy_quarantine_requires_path(self, tmp_path: Path) -> None:
+        """Policy QUARANTINE fails without quarantine_path."""
+        staging_folder = tmp_path / "staging" / "Unknown Book"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = classify_unknown_asin(staging_folder, parse_mam_folder_name(staging_folder.name))
+
+        result = handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=UnknownAsinPolicy.QUARANTINE,
+            quarantine_path=None,  # Missing!
+        )
+
+        assert result.status == "failed"
+        assert "quarantine_path" in result.error
+
+    def test_policy_import_missing_asin_to_unknown(self, tmp_path: Path) -> None:
+        """Policy IMPORT routes MISSING_ASIN to Unknown/."""
+        # Use a folder name that won't match homebrew pattern (has year)
+        staging_folder = tmp_path / "staging" / "Unknown Book vol_01 (2024)"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = classify_unknown_asin(staging_folder, parse_mam_folder_name(staging_folder.name))
+
+        result = handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=UnknownAsinPolicy.IMPORT,
+        )
+
+        assert result.status == "success"
+        assert result.target_path == library_root / "Unknown" / "Unknown Book vol_01 (2024)"
+        assert not staging_folder.exists()  # Moved
+        assert result.target_path.exists()  # Target folder exists
+        # Has audio file (may be renamed)
+        audio_files = list(result.target_path.glob("*.m4b"))
+        assert len(audio_files) == 1
+        # Sidecar written
+        assert (result.target_path / "_mamfast_unknown_asin.json").exists()
+
+    def test_policy_import_homebrew_to_author(self, tmp_path: Path) -> None:
+        """Policy IMPORT routes HOMEBREW to Author/."""
+        staging_folder = tmp_path / "staging" / "Joe Smith - My Podcast"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "episode.mp3").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = classify_unknown_asin(staging_folder, parse_mam_folder_name(staging_folder.name))
+
+        result = handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=UnknownAsinPolicy.IMPORT,
+        )
+
+        assert result.status == "success"
+        assert "Joe Smith" in str(result.target_path)
+        assert not staging_folder.exists()  # Moved
+
+    def test_dry_run_does_not_move(self, tmp_path: Path) -> None:
+        """Dry-run mode does not actually move files."""
+        staging_folder = tmp_path / "staging" / "Unknown Book"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        ctx = classify_unknown_asin(staging_folder, parse_mam_folder_name(staging_folder.name))
+
+        result = handle_unknown_asin(
+            ctx,
+            library_root,
+            unknown_asin_policy=UnknownAsinPolicy.IMPORT,
+            dry_run=True,
+        )
+
+        assert result.status == "success"
+        assert staging_folder.exists()  # Still there!
+        assert not result.target_path.exists()
+
+
+class TestImportSingleWithUnknownAsinPolicy:
+    """Tests for import_single integration with unknown ASIN policy."""
+
+    def test_import_single_no_asin_uses_policy(self, tmp_path: Path) -> None:
+        """import_single delegates to unknown ASIN handler when no ASIN."""
+        staging_folder = tmp_path / "staging" / "Unknown Book (2024)"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        result = import_single(
+            staging_folder=staging_folder,
+            library_root=library_root,
+            asin_index={},
+            unknown_asin_policy=UnknownAsinPolicy.IMPORT,
+        )
+
+        assert result.status == "success"
+        assert result.asin is None
+        assert "Unknown" in str(result.target_path)
+
+    def test_import_single_no_asin_skip_policy(self, tmp_path: Path) -> None:
+        """import_single respects SKIP policy."""
+        staging_folder = tmp_path / "staging" / "Unknown Book"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        result = import_single(
+            staging_folder=staging_folder,
+            library_root=library_root,
+            asin_index={},
+            unknown_asin_policy=UnknownAsinPolicy.SKIP,
+        )
+
+        assert result.status == "skipped"
+        assert staging_folder.exists()  # Not moved
+
+    def test_import_single_with_asin_ignores_unknown_policy(self, tmp_path: Path) -> None:
+        """import_single uses normal path when ASIN is present."""
+        # Use valid 10-char ASIN format (B0 + 8 alphanumeric)
+        staging_folder = tmp_path / "staging" / "Author - My Book (2024) {ASIN.B0ABCD1234}"
+        staging_folder.mkdir(parents=True)
+        (staging_folder / "book.m4b").touch()
+
+        library_root = tmp_path / "library"
+        library_root.mkdir()
+
+        result = import_single(
+            staging_folder=staging_folder,
+            library_root=library_root,
+            asin_index={},  # No duplicate
+            unknown_asin_policy=UnknownAsinPolicy.SKIP,  # Should be ignored
+        )
+
+        assert result.status == "success"
+        assert result.asin == "B0ABCD1234"
+        assert "Unknown" not in str(result.target_path)  # Normal path, not Unknown/
+
+
+class TestZeroAudioFiles:
+    """Tests for edge case: folder with zero audio files."""
+
+    def test_classify_zero_audio_files(self, tmp_path: Path) -> None:
+        """Folder with only sidecars has file_count=0."""
+        folder = tmp_path / "Empty Book"
+        folder.mkdir()
+        (folder / "cover.jpg").touch()
+        (folder / "notes.pdf").touch()
+
+        parsed = parse_mam_folder_name(folder.name)
+        ctx = classify_unknown_asin(folder, parsed)
+
+        assert ctx.file_count == 0
+        assert ctx.is_multi_file is False
+
+
+class TestMixedAudioFormats:
+    """Tests for folders with mixed audio formats."""
+
+    def test_mixed_formats_counted_as_multi_file(self, tmp_path: Path) -> None:
+        """Different audio formats all count toward file_count."""
+        folder = tmp_path / "Mixed Format Book"
+        folder.mkdir()
+        (folder / "part1.m4b").touch()
+        (folder / "part2.mp3").touch()
+        (folder / "part3.flac").touch()
+
+        parsed = parse_mam_folder_name(folder.name)
+        ctx = classify_unknown_asin(folder, parsed)
+
+        assert ctx.file_count == 3
+        assert ctx.is_multi_file is True

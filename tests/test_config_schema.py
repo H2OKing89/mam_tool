@@ -424,6 +424,79 @@ class TestAudiobookshelfSchema:
             AudiobookshelfImportSchema(trigger_scan="always")
         assert "Invalid trigger_scan" in str(exc_info.value)
 
+    def test_unknown_asin_policy_validation(self) -> None:
+        """Test unknown_asin_policy must be valid value."""
+        from mamfast.schemas.config import AudiobookshelfImportSchema
+
+        # Valid values (import and skip don't require quarantine_path)
+        for policy in ["import", "skip"]:
+            schema = AudiobookshelfImportSchema(unknown_asin_policy=policy)
+            assert schema.unknown_asin_policy == policy
+
+        # Quarantine requires path
+        schema = AudiobookshelfImportSchema(
+            unknown_asin_policy="quarantine", quarantine_path="/mnt/quarantine"
+        )
+        assert schema.unknown_asin_policy == "quarantine"
+
+        # Default is import
+        schema = AudiobookshelfImportSchema()
+        assert schema.unknown_asin_policy == "import"
+
+        # Invalid
+        with pytest.raises(ValidationError) as exc_info:
+            AudiobookshelfImportSchema(unknown_asin_policy="ignore")
+        assert "Invalid unknown_asin_policy" in str(exc_info.value)
+
+    def test_unknown_asin_policy_case_insensitive(self) -> None:
+        """Test unknown_asin_policy is normalized to lowercase."""
+        from mamfast.schemas.config import AudiobookshelfImportSchema
+
+        schema = AudiobookshelfImportSchema(unknown_asin_policy="IMPORT")
+        assert schema.unknown_asin_policy == "import"
+
+        schema = AudiobookshelfImportSchema(unknown_asin_policy="SKIP")
+        assert schema.unknown_asin_policy == "skip"
+
+        # Quarantine with path
+        schema = AudiobookshelfImportSchema(
+            unknown_asin_policy="Quarantine", quarantine_path="/mnt/q"
+        )
+        assert schema.unknown_asin_policy == "quarantine"
+
+    def test_quarantine_requires_path(self) -> None:
+        """Test quarantine_path is required when policy is quarantine."""
+        from mamfast.schemas.config import AudiobookshelfImportSchema
+
+        # Quarantine without path fails
+        with pytest.raises(ValidationError) as exc_info:
+            AudiobookshelfImportSchema(unknown_asin_policy="quarantine")
+        assert "quarantine_path is required" in str(exc_info.value)
+
+        # Quarantine with empty path fails
+        with pytest.raises(ValidationError) as exc_info:
+            AudiobookshelfImportSchema(unknown_asin_policy="quarantine", quarantine_path="")
+        assert "quarantine_path is required" in str(exc_info.value)
+
+        # Quarantine with path succeeds
+        schema = AudiobookshelfImportSchema(
+            unknown_asin_policy="quarantine", quarantine_path="/mnt/quarantine"
+        )
+        assert schema.unknown_asin_policy == "quarantine"
+        assert schema.quarantine_path == "/mnt/quarantine"
+
+    def test_import_policy_no_quarantine_path_ok(self) -> None:
+        """Test quarantine_path is optional for import/skip policies."""
+        from mamfast.schemas.config import AudiobookshelfImportSchema
+
+        # Import without quarantine_path is fine
+        schema = AudiobookshelfImportSchema(unknown_asin_policy="import")
+        assert schema.quarantine_path is None
+
+        # Skip without quarantine_path is fine
+        schema = AudiobookshelfImportSchema(unknown_asin_policy="skip")
+        assert schema.quarantine_path is None
+
     def test_full_config_with_audiobookshelf(self) -> None:
         """Test complete config including audiobookshelf section."""
         data = {
