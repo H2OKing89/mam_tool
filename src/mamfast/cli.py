@@ -2047,16 +2047,16 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     # Use first managed library
     target_library = managed_libs[0]
 
-    # Get library root from path_map
+    # Get ABS library root from path_map (destination for imports)
     if not abs_config.path_map:
         fatal_error("No path_map configured for Audiobookshelf")
         return 1
 
-    # Use first path map's host path as library root
-    library_root = Path(abs_config.path_map[0].host)
+    # Use first path map's host path as ABS library root
+    abs_library_root = Path(abs_config.path_map[0].host)
 
-    # Get staging root
-    staging_root = settings.paths.seed_root
+    # Get import source directory (library_root = where new audiobooks are staged)
+    import_source = settings.paths.library_root
 
     # Get index database path
     db_path = Path(abs_config.index_db)
@@ -2065,7 +2065,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
 
     # Validate prerequisites
     print_step(1, 4, "Validating prerequisites")
-    errors = validate_import_prerequisites(staging_root, library_root, db_path)
+    errors = validate_import_prerequisites(import_source, abs_library_root, db_path)
     if errors:
         for err in errors:
             print_error(err)
@@ -2081,7 +2081,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             print_warning("No valid directories in provided paths")
             return 1
     else:
-        staging_folders = discover_staged_books(staging_root)
+        staging_folders = discover_staged_books(import_source)
 
     if not staging_folders:
         print_info("No staged books to import")
@@ -2094,7 +2094,8 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
 
     # Open index and perform import
     print_step(3, 4, "Importing to library")
-    print_info(f"Target: {library_root}")
+    print_info(f"Source: {import_source}")
+    print_info(f"Target: {abs_library_root}")
     print_info(f"Duplicate policy: {dup_policy}")
 
     if args.dry_run:
@@ -2104,9 +2105,10 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         with AbsIndex(db_path) as index:
             result = import_batch(
                 staging_folders=staging_folders,
-                library_root=library_root,
+                library_root=abs_library_root,
                 index=index,
                 library_id=target_library.id,
+                staging_root=import_source,
                 duplicate_policy=dup_policy,
                 dry_run=args.dry_run,
             )
@@ -2139,7 +2141,10 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
 
             detail = ""
             if r.status == "success" and r.target_path:
-                detail = str(r.target_path.relative_to(library_root))[:37] + "..."
+                try:
+                    detail = str(r.target_path.relative_to(abs_library_root))[:37] + "..."
+                except ValueError:
+                    detail = r.target_path.name[:37] + "..."
             elif r.error:
                 detail = r.error[:37] + "..." if len(r.error) > 40 else r.error
 

@@ -286,8 +286,12 @@ def build_target_path(
     library_root: Path,
     parsed: ParsedFolderName,
     staging_folder: Path,
+    staging_root: Path | None = None,
 ) -> Path:
     """Build the target path in ABS library structure.
+
+    If the staging folder is already in an Author/Series structure relative to
+    staging_root, preserve that structure. Otherwise, use parsed author/series.
 
     Structure:
     - Series: Library/Author/Series/FolderName/
@@ -297,10 +301,22 @@ def build_target_path(
         library_root: ABS library root path
         parsed: Parsed folder name components
         staging_folder: Original staging folder (for folder name)
+        staging_root: Root of staging directory (to calculate relative path)
 
     Returns:
         Target path for the audiobook
     """
+    # If staging_root is provided and folder is nested, preserve structure
+    if staging_root and staging_folder != staging_root:
+        try:
+            relative_path = staging_folder.relative_to(staging_root)
+            # If there's a parent structure (Author/Series/Book), use it
+            if len(relative_path.parts) > 1:
+                return library_root / relative_path
+        except ValueError:
+            pass  # Not relative to staging_root, fall through
+
+    # Fall back to parsed author/series
     author_folder = parsed.author
 
     if parsed.series and not parsed.is_standalone:
@@ -317,6 +333,7 @@ def import_single(
     index: AbsIndex,
     library_id: str,
     *,
+    staging_root: Path | None = None,
     duplicate_policy: str = "skip",
     dry_run: bool = False,
 ) -> ImportResult:
@@ -327,6 +344,7 @@ def import_single(
         library_root: ABS library root
         index: AbsIndex for duplicate checking
         library_id: Target ABS library ID (for logging)
+        staging_root: Root of staging directory (to preserve nested structure)
         duplicate_policy: "skip", "warn", or "overwrite"
         dry_run: If True, don't actually move files
 
@@ -378,8 +396,8 @@ def import_single(
     else:
         logger.warning("No ASIN found in folder name: %s", folder_name)
 
-    # Build target path
-    target_path = build_target_path(library_root, parsed, staging_folder)
+    # Build target path (preserves nested structure if present)
+    target_path = build_target_path(library_root, parsed, staging_folder, staging_root)
 
     # Check if target already exists on disk
     if target_path.exists():
@@ -460,6 +478,7 @@ def import_batch(
     index: AbsIndex,
     library_id: str,
     *,
+    staging_root: Path | None = None,
     duplicate_policy: str = "skip",
     dry_run: bool = False,
 ) -> BatchImportResult:
@@ -470,6 +489,7 @@ def import_batch(
         library_root: ABS library root
         index: AbsIndex for duplicate checking
         library_id: Target ABS library ID
+        staging_root: Root staging directory (for resolving author from path)
         duplicate_policy: "skip", "warn", or "overwrite"
         dry_run: If True, don't actually move files
 
@@ -484,6 +504,7 @@ def import_batch(
             library_root=library_root,
             index=index,
             library_id=library_id,
+            staging_root=staging_root,
             duplicate_policy=duplicate_policy,
             dry_run=dry_run,
         )
@@ -514,16 +535,19 @@ def trigger_scan_safe(client: AbsClient, library_id: str) -> bool:
         return False
 
 
-def discover_staged_books(staging_root: Path) -> list[Path]:
+def discover_staged_books(staging_root: Path, *, recursive: bool = True) -> list[Path]:
     """Discover audiobook folders in staging directory.
 
-    Looks for directories that contain audio files.
+    Finds directories that directly contain audio files (leaf audiobook folders).
+    By default searches recursively through the directory tree.
 
     Args:
         staging_root: Root staging directory
+        recursive: If True, search recursively for audiobook folders.
+                  If False, only check immediate children.
 
     Returns:
-        List of audiobook folder paths
+        List of audiobook folder paths (folders that contain audio files)
     """
     if not staging_root.exists() or not staging_root.is_dir():
         return []
@@ -533,29 +557,33 @@ def discover_staged_books(staging_root: Path) -> list[Path]:
     # Audio extensions to look for
     audio_exts = {".m4b", ".mp3", ".m4a", ".flac", ".ogg", ".opus", ".wav"}
 
-    for item in staging_root.iterdir():
-        if not item.is_dir():
-            continue
+    def has_audio_files(directory: Path) -> bool:
+        """Check if directory directly contains audio files."""
+        try:
+            for child in directory.iterdir():
+                if child.is_file() and child.suffix.lower() in audio_exts:
+                    return True
+        except PermissionError:
+            pass
+        return False
 
-        # Check if directory contains audio files
-        has_audio = False
-        for child in item.iterdir():
-            if child.suffix.lower() in audio_exts:
-                has_audio = True
-                break
+    def search_directory(directory: Path) -> None:
+        """Recursively search for audiobook folders."""
+        try:
+            for item in directory.iterdir():
+                if not item.is_dir():
+                    continue
 
-        # Also check subdirectories (nested structure)
-        if not has_audio:
-            for subdir in item.iterdir():
-                if subdir.is_dir():
-                    for child in subdir.iterdir():
-                        if child.suffix.lower() in audio_exts:
-                            has_audio = True
-                            break
-                if has_audio:
-                    break
+                # If this directory has audio files, it's an audiobook folder
+                if has_audio_files(item):
+                    staged.append(item)
+                elif recursive:
+                    # Otherwise, search deeper
+                    search_directory(item)
+        except PermissionError:
+            pass
 
-        if has_audio:
-            staged.append(item)
+    search_directory(staging_root)
+    return sorted(staged)
 
     return sorted(staged)
