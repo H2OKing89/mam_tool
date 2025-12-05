@@ -532,7 +532,7 @@ def full_run(
                             pass  # Non-critical, don't fail if post-check fails
                 else:
                     print_info(
-                        "No audiobooks staged for download (NotLiberated=0). " "Skipping liberate."
+                        "No audiobooks staged for download (NotLiberated=0). Skipping liberate."
                     )
 
             except Exception as e:

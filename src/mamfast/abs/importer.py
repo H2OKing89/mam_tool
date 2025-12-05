@@ -5,6 +5,8 @@ to the ABS library structure while preserving hardlinks to seed folder.
 
 Uses in-memory ASIN index (from ABS API) for duplicate detection instead
 of SQLite for simplicity and always-fresh data.
+
+See docs/UNKNOWN_ASIN_HANDLING.md for unknown ASIN handling design (Phase 1+).
 """
 
 from __future__ import annotations

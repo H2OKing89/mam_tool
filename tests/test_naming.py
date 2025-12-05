@@ -281,7 +281,7 @@ class TestExtractTranslatorsFromMediainfo:
                     {
                         "@type": "General",
                         "Album_Performer": (
-                            "Real Author; Trans - translator; " "Artist - illustrator; Ed - editor"
+                            "Real Author; Trans - translator; Artist - illustrator; Ed - editor"
                         ),
                     }
                 ]

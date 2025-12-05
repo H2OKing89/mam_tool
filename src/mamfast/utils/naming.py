@@ -305,7 +305,7 @@ def detect_swapped_title_subtitle(
     # Heuristic 1: subtitle has series name, title doesn't → swapped
     if subtitle_has_series and not title_has_series:
         logger.debug(
-            "[normalize] Detected swap (series in subtitle): " "title=%r, subtitle=%r, series=%r",
+            "[normalize] Detected swap (series in subtitle): title=%r, subtitle=%r, series=%r",
             title,
             subtitle,
             series_name,
@@ -320,8 +320,7 @@ def detect_swapped_title_subtitle(
         and re.search(rf"\b{re.escape(series_position)}\b", subtitle_lower)
     ):
         logger.debug(
-            "[normalize] Detected swap (position in subtitle): "
-            "title=%r, subtitle=%r, position=%r",
+            "[normalize] Detected swap (position in subtitle): title=%r, subtitle=%r, position=%r",
             title,
             subtitle,
             series_position,
@@ -1876,7 +1875,7 @@ def _build_truncated_base_name(
     )
     dropped.append("emergency_truncation")
     return (
-        f"{identity_to_truncate[:max_length - len(asin_str) - 4]}... {asin_str}"[:max_length],
+        f"{identity_to_truncate[: max_length - len(asin_str) - 4]}... {asin_str}"[:max_length],
         True,
         dropped,
     )

@@ -307,11 +307,9 @@ class TestGoldenPreserveExact:
 
         if expected_preserved:
             # Title should be unchanged
-            assert result == title, (
-                f"Expected title to be preserved:\n"
-                f"  Input:  {title!r}\n"
-                f"  Result: {result!r}"
-            )
+            assert (
+                result == title
+            ), f"Expected title to be preserved:\n  Input:  {title!r}\n  Result: {result!r}"
         else:
             # Title may be changed (or not, depending on content)
             # Just verify the function runs without error
