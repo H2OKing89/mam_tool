@@ -2442,7 +2442,13 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
         if not args.path.exists():
             fatal_error(f"Path not found: {args.path}")
             return 1
-        folders_to_scan = [args.path] if args.path.is_dir() else []
+        if not args.path.is_dir():
+            fatal_error(f"Path is not a directory: {args.path}")
+            return 1
+        # Scan subfolders of the provided path
+        folders_to_scan = [
+            f for f in args.path.iterdir() if f.is_dir() and not f.name.startswith(".")
+        ]
     else:
         # Default: scan Unknown/ folder
         unknown_folder = abs_library_root / "Unknown"
