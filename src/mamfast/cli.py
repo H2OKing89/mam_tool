@@ -2203,7 +2203,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                                 if f.name != clean_name:
                                     rename_map[f.name] = clean_name
                         except (ValueError, KeyError):
-                            pass
+                            pass  # Can't build clean file name; skip rename preview
 
                     # Show files
                     if files:
@@ -2233,7 +2233,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                                                 final_name
                                             )
                                 except ValueError:
-                                    pass
+                                    pass  # Can't make relative path; skip adding file to tree
 
             elif r.status == "duplicate" and r.error:
                 if "Already exists at " in r.error:
@@ -2500,8 +2500,17 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
         print_info("No folders to process")
         return 0
 
+    # Validate confidence threshold (common mistake: passing 75 instead of 0.75)
+    confidence = args.confidence
+    if not 0.0 <= confidence <= 1.0:
+        fatal_error(
+            f"Invalid confidence value: {confidence}",
+            "Confidence must be between 0.0 and 1.0 (e.g., 0.75 for 75%)",
+        )
+        return 1
+
     print_info(f"Found {len(folders_to_scan)} folder(s) to resolve")
-    print_info(f"Confidence threshold: {args.confidence:.0%}")
+    print_info(f"Confidence threshold: {confidence:.0%}")
 
     # Connect to ABS
     print_step(1, 3, "Connecting to ABS")
@@ -2511,18 +2520,23 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
             api_key=abs_config.api_key,
             timeout=abs_config.timeout_seconds,
         )
-        user = client.authorize()
-        print_success(f"Connected as {user.username}")
     except Exception as e:
         fatal_error(f"Failed to connect to ABS: {e}")
         return 1
 
-    # Process folders
+    # Process folders (using with statement for proper cleanup)
     print_step(2, 3, "Searching for ASINs")
     resolved_count = 0
     failed_count = 0
 
-    try:
+    with client:
+        try:
+            user = client.authorize()
+            print_success(f"Connected as {user.username}")
+        except Exception as e:
+            fatal_error(f"Failed to authorize with ABS: {e}")
+            return 1
+
         for folder in folders_to_scan:
             folder_name = folder.name
             console.print(f"\n[dim]→[/] {folder_name}")
@@ -2550,7 +2564,7 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
                 client,
                 title=title,
                 author=author,
-                confidence_threshold=args.confidence,
+                confidence_threshold=confidence,
             )
 
             if resolution.found:
@@ -2575,9 +2589,6 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
             else:
                 failed_count += 1
                 print_warning("No confident match found")
-
-    finally:
-        client.close()
 
     # Summary
     print_step(3, 3, "Summary")
@@ -2612,7 +2623,7 @@ def main() -> int:
         settings = reload_settings(config_file=args.config)
         log_file = settings.paths.log_file
     except Exception:
-        pass
+        pass  # Config may not exist yet; logging works without log file
 
     # Use Rich console logging for readable output, but keep it quiet unless verbose
     setup_logging(

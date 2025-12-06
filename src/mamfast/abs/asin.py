@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from mamfast.config import get_settings
+
 if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
 
@@ -370,12 +372,48 @@ def _extract_asin_from_metadata_file(meta_file: Path) -> str | None:
 # Common fields: asin, CDEK (which often equals ASIN)
 
 
-def _check_mediainfo_available() -> bool:
-    """Check if mediainfo command is available."""
-    return shutil.which("mediainfo") is not None
+def _get_mediainfo_binary() -> str | None:
+    """Get mediainfo binary path from config, checking availability.
+
+    Uses the configured mediainfo.binary from settings. Returns the binary
+    path if available (either in PATH or as absolute path), None otherwise.
+
+    Falls back to checking for "mediainfo" in PATH if config is unavailable.
+
+    Returns:
+        Binary path if available, None if not found
+    """
+    # Try to get binary name from config, fall back to default
+    binary = "mediainfo"
+    try:
+        settings = get_settings()
+        binary = settings.mediainfo.binary
+    except Exception:
+        # Config unavailable (e.g., in tests without config file)
+        # Fall back to default binary name
+        logger.debug("Config unavailable, using default mediainfo binary")
+
+    # If it's an absolute path, check it exists
+    if Path(binary).is_absolute():
+        if Path(binary).exists():
+            return binary
+        logger.debug("Configured mediainfo binary not found: %s", binary)
+        return None
+
+    # Otherwise check if it's in PATH
+    found = shutil.which(binary)
+    if found:
+        return found
+
+    logger.debug("mediainfo binary '%s' not found in PATH", binary)
+    return None
 
 
-def extract_asin_from_mediainfo(audio_file: Path) -> str | None:
+def extract_asin_from_mediainfo(
+    audio_file: Path,
+    binary: str | None = None,
+    timeout: int = 30,
+) -> str | None:
     """Extract ASIN from audio file metadata using mediainfo.
 
     Audible audiobooks embed ASIN in various metadata fields:
@@ -384,6 +422,8 @@ def extract_asin_from_mediainfo(audio_file: Path) -> str | None:
 
     Args:
         audio_file: Path to audio file to probe
+        binary: Mediainfo binary path (uses config if not provided)
+        timeout: Timeout in seconds (default: 30)
 
     Returns:
         ASIN if found and valid, None otherwise
@@ -391,13 +431,19 @@ def extract_asin_from_mediainfo(audio_file: Path) -> str | None:
     if not audio_file.exists() or not audio_file.is_file():
         return None
 
+    # Get binary from config if not provided
+    if binary is None:
+        binary = _get_mediainfo_binary()
+        if binary is None:
+            return None
+
     try:
         result = subprocess.run(
-            ["mediainfo", "--Output=JSON", str(audio_file)],
+            [binary, "--Output=JSON", str(audio_file)],
             capture_output=True,
             text=True,
             check=True,
-            timeout=30,  # Timeout for large files
+            timeout=timeout,
         )
         data = json.loads(result.stdout)
     except subprocess.TimeoutExpired:
@@ -497,7 +543,9 @@ def resolve_asin_from_folder_with_mediainfo(
         return result
 
     # Phase 4: Try mediainfo probe as last resort
-    if not _check_mediainfo_available():
+    # Get configured binary once to avoid repeated lookups
+    mediainfo_binary = _get_mediainfo_binary()
+    if mediainfo_binary is None:
         logger.debug("mediainfo not available, skipping probe")
         return result
 
@@ -511,7 +559,7 @@ def resolve_asin_from_folder_with_mediainfo(
         if f.suffix.lower() not in AUDIO_EXTENSIONS:
             continue
 
-        asin = extract_asin_from_mediainfo(f)
+        asin = extract_asin_from_mediainfo(f, binary=mediainfo_binary)
         if asin:
             logger.info(
                 "Resolved ASIN %s from embedded metadata: %s",
@@ -634,8 +682,6 @@ def _normalize_for_matching(s: str) -> str:
 
     Removes common noise like volume numbers, punctuation, etc.
     """
-    import re
-
     if not s:
         return ""
 

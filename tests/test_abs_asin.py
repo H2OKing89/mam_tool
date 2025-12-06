@@ -11,7 +11,7 @@ import pytest
 
 from mamfast.abs.asin import (
     AsinResolution,
-    _check_mediainfo_available,
+    _get_mediainfo_binary,
     extract_all_asins,
     extract_asin,
     extract_asin_from_abs_item,
@@ -462,32 +462,68 @@ class TestResolveAsinFromFolder:
 
 
 class TestMediainfoAvailable:
-    """Tests for mediainfo availability check."""
+    """Tests for mediainfo binary availability check."""
 
-    def test_mediainfo_available_when_installed(self) -> None:
-        """Check returns True when mediainfo is in PATH."""
-        with patch.object(shutil, "which", return_value="/usr/bin/mediainfo"):
-            assert _check_mediainfo_available() is True
+    def test_mediainfo_available_when_in_path(self) -> None:
+        """Returns binary path when mediainfo is in PATH."""
+        mock_settings = type(
+            "Settings", (), {"mediainfo": type("MediaInfo", (), {"binary": "mediainfo"})()}
+        )()
+        with (
+            patch("mamfast.abs.asin.get_settings", return_value=mock_settings),
+            patch.object(shutil, "which", return_value="/usr/bin/mediainfo"),
+        ):
+            assert _get_mediainfo_binary() == "/usr/bin/mediainfo"
 
     def test_mediainfo_not_available(self) -> None:
-        """Check returns False when mediainfo not in PATH."""
-        with patch.object(shutil, "which", return_value=None):
-            assert _check_mediainfo_available() is False
+        """Returns None when mediainfo not in PATH."""
+        mock_settings = type(
+            "Settings", (), {"mediainfo": type("MediaInfo", (), {"binary": "mediainfo"})()}
+        )()
+        with (
+            patch("mamfast.abs.asin.get_settings", return_value=mock_settings),
+            patch.object(shutil, "which", return_value=None),
+        ):
+            assert _get_mediainfo_binary() is None
+
+    def test_mediainfo_absolute_path_exists(self, tmp_path: Path) -> None:
+        """Returns binary path when configured as absolute path that exists."""
+        binary = tmp_path / "mediainfo"
+        binary.touch()
+        mock_settings = type(
+            "Settings", (), {"mediainfo": type("MediaInfo", (), {"binary": str(binary)})()}
+        )()
+        with patch("mamfast.abs.asin.get_settings", return_value=mock_settings):
+            assert _get_mediainfo_binary() == str(binary)
+
+    def test_mediainfo_absolute_path_not_exists(self, tmp_path: Path) -> None:
+        """Returns None when configured absolute path doesn't exist."""
+        mock_settings = type(
+            "Settings",
+            (),
+            {"mediainfo": type("MediaInfo", (), {"binary": "/nonexistent/mediainfo"})()},
+        )()
+        with patch("mamfast.abs.asin.get_settings", return_value=mock_settings):
+            assert _get_mediainfo_binary() is None
 
 
 class TestExtractAsinFromMediainfo:
-    """Tests for extract_asin_from_mediainfo()."""
+    """Tests for extract_asin_from_mediainfo().
+
+    Note: These tests pass binary=\"mediainfo\" explicitly to avoid
+    needing to mock config. The subprocess.run is still mocked.
+    """
 
     def test_nonexistent_file(self, tmp_path: Path) -> None:
         """Return None for nonexistent file."""
-        result = extract_asin_from_mediainfo(tmp_path / "nonexistent.m4b")
+        result = extract_asin_from_mediainfo(tmp_path / "nonexistent.m4b", binary="mediainfo")
         assert result is None
 
     def test_not_a_file(self, tmp_path: Path) -> None:
         """Return None for directory."""
         folder = tmp_path / "folder"
         folder.mkdir()
-        result = extract_asin_from_mediainfo(folder)
+        result = extract_asin_from_mediainfo(folder, binary="mediainfo")
         assert result is None
 
     def test_mediainfo_returns_asin_field(self, tmp_path: Path) -> None:
@@ -511,7 +547,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0FDCW8SS7"
 
     def test_mediainfo_returns_cdek_field(self, tmp_path: Path) -> None:
@@ -535,7 +571,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0ABC12345"
 
     def test_mediainfo_asin_priority_over_cdek(self, tmp_path: Path) -> None:
@@ -559,7 +595,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0ASIN0001"
 
     def test_mediainfo_nested_extra_asin(self, tmp_path: Path) -> None:
@@ -588,7 +624,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0FDCW8SS7"
 
     def test_mediainfo_nested_extra_cdek_only(self, tmp_path: Path) -> None:
@@ -613,7 +649,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0CDEK1234"
 
     def test_mediainfo_no_asin_fields(self, tmp_path: Path) -> None:
@@ -637,7 +673,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
     def test_mediainfo_invalid_asin_ignored(self, tmp_path: Path) -> None:
@@ -660,7 +696,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
     def test_mediainfo_subprocess_error(self, tmp_path: Path) -> None:
@@ -673,7 +709,7 @@ class TestExtractAsinFromMediainfo:
 
             mock_run.side_effect = sp.SubprocessError("mediainfo failed")
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
     def test_mediainfo_invalid_json(self, tmp_path: Path) -> None:
@@ -685,7 +721,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = "not valid json {{{}"
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
     def test_mediainfo_timeout(self, tmp_path: Path) -> None:
@@ -698,7 +734,7 @@ class TestExtractAsinFromMediainfo:
 
             mock_run.side_effect = sp.TimeoutExpired(cmd="mediainfo", timeout=30)
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
     def test_mediainfo_track_is_single_dict(self, tmp_path: Path) -> None:
@@ -720,7 +756,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0SINGLEDI"
 
     def test_mediainfo_track_is_none(self, tmp_path: Path) -> None:
@@ -734,7 +770,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
     def test_mediainfo_track_contains_non_dict(self, tmp_path: Path) -> None:
@@ -757,7 +793,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result == "B0VALIDASN"
 
     def test_mediainfo_unexpected_track_type(self, tmp_path: Path) -> None:
@@ -771,7 +807,7 @@ class TestExtractAsinFromMediainfo:
             mock_run.return_value.stdout = json.dumps(mock_output)
             mock_run.return_value.returncode = 0
 
-            result = extract_asin_from_mediainfo(audio_file)
+            result = extract_asin_from_mediainfo(audio_file, binary="mediainfo")
             assert result is None
 
 
@@ -799,7 +835,7 @@ class TestResolveAsinFromFolderWithMediainfo:
         mock_output = {"media": {"track": [{"@type": "General", "asin": "B0MEDIAINF"}]}}
 
         with (
-            patch("mamfast.abs.asin._check_mediainfo_available", return_value=True),
+            patch("mamfast.abs.asin._get_mediainfo_binary", return_value="/usr/bin/mediainfo"),
             patch("mamfast.abs.asin.subprocess.run") as mock_run,
         ):
             mock_run.return_value.stdout = json.dumps(mock_output)
@@ -816,7 +852,7 @@ class TestResolveAsinFromFolderWithMediainfo:
         folder.mkdir()
         (folder / "book.m4b").touch()
 
-        with patch("mamfast.abs.asin._check_mediainfo_available", return_value=False):
+        with patch("mamfast.abs.asin._get_mediainfo_binary", return_value=None):
             result = resolve_asin_from_folder_with_mediainfo(folder)
             assert result.found is False
             assert result.source == "unknown"
@@ -845,7 +881,7 @@ class TestResolveAsinFromFolderWithMediainfo:
             return mock_result
 
         with (
-            patch("mamfast.abs.asin._check_mediainfo_available", return_value=True),
+            patch("mamfast.abs.asin._get_mediainfo_binary", return_value="/usr/bin/mediainfo"),
             patch("mamfast.abs.asin.subprocess.run", side_effect=mock_mediainfo),
         ):
             result = resolve_asin_from_folder_with_mediainfo(folder)
@@ -865,7 +901,7 @@ class TestResolveAsinFromFolderWithMediainfo:
         mock_output = {"media": {"track": [{"@type": "General", "asin": "B0AUDIOFIL"}]}}
 
         with (
-            patch("mamfast.abs.asin._check_mediainfo_available", return_value=True),
+            patch("mamfast.abs.asin._get_mediainfo_binary", return_value="/usr/bin/mediainfo"),
             patch("mamfast.abs.asin.subprocess.run") as mock_run,
         ):
             mock_run.return_value.stdout = json.dumps(mock_output)

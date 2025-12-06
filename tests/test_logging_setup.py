@@ -122,8 +122,8 @@ class TestSetConsoleQuiet:
 
     def test_quiet_before_setup(self) -> None:
         """Test calling set_console_quiet before setup_logging."""
-        # Reset the global handler
-        import mamfast.logging_setup as ls
+        # Reset the global handler - access internal state for testing
+        from mamfast import logging_setup as ls
 
         ls._console_handler = None
 

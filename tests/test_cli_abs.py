@@ -766,3 +766,142 @@ class TestAbsCheckDuplicateCommand:
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 1  # Found = duplicate
+
+
+# =============================================================================
+# Tests: abs-resolve-asins command
+# =============================================================================
+
+
+class TestAbsResolveAsinsParser:
+    """Tests for abs-resolve-asins command parser setup."""
+
+    def test_abs_resolve_asins_parser_exists(self) -> None:
+        """Test abs-resolve-asins subcommand is registered."""
+        parser = build_parser()
+        args = parser.parse_args(["abs-resolve-asins"])
+        assert args.command == "abs-resolve-asins"
+        assert hasattr(args, "func")
+
+    def test_abs_resolve_asins_default_confidence(self) -> None:
+        """Test abs-resolve-asins default confidence is 0.75."""
+        parser = build_parser()
+        args = parser.parse_args(["abs-resolve-asins"])
+        assert args.confidence == 0.75
+
+    def test_abs_resolve_asins_custom_confidence(self) -> None:
+        """Test abs-resolve-asins --confidence flag."""
+        parser = build_parser()
+        args = parser.parse_args(["abs-resolve-asins", "--confidence", "0.9"])
+        assert args.confidence == 0.9
+
+    def test_abs_resolve_asins_path_flag(self) -> None:
+        """Test abs-resolve-asins --path flag."""
+        parser = build_parser()
+        args = parser.parse_args(["abs-resolve-asins", "--path", "/some/path"])
+        assert args.path == Path("/some/path")
+
+    def test_abs_resolve_asins_write_sidecar_flag(self) -> None:
+        """Test abs-resolve-asins --write-sidecar flag."""
+        parser = build_parser()
+        args_no_flag = parser.parse_args(["abs-resolve-asins"])
+        assert args_no_flag.write_sidecar is False
+
+        args_with_flag = parser.parse_args(["abs-resolve-asins", "--write-sidecar"])
+        assert args_with_flag.write_sidecar is True
+
+
+class TestAbsResolveAsinsConfidenceValidation:
+    """Tests for abs-resolve-asins confidence validation."""
+
+    @pytest.fixture
+    def args(self) -> argparse.Namespace:
+        """Create basic args namespace."""
+        return argparse.Namespace(
+            config="config/config.yaml",
+            dry_run=False,
+            verbose=False,
+            path=None,
+            confidence=0.75,
+            write_sidecar=False,
+        )
+
+    @pytest.fixture
+    def mock_abs_config(self) -> MagicMock:
+        """Create mock ABS config."""
+        config = MagicMock()
+        config.enabled = True
+        config.host = "http://localhost:13378"
+        config.api_key = "test-key"
+        config.timeout_seconds = 30
+        return config
+
+    def test_abs_resolve_asins_invalid_confidence_too_high(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that confidence > 1.0 is rejected with error."""
+        from mamfast.cli import cmd_abs_resolve_asins
+
+        args.confidence = 75  # Common mistake: 75 instead of 0.75
+        args.path = tmp_path
+
+        # Create folder to scan
+        book_folder = tmp_path / "Some Book"
+        book_folder.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(tmp_path))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+
+        with patch("mamfast.config.reload_settings", return_value=mock_settings):
+            result = cmd_abs_resolve_asins(args)
+            assert result == 1  # Should fail with invalid confidence
+
+    def test_abs_resolve_asins_invalid_confidence_negative(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that negative confidence is rejected with error."""
+        from mamfast.cli import cmd_abs_resolve_asins
+
+        args.confidence = -0.5
+        args.path = tmp_path
+
+        # Create folder to scan
+        book_folder = tmp_path / "Some Book"
+        book_folder.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(tmp_path))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+
+        with patch("mamfast.config.reload_settings", return_value=mock_settings):
+            result = cmd_abs_resolve_asins(args)
+            assert result == 1  # Should fail with invalid confidence
+
+    def test_abs_resolve_asins_valid_confidence_at_boundaries(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that confidence at 0.0 and 1.0 boundaries is accepted."""
+        from mamfast.cli import cmd_abs_resolve_asins
+
+        # Create empty folder (no subfolders to process)
+        args.path = tmp_path
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(tmp_path))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+
+        # Test 0.0 boundary
+        args.confidence = 0.0
+        with patch("mamfast.config.reload_settings", return_value=mock_settings):
+            result = cmd_abs_resolve_asins(args)
+            # Should not fail on validation, just return 0 because no folders
+            assert result == 0
+
+        # Test 1.0 boundary
+        args.confidence = 1.0
+        with patch("mamfast.config.reload_settings", return_value=mock_settings):
+            result = cmd_abs_resolve_asins(args)
+            assert result == 0
