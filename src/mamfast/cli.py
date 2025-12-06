@@ -593,6 +593,7 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             else:
                 seed_path = settings.paths.seed_root / "unknown"
             print_dry_run(f"Would hardlink to: {seed_path}")
+            staged += 1
             continue
 
         try:
@@ -705,6 +706,7 @@ def cmd_metadata(args: argparse.Namespace) -> int:
             print_dry_run(f"Would fetch Audnex for ASIN: {asin}")
             print_dry_run(f"Would run MediaInfo on: {m4b_path}")
             print_dry_run(f"Would generate MAM JSON in: {torrent_output}")
+            success += 1
             continue
 
         audnex_data, mediainfo_data, audnex_chapters = fetch_all_metadata(
@@ -828,6 +830,7 @@ def cmd_torrent(args: argparse.Namespace) -> int:
 
         if args.dry_run:
             print_dry_run(f"Would create torrent with preset: {preset}")
+            success += 1
             continue
 
         result = create_torrent(
@@ -903,6 +906,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
         if args.dry_run:
             print_dry_run(f"Would upload with save_path: {save_path}")
+            success += 1
             continue
 
         result = upload_torrent(
