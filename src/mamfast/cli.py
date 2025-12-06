@@ -702,6 +702,11 @@ def cmd_metadata(args: argparse.Namespace) -> int:
         if not asin:
             asin = extract_asin_from_name(staging_dir.name)
 
+        # Fail fast: skip if no ASIN and no m4b file - can't produce useful metadata
+        if not asin and not m4b_path:
+            print_warning(f"Skipping {staging_dir.name}: no ASIN found and no .m4b file")
+            continue
+
         if args.dry_run:
             print_dry_run(f"Would fetch Audnex for ASIN: {asin}")
             print_dry_run(f"Would run MediaInfo on: {m4b_path}")
@@ -1206,11 +1211,29 @@ def cmd_validate_config(args: argparse.Namespace) -> int:
 
     print_header("Validate Configuration Files")
 
-    config_dir = args.config.parent.parent if args.config else Path(".")
+    # Determine where to look for supporting config files (naming.json, categories.json)
+    # Priority: 1) Same directory as config file, 2) config/ subdirectory relative to parent
+    if args.config:
+        config_parent = args.config.parent
+        # Check if files exist beside the config file first (standalone layout)
+        if (config_parent / "naming.json").exists():
+            config_dir = config_parent
+            use_subdir = False
+        else:
+            # Fall back to config/ subdirectory (structured layout: project/config/config.yaml)
+            config_dir = config_parent.parent
+            use_subdir = True
+    else:
+        config_dir = Path(".")
+        use_subdir = True
+
     errors_found = False
 
     # Validate naming.json
-    naming_path = config_dir / "config" / "naming.json"
+    if use_subdir:
+        naming_path = config_dir / "config" / "naming.json"
+    else:
+        naming_path = config_dir / "naming.json"
     console.print(f"\n[bold]Checking:[/] {naming_path}")
 
     if not naming_path.exists():
@@ -1276,7 +1299,10 @@ def cmd_validate_config(args: argparse.Namespace) -> int:
             errors_found = True
 
     # Validate categories.json
-    categories_path = config_dir / "config" / "categories.json"
+    if use_subdir:
+        categories_path = config_dir / "config" / "categories.json"
+    else:
+        categories_path = config_dir / "categories.json"
     console.print(f"\n[bold]Checking:[/] {categories_path}")
 
     if not categories_path.exists():
@@ -1956,8 +1982,12 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         asin_index = build_asin_index(client, target_library.id)
         print_success(f"Indexed {len(asin_index)} books with ASINs")
     except Exception as e:
+        client.close()  # Clean up on error
         fatal_error(f"Failed to build ASIN index: {e}")
         return 1
+
+    # Done with API calls for indexing - close to free socket
+    client.close()
 
     # Perform import
     print_step(4, 5, "Importing to library")
@@ -2260,17 +2290,17 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         trigger_mode = abs_config.import_settings.trigger_scan
         if trigger_mode != "none":
             try:
-                client = AbsClient(
+                with AbsClient(
                     host=abs_config.host,
                     api_key=abs_config.api_key,
                     timeout=abs_config.timeout_seconds,
-                )
-                if trigger_scan_safe(client, target_library.id):
-                    print_success("Triggered ABS library scan")
-                else:
-                    print_warning(
-                        "Failed to trigger ABS scan (files will appear on next scheduled scan)"
-                    )
+                ) as scan_client:
+                    if trigger_scan_safe(scan_client, target_library.id):
+                        print_success("Triggered ABS library scan")
+                    else:
+                        print_warning(
+                            "Failed to trigger ABS scan (files will appear on next scheduled scan)"
+                        )
             except Exception as e:
                 print_warning(f"Could not trigger ABS scan: {e}")
 
