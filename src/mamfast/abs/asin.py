@@ -11,6 +11,8 @@ in-memory ASIN indexing for fast duplicate detection without SQLite.
 
 Phase 3 (UNKNOWN_ASIN_HANDLING.md) adds resolve_asin_from_folder() which
 tries multiple sources before giving up on finding an ASIN.
+
+Phase 4 adds mediainfo probe to extract ASIN from embedded file metadata.
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ from __future__ import annotations
 import json
 import logging
 import re
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -343,6 +347,172 @@ def _extract_asin_from_metadata_file(meta_file: Path) -> str | None:
             return str(asin)  # Explicit str() for mypy
 
     return None
+
+
+# =============================================================================
+# Phase 4: mediainfo Probe for Embedded ASIN
+# =============================================================================
+# See docs/audiobookshelf/UNKNOWN_ASIN_HANDLING.md Phase 4 for design details.
+#
+# Audible files often have ASIN embedded in file metadata (atom tags).
+# Common fields: asin, CDEK (which often equals ASIN)
+
+
+def _check_mediainfo_available() -> bool:
+    """Check if mediainfo command is available."""
+    return shutil.which("mediainfo") is not None
+
+
+def extract_asin_from_mediainfo(audio_file: Path) -> str | None:
+    """Extract ASIN from audio file metadata using mediainfo.
+
+    Audible audiobooks embed ASIN in various metadata fields:
+    - "asin" tag (direct)
+    - "CDEK" tag (often equals ASIN)
+
+    Args:
+        audio_file: Path to audio file to probe
+
+    Returns:
+        ASIN if found and valid, None otherwise
+    """
+    if not audio_file.exists() or not audio_file.is_file():
+        return None
+
+    try:
+        result = subprocess.run(
+            ["mediainfo", "--Output=JSON", str(audio_file)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,  # Timeout for large files
+        )
+        data = json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        logger.warning("mediainfo timed out for: %s", audio_file.name)
+        return None
+    except (subprocess.SubprocessError, json.JSONDecodeError, OSError) as e:
+        logger.debug("Failed to run mediainfo on %s: %s", audio_file.name, e)
+        return None
+
+    # mediainfo JSON structure: {"media": {"track": [...]}}
+    # General track contains metadata fields
+    # ASIN can be at track level OR nested in track.extra dict
+    media = data.get("media", {})
+    tracks = media.get("track", [])
+
+    # Normalize tracks to list - mediainfo sometimes returns single dict instead of list
+    if tracks is None:
+        tracks = []
+    elif isinstance(tracks, dict):
+        tracks = [tracks]
+    elif not isinstance(tracks, list):
+        logger.debug("Unexpected tracks type %s in mediainfo output", type(tracks).__name__)
+        tracks = []
+
+    for track in tracks:
+        # Skip non-dict entries (defensive)
+        if not isinstance(track, dict):
+            continue
+
+        # Check direct "asin" field (lowercase)
+        # Check direct "asin" field (lowercase)
+        asin = track.get("asin")
+        if asin and isinstance(asin, str) and is_valid_asin(asin):
+            return str(asin)  # Explicit cast for mypy
+
+        # Check "CDEK" field (Audible internal, often equals ASIN)
+        cdek = track.get("CDEK")
+        if cdek and isinstance(cdek, str) and is_valid_asin(cdek):
+            return str(cdek)  # Explicit cast for mypy
+
+        # Check nested "extra" dict (common in m4b files)
+        extra = track.get("extra")
+        if isinstance(extra, dict):
+            extra_asin = extra.get("asin")
+            if extra_asin and isinstance(extra_asin, str) and is_valid_asin(extra_asin):
+                logger.debug("Found ASIN in extra.asin: %s", extra_asin)
+                return str(extra_asin)
+
+            extra_cdek = extra.get("CDEK")
+            if extra_cdek and isinstance(extra_cdek, str) and is_valid_asin(extra_cdek):
+                logger.debug("Found ASIN in extra.CDEK: %s", extra_cdek)
+                return str(extra_cdek)
+
+        # Fallback: search all string values for ASIN pattern
+        # This catches ASINs in unusual fields
+        for key, value in track.items():
+            if (
+                isinstance(value, str)
+                and value.startswith("B0")
+                and len(value) == 10
+                and is_valid_asin(value)
+            ):
+                logger.debug(
+                    "Found ASIN in unexpected field '%s': %s",
+                    key,
+                    value,
+                )
+                return value
+
+    return None
+
+
+def resolve_asin_from_folder_with_mediainfo(
+    folder: Path,
+    parsed_asin: str | None = None,
+) -> AsinResolution:
+    """Enhanced ASIN resolution including mediainfo probe.
+
+    This is Phase 4 - extends Phase 3 by also checking embedded file metadata.
+
+    Resolution cascade (stops at first match):
+        1. Folder name - use parsed ASIN if provided, else re-extract
+        2. File names - check audio file names for embedded ASIN
+        3. metadata.json - check sidecar files for ASIN field
+        4. mediainfo - probe audio files for embedded metadata (if available)
+
+    Args:
+        folder: Path to the folder to search
+        parsed_asin: ASIN already parsed from folder name (optimization)
+
+    Returns:
+        AsinResolution with ASIN and source info, or source="unknown" if not found
+    """
+    # First try Phase 3 resolution (fast, no subprocess)
+    result = resolve_asin_from_folder(folder, parsed_asin)
+    if result.found:
+        return result
+
+    # Phase 4: Try mediainfo probe as last resort
+    if not _check_mediainfo_available():
+        logger.debug("mediainfo not available, skipping probe")
+        return result
+
+    if not folder.is_dir():
+        return result
+
+    # Probe audio files for embedded ASIN
+    for f in folder.iterdir():
+        if not f.is_file():
+            continue
+        if f.suffix.lower() not in AUDIO_EXTENSIONS:
+            continue
+
+        asin = extract_asin_from_mediainfo(f)
+        if asin:
+            logger.info(
+                "Resolved ASIN %s from embedded metadata: %s",
+                asin,
+                f.name,
+            )
+            return AsinResolution(
+                asin=asin,
+                source="mediainfo",
+                source_detail=f.name,
+            )
+
+    return AsinResolution(asin=None, source="unknown")
 
 
 # =============================================================================

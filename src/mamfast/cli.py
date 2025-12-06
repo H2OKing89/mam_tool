@@ -2028,7 +2028,16 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                     rename_map: dict[str, str] = {}
                     if args.dry_run:
                         try:
-                            parsed = parse_mam_folder_name(r.staging_path.name)
+                            # Use enriched parsed data from import result if available
+                            # (includes Audnex-enriched author/series/position)
+                            if r.parsed:
+                                parsed = r.parsed
+                            else:
+                                parsed = parse_mam_folder_name(r.staging_path.name)
+                                # Use resolved ASIN from import result (may have been
+                                # discovered via mediainfo even if not in folder name)
+                                if r.asin and not parsed.asin:
+                                    parsed.asin = r.asin
                             for f in source_folder.iterdir():
                                 if not f.is_file():
                                     continue

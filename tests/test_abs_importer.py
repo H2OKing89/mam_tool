@@ -178,6 +178,142 @@ class TestParseMamFolderName:
 
 
 # =============================================================================
+# Tests: enrich_from_audnex
+# =============================================================================
+
+
+class TestEnrichFromAudnex:
+    """Tests for Audnex metadata enrichment."""
+
+    def test_series_position_int_coerced_to_string(self) -> None:
+        """Audnex sometimes returns series_position as int - must be coerced to string."""
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Unknown",
+            title="Test Book",
+            series=None,
+            series_position=None,
+            asin="B0TEST1234",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        # Mock Audnex returning position as int (common case)
+        mock_audnex_data = {
+            "title": "Test Book",
+            "authors": [{"name": "Test Author"}],
+            "seriesPrimary": {
+                "name": "Test Series",
+                "position": 5,  # int, not string!
+            },
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B0TEST1234")
+
+        assert result.series == "Test Series"
+        assert result.series_position == "5"  # Must be string
+        assert isinstance(result.series_position, str)
+
+    def test_series_position_float_coerced_to_string(self) -> None:
+        """Handle float position like 1.5 (sub-books)."""
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Unknown",
+            title="Test Book",
+            series=None,
+            series_position=None,
+            asin="B0TEST1234",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        mock_audnex_data = {
+            "seriesPrimary": {
+                "name": "Test Series",
+                "position": 1.5,  # float
+            },
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B0TEST1234")
+
+        assert result.series_position == "1.5"
+        assert isinstance(result.series_position, str)
+
+    def test_series_position_none_handled(self) -> None:
+        """Handle None position gracefully."""
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Unknown",
+            title="Test Book",
+            series=None,
+            series_position=None,
+            asin="B0TEST1234",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        mock_audnex_data = {
+            "seriesPrimary": {
+                "name": "Test Series",
+                "position": None,  # explicitly None
+            },
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B0TEST1234")
+
+        assert result.series == "Test Series"
+        assert result.series_position is None  # Should remain None
+
+    def test_subtitle_series_position_coerced(self) -> None:
+        """Subtitle fallback also coerces position to string."""
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Test Author",
+            title="Test Book",
+            series=None,
+            series_position=None,
+            asin="B0TEST1234",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        # No seriesPrimary, but subtitle has series info
+        mock_audnex_data = {
+            "subtitle": "My Series, Book 3",
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B0TEST1234")
+
+        assert result.series == "My Series"
+        assert result.series_position == "3"
+        assert isinstance(result.series_position, str)
+
+
+# =============================================================================
 # Tests: build_target_path
 # =============================================================================
 
