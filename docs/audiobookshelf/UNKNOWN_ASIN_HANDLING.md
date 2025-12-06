@@ -1,31 +1,33 @@
 # Unknown ASIN Handling Plan
 
-> **Document Version:** 3.0.0 | **Last Updated:** 2025-07-01 | **Status:** ✅ Phase 3 Complete
+> **Document Version:** 4.0.0 | **Last Updated:** 2025-12-06 | **Status:** ✅ Phase 4 Complete
 
 This document outlines the plan for handling audiobooks without ASINs during import.
 
-> **Scope:** Phases 1-3 are complete. Phases 4-5 are planned for future PRs.
+> **Scope:** Phases 1-4 are complete. Phase 5 is planned for future PRs.
 
 ---
 
-## Current Behavior (Phase 3)
+## Current Behavior (Phase 4)
 
 | Scenario | Behavior |
 |----------|----------|
 | Folder has ASIN | Normal MAM-style import with renames |
 | ASIN found in files | Enhanced resolution finds it (Phase 3) |
 | ASIN found in metadata.json | Enhanced resolution finds it (Phase 3) |
+| ASIN found in embedded metadata | mediainfo probe finds it (Phase 4) |
 | No ASIN + policy=import | Route by classification (see below) |
 | No ASIN + policy=quarantine | Move to quarantine folder, no renames |
 | No ASIN + policy=skip | Leave in staging, log warning only |
 
-### Phase 3 ASIN Resolution Cascade
+### Phase 3+4 ASIN Resolution Cascade
 
 Before classifying as unknown, we try multiple sources:
 
 1. **Folder name** - Primary source, already parsed
 2. **Audio file names** - `Book {ASIN.B0xxx}.m4b`
 3. **Sidecar JSON** - `*.metadata.json` or `metadata.json` with `asin` field
+4. **Embedded metadata** - mediainfo probe for `asin` or `CDEK` tags (Phase 4)
 
 This catches cases where ASIN exists but wasn't in folder name.
 
@@ -434,43 +436,70 @@ def import_single(staging_folder: Path, ...) -> ImportResult:
 
 ---
 
-### Phase 4: mediainfo Probe (Future Enhancement)
+### Phase 4: mediainfo Probe ✅ COMPLETE
 
 **Goal:** Extract ASIN from embedded file metadata.
 
-**Keep out of hot path** - make it opt-in or batch-only:
+**Implementation:** Always enabled as last resort in the resolution cascade. If mediainfo is not available on the system, this step is silently skipped.
 
-```yaml
-audiobookshelf:
-  import_settings:
-    use_mediainfo_for_unknown_asin: false  # Opt-in for slower but thorough resolution
-```
+**Acceptance criteria:**
+- [x] `_check_mediainfo_available()` helper function
+- [x] `extract_asin_from_mediainfo()` extracts from `asin` and `CDEK` fields
+- [x] `resolve_asin_from_folder_with_mediainfo()` cascade function
+- [x] Integration in `import_single()` via the with-mediainfo function
+- [x] 30-second timeout for large files
+- [x] Tests added: `TestExtractAsinFromMediainfo`, `TestResolveAsinFromFolderWithMediainfo` (23 tests)
 
-Or as a separate command:
-```bash
-mamfast abs-resolve-asins --use-mediainfo  # Walks Unknown/, probes files, writes sidecars
-```
-
-**Implementation sketch:**
+#### Implementation: `asin.py`
 
 ```python
-def asin_from_mediainfo(audio_file: Path) -> str | None:
-    """Extract ASIN from audio file metadata tags."""
+def _check_mediainfo_available() -> bool:
+    """Check if mediainfo command is available."""
+    return shutil.which("mediainfo") is not None
+
+
+def extract_asin_from_mediainfo(audio_file: Path) -> str | None:
+    """Extract ASIN from audio file metadata using mediainfo.
+
+    Audible audiobooks embed ASIN in various metadata fields:
+    - "asin" tag (direct)
+    - "CDEK" tag (often equals ASIN)
+    - Nested in track.extra dict
+    """
     try:
         result = subprocess.run(
             ["mediainfo", "--Output=JSON", str(audio_file)],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=30,
         )
         data = json.loads(result.stdout)
-    except (subprocess.SubprocessError, json.JSONDecodeError):
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, json.JSONDecodeError):
         return None
 
-    # Search all string fields for ASIN pattern
-    blob = json.dumps(data)
-    if match := re.search(r"\bB0[A-Z0-9]{8}\b", blob):
-        return match.group(0)
+    # Check tracks for asin/CDEK fields
+    for track in data.get("media", {}).get("track", []):
+        if asin := track.get("asin"):
+            if is_valid_asin(asin):
+                return asin
+        if cdek := track.get("CDEK"):
+            if is_valid_asin(cdek):
+                return cdek
+        # Also check nested "extra" dict
+        if extra := track.get("extra", {}):
+            if asin := extra.get("asin"):
+                if is_valid_asin(asin):
+                    return asin
     return None
 ```
+
+#### Resolution Sources (Priority Order)
+
+| Source | Cost | Reliability | Implementation |
+|--------|------|-------------|----------------|
+| Folder name | Free | High | `extract_asin(folder.name)` |
+| File names | Free | High | Loop over audio files |
+| `*.metadata.json` | Free | High | Check common ASIN fields |
+| `metadata.json` | Free | High | Check common ASIN fields |
+| **mediainfo** | Subprocess | High | Probe embedded metadata |
 
 ---
 
@@ -889,6 +918,39 @@ class TestMultiFileProtection:
 | `test_resolve_not_found_returns_unknown` | Returns source="unknown" | ✅ |
 | `test_resolve_invalid_asin_skipped` | Invalid patterns ignored | ✅ |
 
+### Phase 4 Tests ✅ IMPLEMENTED
+
+#### `TestExtractAsinFromMediainfo` (16 tests)
+
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_nonexistent_file_returns_none` | Missing file returns None | ✅ |
+| `test_directory_returns_none` | Directory path returns None | ✅ |
+| `test_asin_in_general_track` | Direct `asin` field extraction | ✅ |
+| `test_cdek_as_asin` | `CDEK` field used as ASIN | ✅ |
+| `test_asin_in_extra_dict` | Nested `extra.asin` extraction | ✅ |
+| `test_cdek_in_extra_dict` | Nested `extra.CDEK` extraction | ✅ |
+| `test_invalid_asin_rejected` | Invalid patterns rejected | ✅ |
+| `test_empty_mediainfo_output` | Empty output returns None | ✅ |
+| `test_no_tracks` | No tracks returns None | ✅ |
+| `test_malformed_json` | JSON parse error handled | ✅ |
+| `test_subprocess_error` | Subprocess errors handled | ✅ |
+| `test_timeout_handled` | 30s timeout returns None | ✅ |
+| `test_single_track_dict` | Single track as dict handled | ✅ |
+| `test_asin_found_in_fallback_search` | ASIN found in other fields | ✅ |
+| `test_tracks_none` | tracks=null handled | ✅ |
+| `test_tracks_invalid_type` | Invalid tracks type handled | ✅ |
+
+#### `TestResolveAsinFromFolderWithMediainfo` (7 tests)
+
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_falls_back_to_phase3_first` | Phase 3 checked before mediainfo | ✅ |
+| `test_mediainfo_used_when_phase3_fails` | mediainfo fallback works | ✅ |
+| `test_mediainfo_not_available_returns_unknown` | Missing mediainfo handled | ✅ |
+| `test_mediainfo_probes_multiple_files` | Probes files until ASIN found | ✅ |
+| `test_only_probes_audio_files` | Non-audio files skipped | ✅ |
+
 ---
 
 ## Summary
@@ -898,10 +960,10 @@ class TestMultiFileProtection:
 | 1. Multi-file protection | **Critical** | 1-2 hrs | ✅ **Complete** |
 | 2. Unknown ASIN policy | High | 4-5 hrs | ✅ **Complete** |
 | 3. Enhanced resolution | Medium | 2-3 hrs | ✅ **Complete** |
-| 4. mediainfo probe | Low | 2-3 hrs | ⏸️ Deferred |
+| 4. mediainfo probe | Low | 2-3 hrs | ✅ **Complete** |
 | 5. ABS Metadata Search | Low | 4-5 hrs | ⏸️ Deferred |
 
-**Phase 3 complete:** Enhanced ASIN resolution from filenames and metadata.json.
+**Phase 4 complete:** mediainfo probe for embedded ASIN extraction.
 
 ---
 
@@ -916,3 +978,4 @@ class TestMultiFileProtection:
 | 1.4.0 | 2025-12-05 | Added edge cases from review: sample/trailer files, partial imports, homebrew misclassification, foreign folders |
 | 2.0.0 | 2025-12-05 | **Phase 2 complete:** Added UnknownAsinPolicy enum, homebrew classification, sidecar writer, config schema, tests |
 | 3.0.0 | 2025-12-06 | **Phase 3 complete:** Added `AsinResolution` dataclass, `resolve_asin_from_folder()` cascade, metadata.json extraction, 20+ tests |
+| 4.0.0 | 2025-12-06 | **Phase 4 complete:** Added `extract_asin_from_mediainfo()`, `resolve_asin_from_folder_with_mediainfo()`, embedded metadata extraction, 23 tests |
