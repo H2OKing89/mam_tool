@@ -479,24 +479,43 @@ class TestFilterTitlePreserveExact:
         result = filter_title("Re:ZERO", naming_config=config)
         assert result == "Re:ZERO"
 
-    def test_preserves_substring_match(self) -> None:
-        """Test substring match is preserved."""
+    def test_preserves_prefix_match(self) -> None:
+        """Test prefix match preserves title with suffix.
+
+        With prefix matching, 'Re:ZERO' in preserve_exact will preserve
+        'Re:ZERO (Light Novel)' because it starts with 'Re:ZERO' followed
+        by a valid separator (space + parenthesis).
+        """
         config = NamingConfig(
             format_indicators=["(Light Novel)"],
             preserve_exact=["Re:ZERO"],
         )
         result = filter_title("Re:ZERO (Light Novel)", naming_config=config)
-        # Should preserve because "Re:ZERO" is in the input
+        # Should preserve because input starts with "Re:ZERO" + " ("
         assert result == "Re:ZERO (Light Novel)"
 
-    def test_preserves_86_eighty_six(self) -> None:
-        """Test 86--EIGHTY-SIX is preserved."""
+    def test_preserves_86_eighty_six_with_suffix(self) -> None:
+        """Test 86--EIGHTY-SIX is preserved with suffix via prefix matching.
+
+        With prefix matching, '86--EIGHTY-SIX' in preserve_exact will preserve
+        '86--EIGHTY-SIX (Light Novel)' because it starts with the preserved
+        string followed by a valid separator.
+        """
         config = NamingConfig(
             format_indicators=["(Light Novel)"],
             preserve_exact=["86--EIGHTY-SIX"],
         )
-        result = filter_title("86--EIGHTY-SIX (Light Novel)", naming_config=config)
-        assert result == "86--EIGHTY-SIX (Light Novel)"
+        # Exact match - preserved
+        result = filter_title("86--EIGHTY-SIX", naming_config=config)
+        assert result == "86--EIGHTY-SIX"
+
+        # Prefix match with (Light Novel) - also preserved
+        result2 = filter_title("86--EIGHTY-SIX (Light Novel)", naming_config=config)
+        assert result2 == "86--EIGHTY-SIX (Light Novel)"
+
+        # Prefix match with Vol. - also preserved
+        result3 = filter_title("86--EIGHTY-SIX, Vol. 1", naming_config=config)
+        assert result3 == "86--EIGHTY-SIX, Vol. 1"
 
     def test_preserves_sao_progressive(self) -> None:
         """Test Sword Art Online: Progressive is preserved."""
@@ -559,14 +578,22 @@ class TestFilterSeries:
         assert result == "The Stormlight Archive"
 
     def test_preserve_exact_works_in_series(self) -> None:
-        """Test preserve_exact also works in filter_series."""
+        """Test preserve_exact works in filter_series with prefix matching.
+
+        filter_series uses the same preserve_exact logic as filter_title,
+        with prefix matching for titles followed by valid separators.
+        """
         config = NamingConfig(
             series_suffixes=[r"\s+[Ss]eries$"],
             preserve_exact=["Re:ZERO"],
         )
+        # Prefix match with " Series" - preserved
         result = filter_series("Re:ZERO Series", naming_config=config)
-        # Should preserve because "Re:ZERO" is in preserve_exact
         assert result == "Re:ZERO Series"
+
+        # Exact match - also preserved
+        result2 = filter_series("Re:ZERO", naming_config=config)
+        assert result2 == "Re:ZERO"
 
     def test_multiple_suffix_patterns(self) -> None:
         """Test multiple suffix patterns."""

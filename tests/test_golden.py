@@ -290,10 +290,15 @@ class TestGoldenPreserveExact:
     @pytest.mark.parametrize(
         "title,expected_preserved",
         [
+            # Prefix match - these start with preserve_exact entries + separator
             ("Re:ZERO -Starting Life in Another World-, Vol. 1", True),
             ("86--EIGHTY-SIX, Vol. 1", True),
             ("Normal Title (Light Novel)", False),
             ("Overlord, Vol. 3", False),
+            # Exact matches
+            ("Re:ZERO", True),
+            ("86--EIGHTY-SIX", True),
+            ("Sword Art Online: Progressive", True),
         ],
     )
     def test_preserve_exact_detection(
@@ -302,7 +307,12 @@ class TestGoldenPreserveExact:
         title: str,
         expected_preserved: bool,
     ):
-        """Test that preserve_exact correctly identifies titles to preserve."""
+        """Test that preserve_exact uses exact and prefix matching.
+
+        preserve_exact preserves titles that:
+        1. Exactly equal an entry in preserve_exact
+        2. Start with an entry followed by a valid separator (, /Vol/Book/()
+        """
         result = filter_title(title, naming_config=naming_config, keep_volume=True)
 
         if expected_preserved:

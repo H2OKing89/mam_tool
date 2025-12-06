@@ -35,6 +35,7 @@ from mamfast.utils.naming import (
     filter_subtitle,
     filter_title,
     normalize_audnex_book,
+    resolve_series,
     transliterate_text,
 )
 
@@ -1073,41 +1074,132 @@ def build_mam_json(
         if bbcode_description:
             mam_json["description"] = bbcode_description
 
-    # Series - apply filter_series to remove format indicators and series suffixes
-    # Series names should not have volume indicators
-    cleaned_series: str | None = None  # Initialize for use in filter_subtitle
+    # Series - resolve from multiple sources with smart fallback and gap-filling
+    # Priority:
+    #   1) Normalized book (from swap detection) + secondary series from Audnex
+    #   2) Audnex via _build_series_list (preserves primary + secondary series)
+    #   3) resolve_series() fallback (Libation path → Title heuristics)
+    #
+    # Key principle: resolve_series() is an ENHANCER, not a bulldozer.
+    # It fills gaps (missing position) but doesn't overwrite existing multi-series data.
+    series_entries: list[dict[str, str]] = []
+    cleaned_series: str | None = None  # For subtitle filtering
 
-    # Use normalized series if available
+    # Step 1: Try normalized book (from swap detection)
     if normalized and normalized.series_name:
         cleaned_series = filter_series(
             normalized.series_name,
             naming_config=naming_config,
         )
-        series_number = normalized.series_position or ""
-        mam_json["series"] = [
+        series_number = (
+            normalized.series_position
+            or release.series_position
+            or (
+                str(audnex.get("seriesPrimary", {}).get("position"))
+                if audnex.get("seriesPrimary")
+                else ""
+            )
+        )
+        series_entries = [
             {
                 "name": cleaned_series,
                 "number": series_number,
             }
         ]
+        # Also add secondary series if present (normalized only handles primary)
+        secondary = audnex.get("seriesSecondary")
+        if secondary and secondary.get("name"):
+            secondary_name = filter_series(secondary.get("name", ""), naming_config=naming_config)
+            series_entries.append(
+                {
+                    "name": secondary_name,
+                    "number": secondary.get("position", ""),
+                }
+            )
+        logger.debug(
+            "Series from normalized book: %s",
+            [s.get("name") for s in series_entries],
+        )
     else:
-        # Fallback to building from audnex seriesPrimary
+        # Step 2: Try _build_series_list() to preserve primary + secondary series
         series_list = _build_series_list(audnex, naming_config=naming_config)
         if series_list:
-            mam_json["series"] = series_list
-            # Extract cleaned_series from the first series entry for subtitle filtering
-            cleaned_series = series_list[0].get("name") if series_list else None
-        elif release.series:
-            cleaned_series = filter_series(
-                release.series,
-                naming_config=naming_config,
+            series_entries = series_list
+            cleaned_series = series_list[0].get("name")
+            logger.debug(
+                "Series from Audnex (primary + secondary): %s",
+                [s.get("name") for s in series_list],
             )
-            mam_json["series"] = [
+
+    # Step 3: Use resolve_series() as enhancer or fallback
+    # - If no series yet: use as primary source (Libation → Title heuristics)
+    # - If we have exactly one series with missing info: fill gaps
+    title_for_heuristic = cleaned_title or audnex.get("title") or release.title
+    series_info = resolve_series(
+        audnex_data=audnex,
+        libation_path=release.source_dir,
+        title=title_for_heuristic,
+    )
+
+    if series_info:
+        resolved_name = filter_series(
+            series_info.name,
+            naming_config=naming_config,
+        )
+        # Always use resolved name for subtitle filtering (it's the cleaned version)
+        cleaned_series = resolved_name
+
+        if not series_entries:
+            # No series yet → use resolver as primary source
+            series_entries = [
                 {
-                    "name": cleaned_series,
-                    "number": release.series_position or "",
+                    "name": resolved_name,
+                    "number": series_info.position or "",
                 }
             ]
+            logger.debug(
+                "Series from %s (confidence=%.1f): %s #%s",
+                series_info.source.value,
+                series_info.confidence,
+                resolved_name,
+                series_info.position or "N/A",
+            )
+        elif len(series_entries) == 1:
+            # We have one series entry; let resolver fill gaps but not overwrite
+            entry = series_entries[0]
+            if not entry.get("name"):
+                entry["name"] = resolved_name
+            if not entry.get("number") and series_info.position:
+                entry["number"] = series_info.position
+                logger.debug(
+                    "Filled series position from %s: %s #%s",
+                    series_info.source.value,
+                    entry.get("name"),
+                    series_info.position,
+                )
+        # else: multiple series entries from Audnex - don't touch them
+
+    # Step 4: Last-ditch fallback - release.series (only if still nothing)
+    if not series_entries and release.series:
+        cleaned_series = filter_series(
+            release.series,
+            naming_config=naming_config,
+        )
+        series_entries = [
+            {
+                "name": cleaned_series,
+                "number": release.series_position or "",
+            }
+        ]
+        logger.debug(
+            "Series from release fallback: %s #%s",
+            cleaned_series,
+            release.series_position or "N/A",
+        )
+
+    # Commit series to MAM JSON
+    if series_entries:
+        mam_json["series"] = series_entries
 
     # Subtitle - use normalized arc_name (from swap detection) or filter raw subtitle
     # Arc name is the meaningful subtitle (e.g., "Alicization Exploding", "Mother's Rosary")
