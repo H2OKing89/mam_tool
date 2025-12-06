@@ -169,5 +169,40 @@ audiobookshelf:
     # batch: Scan once after all imports complete (recommended)
     trigger_scan: batch
 
+    # ───────────────────────────────────────────────────────────────────────
+    # Trumping: Quality-Based Replacement (optional)
+    # See docs/audiobookshelf/TRUMPING.md for full documentation
+    # ───────────────────────────────────────────────────────────────────────
+    trumping:
+      # Master enable/disable (default: off - opt-in feature)
+      enabled: false
+
+      # How eager to replace existing content
+      # - conservative: Only trump for major upgrades (format tier changes)
+      # - balanced: Trump for clear improvements (recommended when enabled)
+      # - aggressive: Trump for any measurable improvement
+      aggressiveness: balanced
+
+      # Minimum bitrate improvement required (kbps) when format tier is equal
+      # Set to 0 to allow any bitrate improvement
+      min_bitrate_increase_kbps: 64
+
+      # Tiebreakers: when core metrics (format, bitrate, sample rate) are equal
+      prefer_chapters: true           # Chapter markers trump non-chaptered
+      prefer_stereo: true             # Stereo trumps mono
+
+      # Duration tolerance for sanity checks
+      # Reject incoming if significantly shorter (truncated?)
+      min_duration_ratio: 0.9         # Incoming must be >= 90% of existing duration
+      # Keep both if incoming is significantly longer (different edition?)
+      max_duration_ratio: 1.25        # Incoming > 125% triggers KEEP_BOTH
+
+      # Where to archive replaced content (REQUIRED if enabled)
+      # Old files moved to: {archive_root}/{year}/{ASIN}/{timestamp}/
+      # archive_root: "/mnt/user/data/audio/archive"
+
+      # Keep archive organized by year?
+      archive_by_year: true
+
   # Index database location (for ASIN caching and duplicate detection)
   index_db: "./data/abs_index.db"

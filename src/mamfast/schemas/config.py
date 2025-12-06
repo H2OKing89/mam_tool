@@ -173,6 +173,91 @@ class AudiobookshelfLibrarySchema(BaseModel):
         return v
 
 
+# Valid trumping aggressiveness levels
+VALID_TRUMP_AGGRESSIVENESS = frozenset(["conservative", "balanced", "aggressive"])
+
+
+class TrumpingSchema(BaseModel):
+    """Configuration for quality-based replacement.
+
+    Nested under AudiobookshelfImportSchema.trumping in config.
+    See docs/audiobookshelf/TRUMPING.md for full documentation.
+    """
+
+    enabled: bool = Field(default=False, description="Enable trumping")
+
+    aggressiveness: str = Field(
+        default="balanced",
+        description="How eager to replace existing content: conservative | balanced | aggressive",
+    )
+
+    min_bitrate_increase_kbps: int = Field(
+        default=64,
+        ge=0,
+        description="Minimum bitrate improvement for trumping (kbps)",
+    )
+
+    prefer_chapters: bool = Field(
+        default=True,
+        description="Chapters trump non-chaptered at same quality",
+    )
+
+    prefer_stereo: bool = Field(
+        default=True,
+        description="Stereo trumps mono at same quality",
+    )
+
+    min_duration_ratio: float = Field(
+        default=0.9,
+        ge=0.5,
+        le=1.0,
+        description="Minimum duration ratio (incoming/existing) - reject if below",
+    )
+
+    max_duration_ratio: float = Field(
+        default=1.25,
+        ge=1.0,
+        le=2.0,
+        description="Maximum duration ratio - keep both if exceeded",
+    )
+
+    archive_root: str | None = Field(
+        default=None,
+        description="Where to archive replaced content (required if enabled)",
+    )
+
+    archive_by_year: bool = Field(
+        default=True,
+        description="Organize archive by year",
+    )
+
+    @field_validator("aggressiveness")
+    @classmethod
+    def validate_aggressiveness(cls, v: str) -> str:
+        """Validate aggressiveness is a recognized value."""
+        if v.lower() not in VALID_TRUMP_AGGRESSIVENESS:
+            valid = sorted(VALID_TRUMP_AGGRESSIVENESS)
+            raise ValueError(f"Invalid aggressiveness '{v}'. Must be one of: {valid}")
+        return v.lower()
+
+    @field_validator("archive_root")
+    @classmethod
+    def validate_archive_root_absolute(cls, v: str | None) -> str | None:
+        """Ensure archive_root is absolute when provided."""
+        if v is not None and v.strip():
+            if not v.startswith("/"):
+                raise ValueError(f"archive_root must be an absolute path (start with /), got: {v}")
+            return v.rstrip("/")  # Normalize: remove trailing slash
+        return v
+
+    @model_validator(mode="after")
+    def validate_archive_required_when_enabled(self) -> TrumpingSchema:
+        """Ensure archive_root is set when trumping is enabled."""
+        if self.enabled and (not self.archive_root or not self.archive_root.strip()):
+            raise ValueError("archive_root is required when trumping is enabled")
+        return self
+
+
 class AudiobookshelfImportSchema(BaseModel):
     """Audiobookshelf import settings."""
 
@@ -185,6 +270,10 @@ class AudiobookshelfImportSchema(BaseModel):
     quarantine_path: str | None = Field(
         default=None,
         description="Path for quarantined books (required if unknown_asin_policy=quarantine)",
+    )
+    trumping: TrumpingSchema = Field(
+        default_factory=TrumpingSchema,
+        description="Quality-based replacement settings",
     )
 
     @field_validator("duplicate_policy")
