@@ -988,6 +988,7 @@ class TestMultiFileProtection:
 | `test_mediainfo_probes_multiple_files` | Probes files until ASIN found | ✅ |
 | `test_only_probes_audio_files` | Non-audio files skipped | ✅ |
 
+
 ---
 
 ## Summary
@@ -998,9 +999,9 @@ class TestMultiFileProtection:
 | 2. Unknown ASIN policy | High | 4-5 hrs | ✅ **Complete** |
 | 3. Enhanced resolution | Medium | 2-3 hrs | ✅ **Complete** |
 | 4. mediainfo probe | Low | 2-3 hrs | ✅ **Complete** |
-| 5. ABS Metadata Search | Low | 4-5 hrs | ⏸️ Deferred |
+| 5. ABS Metadata Search | Low | 4-5 hrs | ✅ **Complete** |
 
-**Phase 4 complete:** mediainfo probe for embedded ASIN extraction.
+**All phases complete.** Unknown ASIN handling is fully implemented with multi-source resolution cascade.
 
 ---
 
@@ -1016,3 +1017,4 @@ class TestMultiFileProtection:
 | 2.0.0 | 2025-12-05 | **Phase 2 complete:** Added UnknownAsinPolicy enum, homebrew classification, sidecar writer, config schema, tests |
 | 3.0.0 | 2025-12-06 | **Phase 3 complete:** Added `AsinResolution` dataclass, `resolve_asin_from_folder()` cascade, metadata.json extraction, 20+ tests |
 | 4.0.0 | 2025-12-06 | **Phase 4 complete:** Added `extract_asin_from_mediainfo()`, `resolve_asin_from_folder_with_mediainfo()`, embedded metadata extraction, 23 tests |
+| 5.0.0 | 2025-12-06 | **Phase 5 complete:** Added ABS metadata search, `resolve_asin_via_abs_search()`, `abs-resolve-asins` CLI command, integrated into `abs-import --abs-search`, fuzzy matching with RapidFuzz, confidence validation |
