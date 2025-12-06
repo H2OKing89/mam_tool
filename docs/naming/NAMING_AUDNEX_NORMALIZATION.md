@@ -56,22 +56,35 @@ This is the correct format, but rare.
 
 ## The Solution: NormalizedBook
 
-The `NormalizedBook` Pydantic model in `models.py` provides corrected metadata:
+The `NormalizedBook` dataclass in `models.py` provides corrected metadata:
 
 ```python
-class NormalizedBook(BaseModel):
-    """Normalized book metadata from Audnex API."""
+@dataclass
+class NormalizedBook:
+    """Canonical book metadata after Audnex normalization."""
 
-    title: str           # Always the actual book title
-    subtitle: str | None # Always the subtitle (if any)
-    series_name: str | None
-    series_position: str | None
+    asin: str
 
-    @classmethod
-    def from_audnex(cls, audnex_data: dict) -> "NormalizedBook":
-        """Build from Audnex API response with normalization."""
-        ...
+    # Raw values (preserved for debugging)
+    raw_title: str
+    raw_subtitle: str | None
+
+    # Canonical values from seriesPrimary (source of truth)
+    series_name: str | None = None
+    series_position: str | None = None
+
+    # Extracted arc name (e.g., "Alicization Exploding", "Aincrad")
+    arc_name: str | None = None
+
+    # Constructed display values
+    display_title: str = ""      # "{Series} {N}" or raw_title if no series
+    display_subtitle: str | None = None  # Arc name if exists, else None
+
+    # Tracking
+    was_swapped: bool = False
 ```
+
+The `normalize_audnex_book()` function in `utils/naming.py` creates NormalizedBook instances from raw Audnex API responses.
 
 ### Normalization Rules
 
@@ -138,6 +151,7 @@ def _needs_swap(title: str, subtitle: str | None, series_primary: dict | None) -
 **Input (Audnex Response):**
 ```json
 {
+  "asin": "B003ZWFO7E",
   "title": "The Stormlight Archive, Book 1",
   "subtitle": "The Way of Kings",
   "seriesPrimary": {
@@ -150,18 +164,24 @@ def _needs_swap(title: str, subtitle: str | None, series_primary: dict | None) -
 **Output (NormalizedBook):**
 ```python
 NormalizedBook(
-    title="The Way of Kings",
-    subtitle=None,  # Original subtitle was the real title
+    asin="B003ZWFO7E",
+    raw_title="The Stormlight Archive, Book 1",
+    raw_subtitle="The Way of Kings",
     series_name="The Stormlight Archive",
-    series_position="01"
+    series_position="1",
+    arc_name=None,
+    display_title="The Stormlight Archive, Book 1",
+    display_subtitle=None,
+    was_swapped=True
 )
 ```
 
-### Example 2: No Swap Needed
+### Example 2: No Swap Needed (Standalone)
 
 **Input:**
 ```json
 {
+  "asin": "B08G9PRS1K",
   "title": "Project Hail Mary",
   "subtitle": "A Novel",
   "seriesPrimary": null
@@ -171,31 +191,45 @@ NormalizedBook(
 **Output:**
 ```python
 NormalizedBook(
-    title="Project Hail Mary",
-    subtitle="A Novel",
+    asin="B08G9PRS1K",
+    raw_title="Project Hail Mary",
+    raw_subtitle="A Novel",
     series_name=None,
-    series_position=None
+    series_position=None,
+    arc_name=None,
+    display_title="Project Hail Mary",
+    display_subtitle=None,
+    was_swapped=False
 )
 ```
 
-### Example 3: Series in Subtitle
+### Example 3: Series with Arc Name
 
 **Input:**
 ```json
 {
-  "title": "The Final Empire",
-  "subtitle": "Mistborn, Book 1",
-  "seriesPrimary": null
+  "asin": "B08XXXXX",
+  "title": "Alicization Beginning",
+  "subtitle": "Sword Art Online 9",
+  "seriesPrimary": {
+    "name": "Sword Art Online",
+    "position": "9"
+  }
 }
 ```
 
 **Output:**
 ```python
 NormalizedBook(
-    title="The Final Empire",
-    subtitle=None,  # Series info extracted
-    series_name="Mistborn",
-    series_position="01"
+    asin="B08XXXXX",
+    raw_title="Alicization Beginning",
+    raw_subtitle="Sword Art Online 9",
+    series_name="Sword Art Online",
+    series_position="9",
+    arc_name="Alicization Beginning",  # Extracted as arc name
+    display_title="Sword Art Online 9",
+    display_subtitle="Alicization Beginning",
+    was_swapped=True
 )
 ```
 
@@ -236,23 +270,25 @@ if fuzzy_match(extracted, expected, threshold=0.8):
 def test_swap_detection():
     """Title/subtitle swap is detected correctly."""
     data = {
+        "asin": "B0123456789",
         "title": "Series, Book 1",
         "subtitle": "Actual Title",
         "seriesPrimary": {"name": "Series", "position": "1"}
     }
-    book = NormalizedBook.from_audnex(data)
-    assert book.title == "Actual Title"
+    book = normalize_audnex_book(data)
+    assert book.was_swapped == True
     assert book.series_name == "Series"
 
 def test_no_swap_when_correct():
     """Correct format is not modified."""
     data = {
+        "asin": "B0123456789",
         "title": "Actual Title",
         "subtitle": "A Subtitle",
         "seriesPrimary": {"name": "Series", "position": "1"}
     }
-    book = NormalizedBook.from_audnex(data)
-    assert book.title == "Actual Title"
+    book = normalize_audnex_book(data)
+    assert book.display_title == "Actual Title"
 ```
 
 ### Golden Tests
@@ -264,5 +300,6 @@ See `tests/fixtures/audnex_normalization_samples.json` for comprehensive test ca
 ## See Also
 
 - [schemas/audnex.py](/src/mamfast/schemas/audnex.py) - Audnex response validation
-- [models.py](/src/mamfast/models.py) - NormalizedBook implementation
+- [models.py](/src/mamfast/models.py) - NormalizedBook dataclass
+- [utils/naming.py](/src/mamfast/utils/naming.py) - `normalize_audnex_book()` implementation
 - [test_normalization.py](/tests/test_normalization.py) - Normalization tests

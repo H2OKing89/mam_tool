@@ -44,7 +44,7 @@ MAMFast uses a **multi-layer naming system** that transforms raw Libation/Audibl
 | Concept | Description |
 |---------|-------------|
 | **Audnex Normalization** | Fixes Audible's title/subtitle swaps using `seriesPrimary` |
-| **NormalizedBook** | Pydantic model holding corrected title/subtitle/series |
+| **NormalizedBook** | Dataclass holding corrected title/subtitle/series/arc |
 | **MamPath** | Tracks 225-char path compliance with truncation metadata |
 | **Phrase Removal** | Regex-based removal of marketing text, editions, etc. |
 | **Author Map** | Handles pseudonyms and author name variations |
@@ -65,24 +65,24 @@ authors: ["Andy Weir"]
 
 **After Normalization & Cleaning:**
 ```
-folder: "Andy Weir - Project Hail Mary (2021) {ASIN.B08G9PRS1K}"
-file:   "Andy Weir - Project Hail Mary.m4b"
+folder: "Project Hail Mary (2021) (Andy Weir) {ASIN.B08G9PRS1K} [H2OKing]"
+file:   "Project Hail Mary (2021) (Andy Weir) {ASIN.B08G9PRS1K}.m4b"
 ```
 
 ### Series Example
 
 **Libation Raw Data:**
 ```
-title: "The Martian"
+title: "The Way of Kings"
 subtitle: null
-seriesPrimary: "The Martian, Book 1"
-authors: ["Andy Weir"]
+seriesPrimary: {"name": "Stormlight Archive", "position": "1"}
+authors: ["Brandon Sanderson"]
 ```
 
 **After Normalization & Cleaning:**
 ```
-folder: "Andy Weir - The Martian vol_01 - The Martian (2014) {ASIN.B00B5HZGUG}"
-file:   "Andy Weir - The Martian vol_01 - The Martian.m4b"
+folder: "Stormlight Archive vol_01 The Way of Kings (2010) (Brandon Sanderson) {ASIN.B003ZWFO7E} [H2OKing]"
+file:   "Stormlight Archive vol_01 The Way of Kings (2010) (Brandon Sanderson) {ASIN.B003ZWFO7E}.m4b"
 ```
 
 ---
@@ -103,9 +103,9 @@ file:   "Andy Weir - The Martian vol_01 - The Martian.m4b"
 ## File Locations
 
 | File | Purpose |
-|------|---------|
-| `src/mamfast/utils/naming.py` | Core naming functions (~1900 lines) |
-| `src/mamfast/models.py` | `NormalizedBook`, `MamPath` models |
+|------|--------|
+| `src/mamfast/utils/naming.py` | Core naming functions (~2000 lines) |
+| `src/mamfast/models.py` | `NormalizedBook`, `MamPath` dataclasses |
 | `config/naming.json` | Phrase removal rules, author map |
 | `src/mamfast/schemas/naming.py` | Pydantic validation for naming.json |
 | `tests/test_naming.py` | Naming unit tests |

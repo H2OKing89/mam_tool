@@ -333,7 +333,14 @@ print(f"Truncated: {mam_path.was_truncated}")
 
 ## Changelog
 
-### v1.4.0 (Current)
+### v1.5.0 (Current)
+
+- **BBCode description filtering**: Apply title/subtitle filtering to BBCode description header
+- **Dry-run counter fix**: Increment success/skip counters in dry-run mode for accurate summaries
+- **Documentation restructure**: Split monolithic NAMING_PLAN.md into focused modules
+- Moved Audiobookshelf docs to dedicated `docs/audiobookshelf/` subdirectory
+
+### v1.4.0
 
 - Added ABS import with ASIN duplicate detection
 - Unknown ASIN policy: homebrew routing

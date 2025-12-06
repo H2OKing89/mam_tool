@@ -51,43 +51,52 @@ See [Rules Reference](./NAMING_RULES.md) for the full list of phrase removal pat
 
 ### Standard Format
 
+**Series books:**
 ```
-{author} - {series vol_XX - }{title} ({year}) ({narrator}) {ASIN.xxxxxxxxxx}
+{Series} vol_{NN} {Arc} ({Year}) ({Author}) {ASIN.xxxxx} [{Tag}]
+```
+
+**Standalone books:**
+```
+{Title} ({Year}) ({Author}) {ASIN.xxxxx} [{Tag}]
 ```
 
 ### Components
 
 | Component | Required | Format | Example |
 |-----------|----------|--------|---------|
-| `author` | Yes | First author, cleaned (see above) | `Andy Weir` |
-| `series` | No | Series name + vol_XX | `Stormlight Archive vol_01` |
-| `title` | Yes | Cleaned title (see above) | `The Way of Kings` |
-| `year` | Yes | 4-digit year in parens | `(2010)` |
-| `narrator` | Yes | First narrator in parens | `(Michael Kramer)` |
-| `ASIN` | Yes | ASIN tag in braces | `{ASIN.B003ZWFO7E}` |
+| `series` | No | Series name for series books | `Stormlight Archive` |
+| `vol_NN` | No | Zero-padded volume number | `vol_01`, `vol_12` |
+| `arc` | No | Arc/subtitle name | `Aincrad` |
+| `title` | Standalone | Used for standalone books | `Project Hail Mary` |
+| `year` | Yes | 4-digit year in parens | `(2021)` |
+| `author` | Yes | First author in parens | `(Andy Weir)` |
+| `ASIN` | Yes | ASIN tag in braces | `{ASIN.B08G9PRS1K}` |
+| `tag` | No | Ripper tag in brackets | `[H2OKing]` |
 
 ### Examples
 
 **Standalone Book:**
 ```
-Andy Weir - Project Hail Mary (2021) (Ray Porter) {ASIN.B08G9PRS1K}
+Project Hail Mary (2021) (Andy Weir) {ASIN.B08G9PRS1K} [H2OKing]
 ```
 
 **Series Book:**
 ```
-Brandon Sanderson - Stormlight Archive vol_01 - The Way of Kings (2010) (Michael Kramer) {ASIN.B003ZWFO7E}
+Stormlight Archive vol_01 The Way of Kings (2010) (Brandon Sanderson) {ASIN.B003ZWFO7E} [H2OKing]
 ```
 
-**Multi-Author:**
+**Series with Arc:**
 ```
-Douglas Preston - Relic (1995) (David Colacci) {ASIN.B002V1BRDI}
+Sword Art Online vol_09 Alicization Beginning (2020) (Reki Kawahara) {ASIN.B08XXXXX} [H2OKing]
 ```
-Note: Only first author used; second author (Lincoln Child) omitted.
 
 **Decimal Volume:**
 ```
-John Scalzi - Old Mans War vol_01.5 - Questions for a Soldier (2008) (William Dufris) {ASIN.B001D2XXXX}
+Old Mans War vol_01.5 Questions for a Soldier (2008) (John Scalzi) {ASIN.B001D2XXXX} [H2OKing]
 ```
+
+Note: Author appears in parentheses after year. Ripper tag in brackets is optional.
 
 ---
 
@@ -95,29 +104,30 @@ John Scalzi - Old Mans War vol_01.5 - Questions for a Soldier (2008) (William Du
 
 ### Standard Format
 
+Same as folder name but:
+- No ripper tag (only on folder)
+- Includes file extension
+
+**Series books:**
 ```
-{author} - {series vol_XX - }{title}.m4b
+{Series} vol_{NN} {Arc} ({Year}) ({Author}) {ASIN.xxxxx}.m4b
 ```
 
-### Components
-
-| Component | Required | Format | Example |
-|-----------|----------|--------|---------|
-| `author` | Yes | First author, cleaned | `Andy Weir` |
-| `series` | No | Series name + vol_XX | `Stormlight Archive vol_01` |
-| `title` | Yes | Cleaned title | `The Way of Kings` |
-| `extension` | Yes | Audio format | `.m4b` |
+**Standalone books:**
+```
+{Title} ({Year}) ({Author}) {ASIN.xxxxx}.m4b
+```
 
 ### Examples
 
 **Standalone Book:**
 ```
-Andy Weir - Project Hail Mary.m4b
+Project Hail Mary (2021) (Andy Weir) {ASIN.B08G9PRS1K}.m4b
 ```
 
 **Series Book:**
 ```
-Brandon Sanderson - Stormlight Archive vol_01 - The Way of Kings.m4b
+Stormlight Archive vol_01 The Way of Kings (2010) (Brandon Sanderson) {ASIN.B003ZWFO7E}.m4b
 ```
 
 ---
