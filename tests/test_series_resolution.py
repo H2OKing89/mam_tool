@@ -167,13 +167,21 @@ class TestParseSeriesFromLibationPath:
         assert position == "01"
 
     def test_no_vol_in_book_folder(self) -> None:
-        """Test extraction when book folder has no vol_XX."""
-        path = Path("/library/Andy Weir/Standalone/Project Hail Mary (2021) {ASIN.XXX}")
+        """Test extraction when book folder has no vol_XX.
+
+        'Standalone' is a common grouping folder name (meaning 'not in a series')
+        and is filtered out by common_roots.
+
+        Note: Uses realistic Libation format with (Author) in book folder name,
+        which prevents the author folder from being detected as series.
+        """
+        path = Path(
+            "/library/Andy Weir/Standalone/" "Project Hail Mary (2021) (Andy Weir) {ASIN.XXX}"
+        )
         result = parse_series_from_libation_path(path)
-        assert result is not None
-        series_name, position = result
-        assert series_name == "Standalone"
-        assert position is None
+        # "Standalone" is filtered as a common root, "Andy Weir" is detected as
+        # author due to (Andy Weir) in book folder, so no series detected
+        assert result is None
 
     def test_two_level_structure_no_series(self) -> None:
         """Test Author/Book structure (no series folder)."""

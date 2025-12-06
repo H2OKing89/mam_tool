@@ -97,8 +97,9 @@ def _build_author_role_pattern(
     Returns:
         Compiled regex pattern
     """
-    roles = role_words or _DEFAULT_ROLE_WORDS
-    credits = credit_words or _DEFAULT_CREDIT_WORDS
+    # Use explicit None check to allow empty list to disable roles
+    roles = _DEFAULT_ROLE_WORDS if role_words is None else role_words
+    credits = _DEFAULT_CREDIT_WORDS if credit_words is None else credit_words
 
     # Build alternation patterns
     role_pattern = "|".join(re.escape(r) for r in roles)
@@ -481,8 +482,9 @@ def _build_mediainfo_role_pattern(
     Returns:
         Compiled regex pattern matching "- role" suffix
     """
-    roles = role_words or _DEFAULT_ROLE_WORDS
-    credits = credit_words or _DEFAULT_CREDIT_WORDS
+    # Use explicit None check to allow empty list to disable roles
+    roles = _DEFAULT_ROLE_WORDS if role_words is None else role_words
+    credits = _DEFAULT_CREDIT_WORDS if credit_words is None else credit_words
 
     # Combine all roles, escaping special regex chars and handling multi-word
     all_roles = roles + credits
@@ -774,6 +776,12 @@ def filter_series(
 
     Like filter_title() but also applies series_suffixes regex patterns
     (e.g., " Series", " Trilogy", " Light Novel").
+
+    Note on preserve_exact: This function delegates to filter_title() first,
+    which handles preserve_exact for base cleaning (format indicators, genre tags,
+    etc.). The preserve_exact check here only controls whether series_suffixes
+    are applied - it prevents stripping " Series"/" Light Novel" suffixes from
+    entries that match preserve_exact.
 
     Series names in MAM JSON should NOT have volume indicators, so
     keep_volume=False is typically correct even for JSON output.
@@ -1968,15 +1976,25 @@ def build_mam_path(
     asin_str = f"{{ASIN.{clean_asin}}}" if clean_asin else ""
 
     # Calculate max base length
-    # If folder_max_length is set, derive base length from folder constraint
-    # Otherwise use the path budget formula
+    # If folder_max_length is set, use min(folder constraint, path constraint)
+    # This ensures both folder AND full path stay within their respective limits
     if folder_max_length is not None:
         # Folder = "{base} [{tag}]" or just "{base}"
-        # Derive max_base from folder constraint
         tag_overhead = len(f" [{ripper_tag}]") if ripper_tag else 0
-        max_base_len = folder_max_length - tag_overhead
+        base_from_folder = folder_max_length - tag_overhead
+
+        # Also calculate path budget to ensure full path stays within limit
+        base_from_path = _calculate_max_base_length(
+            ripper_tag=ripper_tag,
+            extension=extension,
+            part_count=part_count,
+            max_path_length=max_path_length,
+        )
+
+        # Use the stricter of the two constraints
+        max_base_len = min(base_from_folder, base_from_path)
     else:
-        # Use path budget formula
+        # Use path budget formula only
         max_base_len = _calculate_max_base_length(
             ripper_tag=ripper_tag,
             extension=extension,
@@ -2026,8 +2044,11 @@ def build_mam_path(
     # Check if tag was dropped during truncation (not yet implemented in _build_truncated_base_name)
     # For now, tag is always included if provided - it's handled by the budget formula
 
+    # Sanitize ripper_tag to protect against special characters
+    clean_tag = sanitize_filename(ripper_tag) if ripper_tag else None
+
     # Build folder and filename
-    folder = f"{base_name} [{ripper_tag}]" if ripper_tag else base_name
+    folder = f"{base_name} [{clean_tag}]" if clean_tag else base_name
 
     filename = f"{base_name}{extension}"
     full_path = f"{folder}/{filename}"
@@ -2231,6 +2252,7 @@ def parse_series_from_libation_path(
         lower_candidate = candidate.lower()
 
         # Exact matches for common root/library folders
+        # Also includes common grouping folders that aren't series names
         common_roots = {
             "audiobooks",
             "audiobook",
@@ -2246,6 +2268,17 @@ def parse_series_from_libation_path(
             "completed",
             "staging",
             "upload",
+            # Common grouping folders that could be mistaken for series
+            "light novels",
+            "light novel",
+            "fiction",
+            "non-fiction",
+            "nonfiction",
+            "single books",
+            "standalone",
+            "series",
+            "collections",
+            "complete",
         }
         if lower_candidate in common_roots:
             continue
