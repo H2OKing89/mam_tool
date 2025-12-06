@@ -334,6 +334,13 @@ def handle_unknown_asin(ctx: UnknownAsinContext, cfg: Config, *, dry_run: bool =
 
 **Key:** Run resolution **before** classification - if we find an ASIN, we don't need the unknown handler.
 
+**Acceptance criteria:**
+- [x] `AsinResolution` dataclass with `found` property
+- [x] `resolve_asin_from_folder()` cascade function
+- [x] `_extract_asin_from_metadata_file()` helper
+- [x] Integration in `import_single()` before unknown handler
+- [x] Tests added: `TestAsinResolution`, `TestResolveAsinFromFolder` (20+ tests)
+
 #### Implementation: `asin.py`
 
 ```python
@@ -424,13 +431,6 @@ def import_single(staging_folder: Path, ...) -> ImportResult:
 | File names | Free | High | Loop over audio files |
 | `*.metadata.json` | Free | High | Check common ASIN fields |
 | `metadata.json` | Free | High | Check common ASIN fields |
-
-**Acceptance criteria:**
-- [x] `AsinResolution` dataclass with `found` property
-- [x] `resolve_asin_from_folder()` cascade function
-- [x] `_extract_asin_from_metadata_file()` helper
-- [x] Integration in `import_single()` before unknown handler
-- [x] Tests added: `TestAsinResolution`, `TestResolveAsinFromFolder` (20 tests)
 
 ---
 
@@ -529,7 +529,7 @@ def search_audible_via_abs(
     params = {"title": title, "provider": "audible"}
     if author:
         params["author"] = author
-    
+
     resp = client._client.get("/api/search/books", params=params)
     resp.raise_for_status()
     return resp.json()
@@ -543,16 +543,16 @@ def resolve_asin_from_abs_search(
     """Try to resolve ASIN via ABS metadata search."""
     # Parse folder name for search terms
     title, author = parse_folder_for_search(folder_name)
-    
+
     results = search_audible_via_abs(client, title, author)
     if not results:
         return None
-    
+
     # Use fuzzy matching to find best match
     best_match = find_best_match(results, title, author)
     if best_match and best_match["confidence"] >= confidence_threshold:
         return best_match["asin"]
-    
+
     return None
 ```
 
@@ -874,16 +874,20 @@ class TestMultiFileProtection:
 | `test_import_single_no_asin_skip_policy` | import_single respects SKIP | ✅ |
 | `test_import_single_with_asin_ignores_unknown_policy` | ASIN present ignores policy | ✅ |
 
-### Phase 3 Tests (Future)
+### Phase 3 Tests ✅ IMPLEMENTED
 
-| Test | Description | Assertions |
-|------|-------------|------------|
-| `test_resolve_asin_from_folder` | ASIN in folder name | Returns (asin, "folder") |
-| `test_resolve_asin_from_filename` | ASIN in audio filename | Returns (asin, "filename") |
-| `test_resolve_asin_from_metadata` | ASIN in .metadata.json | Returns (asin, "metadata") |
-| `test_resolve_asin_cascade` | All sources checked in order | First match wins |
-| `test_resolve_asin_not_found` | No ASIN anywhere | Returns (None, "unknown") |
-| `test_metadata_json_has_asin` | Folder missing ASIN, metadata.json has it | Resolved from metadata, normal import |
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_asin_resolution_found_property` | `found` returns True when ASIN present | ✅ |
+| `test_asin_resolution_not_found_property` | `found` returns False when None | ✅ |
+| `test_resolve_from_parsed_asin` | Uses provided parsed ASIN | ✅ |
+| `test_resolve_from_folder_name` | Extracts from folder name | ✅ |
+| `test_resolve_from_audio_filename` | Extracts from .m4b name | ✅ |
+| `test_resolve_from_metadata_json` | Extracts from metadata.json | ✅ |
+| `test_resolve_from_metadata_dot_json` | Extracts from *.metadata.json | ✅ |
+| `test_resolve_cascade_priority` | Folder → filename → metadata order | ✅ |
+| `test_resolve_not_found_returns_unknown` | Returns source="unknown" | ✅ |
+| `test_resolve_invalid_asin_skipped` | Invalid patterns ignored | ✅ |
 
 ---
 
@@ -893,13 +897,11 @@ class TestMultiFileProtection:
 |-------|----------|--------|--------|
 | 1. Multi-file protection | **Critical** | 1-2 hrs | ✅ **Complete** |
 | 2. Unknown ASIN policy | High | 4-5 hrs | ✅ **Complete** |
-| 3. Enhanced resolution | Medium | 2-3 hrs | 📋 Planned |
+| 3. Enhanced resolution | Medium | 2-3 hrs | ✅ **Complete** |
 | 4. mediainfo probe | Low | 2-3 hrs | ⏸️ Deferred |
-| 5. Audible API | Low | 4-5 hrs | ⏸️ Deferred |
+| 5. ABS Metadata Search | Low | 4-5 hrs | ⏸️ Deferred |
 
-**Phase 2 complete:** Unknown ASIN policy with homebrew routing and sidecar metadata.
-
-**Next:** Phase 3 (enhanced resolution from filenames and metadata.json).
+**Phase 3 complete:** Enhanced ASIN resolution from filenames and metadata.json.
 
 ---
 
@@ -913,3 +915,4 @@ class TestMultiFileProtection:
 | 1.3.0 | 2025-12-05 | Added quick-start behavior summary; scope clarification; linked from importer.py |
 | 1.4.0 | 2025-12-05 | Added edge cases from review: sample/trailer files, partial imports, homebrew misclassification, foreign folders |
 | 2.0.0 | 2025-12-05 | **Phase 2 complete:** Added UnknownAsinPolicy enum, homebrew classification, sidecar writer, config schema, tests |
+| 3.0.0 | 2025-12-06 | **Phase 3 complete:** Added `AsinResolution` dataclass, `resolve_asin_from_folder()` cascade, metadata.json extraction, 20+ tests |
