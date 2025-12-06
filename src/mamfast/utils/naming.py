@@ -641,12 +641,16 @@ def filter_title(
     Remove unwanted phrases from a title/folder name.
 
     Applies in order:
-    1. Check preserve_exact - skip ALL cleaning if matched
+    1. Check preserve_exact - skip ALL cleaning if exact or prefix match
+       - Exact match: input == preserved
+       - Prefix match: input starts with preserved + separator (, /Vol/Book/()
     2. Hardcoded patterns (Book XX, etc.)
     3. Volume patterns (Vol. XX, Volume XX) - unless keep_volume=True
     4. Config patterns: format_indicators, genre_tags, publisher_tags
     5. Legacy remove_phrases (for backward compatibility)
-    6. Duplicate number before vol_XX cleanup
+    6. Collapse whitespace
+    7. Duplicate number before vol_XX cleanup
+    8. Final whitespace cleanup
 
     Args:
         name: Original name
@@ -662,23 +666,29 @@ def filter_title(
     result = name
     transformations: list[tuple[str, str, str]] = []  # (before, after, rule_id)
 
-    # Step 1: Check preserve_exact - skip ALL cleaning if matched
-    # Use word-boundary matching to avoid false positives (e.g., "Zero" matching "Project Zero")
+    # Step 1: Check preserve_exact - skip ALL cleaning if title matches
+    # Two modes:
+    #   1. Exact equality: name == preserved
+    #   2. Prefix match: name starts with preserved + separator (, or space before Vol/Book)
+    # This handles "86--EIGHTY-SIX, Vol. 1" matching preserve_exact=["86--EIGHTY-SIX"]
     if naming_config and naming_config.preserve_exact:
         for preserved in naming_config.preserve_exact:
-            # Exact match or word-boundary match (not substring)
+            # Check exact match first
             if name == preserved:
                 if verbose:
-                    logger.debug(
-                        f"[filter_title] '{name}' -> '{name}' (preserved via preserve_exact)"
-                    )
+                    logger.debug(f"[filter_title] '{name}' -> '{name}' (preserved via exact match)")
                 return name
-            # Check if preserved text appears as complete word/phrase
-            pattern = re.compile(rf"\b{re.escape(preserved)}\b", re.IGNORECASE)
-            if pattern.search(name):
-                if verbose:
-                    logger.debug(f"[filter_title] '{name}' -> '{name}' (preserved via word match)")
-                return name
+            # Check prefix match with common separators (comma, space+Vol, space+Book)
+            # This preserves "Title, Vol. 1" when "Title" is in preserve_exact
+            if name.startswith(preserved):
+                suffix = name[len(preserved) :]
+                # Valid separators: ", " or " Vol" or " Book" or " (" (for annotations)
+                if suffix.startswith((", ", " Vol", " Book", " (")):
+                    if verbose:
+                        logger.debug(
+                            f"[filter_title] '{name}' -> '{name}' (preserved via prefix match)"
+                        )
+                    return name
 
     # Step 2: Apply pre-compiled hardcoded patterns (always applied)
     for pattern in _COMPILED_REMOVE_PATTERNS:
@@ -695,10 +705,10 @@ def filter_title(
             if before != result and verbose:
                 transformations.append((before, result, "volume_patterns"))
 
-    # Step 3: Apply naming config patterns (format_indicators, genre_tags, publisher_tags)
+    # Step 4: Apply naming config patterns (format_indicators, genre_tags, publisher_tags)
     if naming_config:
         # Format indicators (case-insensitive phrase matching)
-        for phrase in naming_config.format_indicators:
+        for phrase in naming_config.format_indicators or []:
             before = result
             escaped = re.escape(phrase)
             result = re.sub(escaped, "", result, flags=re.IGNORECASE)
@@ -706,7 +716,7 @@ def filter_title(
                 transformations.append((before, result, f"format_indicators:{phrase}"))
 
         # Genre tags (case-insensitive phrase matching)
-        for phrase in naming_config.genre_tags:
+        for phrase in naming_config.genre_tags or []:
             before = result
             escaped = re.escape(phrase)
             result = re.sub(escaped, "", result, flags=re.IGNORECASE)
@@ -714,14 +724,14 @@ def filter_title(
                 transformations.append((before, result, f"genre_tags:{phrase}"))
 
         # Publisher tags (case-insensitive phrase matching)
-        for phrase in naming_config.publisher_tags:
+        for phrase in naming_config.publisher_tags or []:
             before = result
             escaped = re.escape(phrase)
             result = re.sub(escaped, "", result, flags=re.IGNORECASE)
             if before != result and verbose:
                 transformations.append((before, result, f"publisher_tags:{phrase}"))
 
-    # Step 4: Apply legacy user-configured phrases (backward compatibility)
+    # Step 5: Apply legacy user-configured phrases (backward compatibility)
     if remove_phrases:
         for phrase in remove_phrases:
             before = result
@@ -730,16 +740,16 @@ def filter_title(
             if before != result and verbose:
                 transformations.append((before, result, f"remove_phrases:{phrase}"))
 
-    # Step 5: Collapse whitespace before duplicate check
+    # Step 6: Collapse whitespace before duplicate check
     result = _WHITESPACE_PATTERN.sub(" ", result)
 
-    # Step 6: Remove duplicate number before vol_XX (e.g., "Title 12 vol_12" -> "Title vol_12")
+    # Step 7: Remove duplicate number before vol_XX (e.g., "Title 12 vol_12" -> "Title vol_12")
     before = result
     result = _DUPLICATE_VOL_PATTERN.sub(r"vol_\1", result)
     if before != result and verbose:
         transformations.append((before, result, "duplicate_vol_cleanup"))
 
-    # Step 7: Clean up whitespace artifacts
+    # Step 8: Clean up whitespace artifacts
     result = _cleanup_string(result)
 
     # Log all transformations if verbose
@@ -787,22 +797,21 @@ def filter_series(
         keep_volume=keep_volume,
     )
 
-    # Check if original name was preserved (filter_title already checked, but verify
-    # against original name since result may have been cleaned)
+    # Check if original name was preserved (exact or prefix match)
     if naming_config and naming_config.preserve_exact:
         for preserved in naming_config.preserve_exact:
-            # Use word-boundary matching to avoid false positives
             if name == preserved:
                 return result  # Already preserved
-            pattern = re.compile(rf"\b{re.escape(preserved)}\b", re.IGNORECASE)
-            if pattern.search(name):
-                return result  # Already preserved
+            if name.startswith(preserved):
+                suffix = name[len(preserved) :]
+                if suffix.startswith((", ", " Vol", " Book", " (", " Series")):
+                    return result  # Already preserved
 
     transformations: list[tuple[str, str, str]] = []
 
     # Apply series suffix patterns (regex, case-insensitive, end-anchored)
     if naming_config and naming_config.series_suffixes:
-        for pattern_str in naming_config.series_suffixes:
+        for pattern_str in naming_config.series_suffixes or []:
             try:
                 pattern = re.compile(pattern_str, re.IGNORECASE)
                 before = result
@@ -863,20 +872,18 @@ def filter_subtitle(
     result = subtitle.strip()
     transformations: list[tuple[str, str, str]] = []
 
-    # Step 1: Check preserve_exact - skip ALL cleaning if matched
-    if naming_config and naming_config.preserve_exact:
-        for preserved in naming_config.preserve_exact:
-            if subtitle == preserved or preserved in subtitle:
-                if verbose:
-                    logger.debug(
-                        f"[filter_subtitle] '{subtitle}' -> '{subtitle}' "
-                        "(preserved via preserve_exact)"
-                    )
-                return subtitle
+    # Step 1: Check preserve_exact - skip ALL cleaning if subtitle matches
+    # Uses exact match only for subtitles (no prefix matching like titles)
+    if naming_config and naming_config.preserve_exact and subtitle in naming_config.preserve_exact:
+        if verbose:
+            logger.debug(
+                f"[filter_subtitle] '{subtitle}' -> '{subtitle}' " "(preserved via preserve_exact)"
+            )
+        return subtitle
 
     # Step 2: Check keep_patterns FIRST - whitelist to preserve special subtitles
     if naming_config and naming_config.subtitle_keep_patterns:
-        for pattern_str in naming_config.subtitle_keep_patterns:
+        for pattern_str in naming_config.subtitle_keep_patterns or []:
             try:
                 pattern = re.compile(pattern_str, re.IGNORECASE)
                 if pattern.search(result):
@@ -891,7 +898,7 @@ def filter_subtitle(
 
     # Step 3: Check remove_patterns - if matches, drop subtitle entirely
     if naming_config and naming_config.subtitle_remove_patterns:
-        for pattern_str in naming_config.subtitle_remove_patterns:
+        for pattern_str in naming_config.subtitle_remove_patterns or []:
             try:
                 pattern = re.compile(pattern_str, re.IGNORECASE)
                 if pattern.search(result):
@@ -920,7 +927,7 @@ def filter_subtitle(
         and naming_config.subtitle_redundancy_enabled
         and naming_config.subtitle_redundancy_rules
     ):
-        for rule in naming_config.subtitle_redundancy_rules:
+        for rule in naming_config.subtitle_redundancy_rules or []:
             pattern_template = rule.get("pattern_template", "")
             action = rule.get("action", "drop_subtitle")
             rule_id = rule.get("id", "unknown")
@@ -1111,9 +1118,10 @@ def transliterate_text(
             return result  # Early return if fuzzy match found
 
     # If no fuzzy match, apply exact substring matches
-    for foreign, romanized in filters.author_map.items():
-        if foreign in result:
-            result = result.replace(foreign, romanized)
+    if filters.author_map:
+        for foreign, romanized in filters.author_map.items():
+            if foreign in result:
+                result = result.replace(foreign, romanized)
 
     # Check if there are any remaining non-ASCII characters
     if result.isascii():
@@ -1590,6 +1598,11 @@ def build_mam_file_name(
     - No ripper tag (only on folder)
     - Includes file extension
 
+    Note: max_length is treated as the full path budget (folder + filename combined),
+    not the raw filename length. Because the base name is shared between folder and
+    filename, the actual filename will be approximately half of max_length. This
+    ensures MAM's 225-char path limit is respected when folder and file are combined.
+
     Args:
         series: Series name (cleaned)
         title: Book title
@@ -1600,10 +1613,11 @@ def build_mam_file_name(
         asin: Amazon ASIN (optional - if None, ASIN component is omitted)
         extension: File extension (default: ".m4b")
         naming_config: NamingConfig for cleaning rules
-        max_length: Maximum filename length
+        max_length: Path budget for truncation (not raw filename length).
+                    The base name is truncated so folder + filename fit within this limit.
 
     Returns:
-        Sanitized filename with extension within length limit
+        Sanitized filename with extension within path budget
     """
     # Ensure extension starts with dot
     if extension and not extension.startswith("."):
@@ -2200,9 +2214,12 @@ def parse_series_from_libation_path(
         return all(series_indicators) and not is_author
 
     # Scan upward from parent toward root, find first series-like folder
-    # Start at -2 (parent) and go up, but stop before hitting potential mount points
-    # (we don't want to match things like "audiobooks" or "library")
-    for idx in range(len(parts) - 2, max(len(parts) - 5, -1), -1):
+    # Start at parent (index -2) and scan up at most 3 levels, but never below index 0
+    # This avoids accidentally including the book folder itself (index -1)
+    start_idx = len(parts) - 2  # Parent folder
+    end_idx = max(len(parts) - 5, 0)  # At most 3 levels up, but not below 0
+
+    for idx in range(start_idx, end_idx - 1, -1):
         candidate = parts[idx]
 
         # Skip very short names (likely mount points or root dirs)
