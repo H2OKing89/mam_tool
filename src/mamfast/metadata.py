@@ -247,28 +247,41 @@ def render_bbcode_description(
     env = _get_jinja_env()
     template = env.get_template("mam_description.j2")
 
-    # Extract data from Audnex
-    title = audnex_data.get("title", "Unknown Title")
+    # Get settings for transliteration and naming config
+    try:
+        settings = get_settings()
+        filters = settings.filters
+        naming_config = settings.naming
+    except Exception:
+        filters = None
+        naming_config = None
+
+    # Extract and clean title from Audnex
+    # Apply same filter_title() used for JSON title field for consistency
+    raw_title = audnex_data.get("title", "Unknown Title")
+    title = filter_title(raw_title, naming_config=naming_config, keep_volume=True)
     subtitle = audnex_data.get("subtitle")
 
     # Only add subtitle if it adds new info (not just "Series, Book N")
     # Skip if subtitle is like "Series Name, Book N" pattern
+    # Also filter the subtitle before appending
     if subtitle:
         # Check if subtitle is just "Book N" or "Series, Book N" which is redundant
         subtitle_lower = subtitle.lower()
         is_book_pattern = ", book " in subtitle_lower or subtitle_lower.startswith("book ")
         # Also check if the core series name is already in the title
         if not is_book_pattern and subtitle not in title:
-            title = f"{title}: {subtitle}"
+            # Filter the subtitle too (removes "Light Novel", etc.)
+            cleaned_subtitle = filter_subtitle(
+                subtitle,
+                title=title,
+                series=None,  # Don't have series context here
+                naming_config=naming_config,
+            )
+            if cleaned_subtitle and cleaned_subtitle not in title:
+                title = f"{title}: {cleaned_subtitle}"
 
     synopsis = _clean_html(audnex_data.get("summary", ""))
-
-    # Get settings for transliteration (fallback to no transliteration if not available)
-    try:
-        settings = get_settings()
-        filters = settings.filters
-    except Exception:
-        filters = None
 
     authors_raw = audnex_data.get("authors", [])
     authors_filtered = filter_authors(authors_raw)
