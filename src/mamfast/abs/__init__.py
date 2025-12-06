@@ -43,10 +43,6 @@ from mamfast.abs.importer import (
 )
 from mamfast.abs.paths import PathMapper, abs_path_to_host, host_path_to_abs
 
-# Optional: SQLite indexer (kept for abs-index command and reports)
-# Import these explicitly if needed:
-# from mamfast.abs.indexer import AbsIndex, SyncResult, etc.
-
 __all__ = [
     # ASIN extraction and in-memory index
     "AUDIO_EXTENSIONS",
