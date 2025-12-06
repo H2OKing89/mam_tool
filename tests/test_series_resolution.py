@@ -166,44 +166,42 @@ class TestParseSeriesFromLibationPath:
         assert series_name == "Stormlight Archive"
         assert position == "01"
 
-    def test_no_vol_in_book_folder(self) -> None:
-        """Test extraction when book folder has no vol_XX."""
+    def test_no_vol_in_book_folder_returns_none(self) -> None:
+        """Test extraction returns None when book folder has no vol_XX.
+
+        Per Libation template, books in a series have vol_XX in folder name.
+        No vol_XX means Libation didn't know about a series, so parent is author.
+        """
         path = Path("/library/Andy Weir/Standalone/Project Hail Mary (2021) {ASIN.XXX}")
         result = parse_series_from_libation_path(path)
-        assert result is not None
-        series_name, position = result
-        assert series_name == "Standalone"
-        assert position is None
+        # No vol_XX in book folder means no series folder structure
+        assert result is None
 
     def test_two_level_structure_no_series(self) -> None:
-        """Test Author/Book structure (no series folder)."""
-        # When the parent folder doesn't look like a series folder,
-        # parse_series_from_libation_path still returns it (caller decides)
-        # This is because we can't always tell author from series
+        """Test Author/Book structure (no series folder) returns None.
+
+        When there's no vol_XX, we can't distinguish author from series,
+        so we return None to avoid false positives (like returning author name).
+        """
         path = Path("/library/Andy Weir/Project Hail Mary (2021) {ASIN.XXX}")
         result = parse_series_from_libation_path(path)
-        # The function returns "Andy Weir" as potential series since it
-        # doesn't have ASIN/year/vol_ markers. Caller must validate further.
-        assert result is not None
-        series_name, position = result
-        assert series_name == "Andy Weir"
-        assert position is None
+        # No vol_XX = no series folder, parent is author
+        assert result is None
 
     def test_series_folder_with_year(self) -> None:
         """Test that folders with (Year) are detected as book folders, not series."""
         path = Path("/library/Author/Series Name (2020)/Book Title {ASIN.XXX}")
         result = parse_series_from_libation_path(path)
         # Parent has (2020), so it looks like a book folder, not series
+        # Also, no vol_XX in book folder
         assert result is None
 
-    def test_short_path(self) -> None:
-        """Test path with only 2 parts still returns potential series."""
+    def test_short_path_returns_none(self) -> None:
+        """Test path with only 2 parts returns None (not enough structure)."""
         path = Path("/library/BookFolder")
         result = parse_series_from_libation_path(path)
-        # With 2 parts, "library" is returned as potential series
-        # This is a limitation - caller should validate
-        assert result is not None
-        assert result[0] == "library"
+        # With 2 parts and no vol_XX, can't determine series
+        assert result is None
 
     def test_none_path(self) -> None:
         """Test None path returns None."""

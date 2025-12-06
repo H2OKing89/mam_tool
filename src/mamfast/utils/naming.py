@@ -2127,6 +2127,9 @@ def parse_series_from_libation_path(
     If there's no series folder, the structure is:
         Author/BookTitle (Year) (Author) {ASIN.XXX} [Source]/
 
+    The key differentiator: books IN a series have "vol_XX" in the folder name.
+    If there's no vol_XX, the parent folder is likely the author, not series.
+
     Args:
         libation_path: Full path to the book folder
         book_folder_name: The innermost folder name (optional, extracted from path if not provided)
@@ -2142,14 +2145,22 @@ def parse_series_from_libation_path(
 
     # We need at least Author/Series/Book (3 levels from library root)
     # But we don't know where library root is, so look for patterns
-
-    # Strategy: If we have at least 3 parts and the grandparent isn't typical
-    # author-like (doesn't contain ASIN, year, vol_), it might be a series folder
     if len(parts) < 3:
         return None
 
     # The innermost folder is the book folder
     book_folder = book_folder_name or parts[-1]
+
+    # Key insight from Libation template:
+    # - With series: "Book vol_XX (Year) (Author) {ASIN}" - has vol_XX
+    # - Without series: "Book (Year) (Author) {ASIN}" - no vol_XX
+    #
+    # If the book folder doesn't have vol_XX, Libation didn't know about a series,
+    # so the parent folder is the author, not a series folder.
+    vol_match = _VOL_FROM_NAME_PATTERN.search(book_folder)
+    if not vol_match:
+        # No vol_XX means no series folder - parent is author
+        return None
 
     # The parent could be series or author
     potential_series = parts[-2]
@@ -2169,12 +2180,7 @@ def parse_series_from_libation_path(
     # If all indicators suggest it's a series folder
     if all(series_indicators):
         series_name = potential_series.strip()
-
-        # Try to extract volume from book folder name
-        position = None
-        vol_match = _VOL_FROM_NAME_PATTERN.search(book_folder)
-        if vol_match:
-            position = vol_match.group(1)
+        position = vol_match.group(1)
 
         return (series_name, position)
 
