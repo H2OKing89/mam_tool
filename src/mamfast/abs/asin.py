@@ -775,8 +775,12 @@ def resolve_asin_via_abs_search(
     """Resolve ASIN by searching ABS metadata providers.
 
     This is a last-resort ASIN resolution method that queries Audible
-    (via ABS) to find matching books. Should NOT be used in the hot
-    import path - use for batch resolution of Unknown/ books.
+    (via ABS) to find matching books. Makes a network call per invocation.
+
+    Performance note: This function is opt-in for imports via --abs-search flag.
+    By default, abs-import does NOT call this to avoid API rate limiting on
+    large batches. For batch resolution of Unknown/ books, consider using
+    the standalone abs-resolve-asins command with --write-sidecar.
 
     Args:
         client: AbsClient instance

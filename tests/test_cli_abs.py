@@ -226,6 +226,26 @@ class TestAbsImportParser:
         args = parser.parse_args(["abs-import", "--no-scan"])
         assert args.no_scan is True
 
+    def test_abs_import_abs_search_flag(self) -> None:
+        """Test abs-import --abs-search flag is parsed (opt-in)."""
+        parser = build_parser()
+        # Default is False (off)
+        args_default = parser.parse_args(["abs-import"])
+        assert args_default.abs_search is False
+        # Explicit enable
+        args_enabled = parser.parse_args(["abs-import", "--abs-search"])
+        assert args_enabled.abs_search is True
+
+    def test_abs_import_confidence_flag(self) -> None:
+        """Test abs-import --confidence flag is parsed."""
+        parser = build_parser()
+        # Default value
+        args_default = parser.parse_args(["abs-import"])
+        assert args_default.confidence == 0.75
+        # Custom value
+        args_custom = parser.parse_args(["abs-import", "--confidence", "0.6"])
+        assert args_custom.confidence == 0.6
+
     def test_abs_import_paths_positional(self, tmp_path: Path) -> None:
         """Test abs-import accepts positional paths."""
         parser = build_parser()
@@ -240,6 +260,8 @@ class TestAbsImportParser:
         args = parser.parse_args(["abs-import"])
         assert args.duplicate_policy is None
         assert args.no_scan is False
+        assert args.abs_search is False  # Default off (opt-in)
+        assert args.confidence == 0.75
         assert args.paths == []
 
 
@@ -255,7 +277,7 @@ class TestAbsImportCommand:
             verbose=False,
             duplicate_policy=None,
             no_scan=False,
-            no_abs_search=False,
+            abs_search=False,  # Opt-in, default off
             confidence=0.75,
             paths=[],
         )
@@ -399,6 +421,200 @@ class TestAbsImportCommand:
         ):
             result = cmd_abs_import(args)
             assert result == 0
+
+    def test_abs_import_abs_search_disabled_by_default(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that ABS search is disabled by default (opt-in)."""
+        from mamfast.abs.importer import BatchImportResult
+        from mamfast.cli import cmd_abs_import
+
+        # Create staging directory with a book
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        book_folder = staging / "Author - Book"  # No ASIN in name
+        book_folder.mkdir()
+        (book_folder / "book.m4b").write_text("audio")
+
+        library = tmp_path / "audiobooks"
+        library.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+        mock_settings.paths.library_root = staging
+
+        mock_user = MagicMock()
+        mock_user.username = "testuser"
+        mock_client = MagicMock()
+        mock_client.authorize.return_value = mock_user
+
+        with (
+            patch("mamfast.config.reload_settings", return_value=mock_settings),
+            patch("mamfast.abs.AbsClient", return_value=mock_client),
+            patch("mamfast.abs.build_asin_index", return_value={}),
+            patch("mamfast.abs.import_batch", return_value=BatchImportResult()) as mock_batch,
+        ):
+            result = cmd_abs_import(args)
+            assert result == 0
+            # Verify abs_client is None when --abs-search not passed
+            call_kwargs = mock_batch.call_args.kwargs
+            assert call_kwargs["abs_client"] is None
+
+    def test_abs_import_abs_search_enabled_with_flag(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that --abs-search enables ABS search."""
+        from mamfast.abs.importer import BatchImportResult
+        from mamfast.cli import cmd_abs_import
+
+        args.abs_search = True  # Enable ABS search
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        book_folder = staging / "Author - Book"
+        book_folder.mkdir()
+        (book_folder / "book.m4b").write_text("audio")
+
+        library = tmp_path / "audiobooks"
+        library.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+        mock_settings.paths.library_root = staging
+
+        mock_user = MagicMock()
+        mock_user.username = "testuser"
+        mock_client = MagicMock()
+        mock_client.authorize.return_value = mock_user
+
+        with (
+            patch("mamfast.config.reload_settings", return_value=mock_settings),
+            patch("mamfast.abs.AbsClient", return_value=mock_client),
+            patch("mamfast.abs.build_asin_index", return_value={}),
+            patch("mamfast.abs.import_batch", return_value=BatchImportResult()) as mock_batch,
+        ):
+            result = cmd_abs_import(args)
+            assert result == 0
+            # Verify abs_client is passed when --abs-search is set
+            call_kwargs = mock_batch.call_args.kwargs
+            assert call_kwargs["abs_client"] is mock_client
+
+    def test_abs_import_confidence_flows_through(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that --confidence value flows through to import_batch."""
+        from mamfast.abs.importer import BatchImportResult
+        from mamfast.cli import cmd_abs_import
+
+        args.abs_search = True
+        args.confidence = 0.6  # Custom confidence
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        book_folder = staging / "Author - Book"
+        book_folder.mkdir()
+        (book_folder / "book.m4b").write_text("audio")
+
+        library = tmp_path / "audiobooks"
+        library.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+        mock_settings.paths.library_root = staging
+
+        mock_user = MagicMock()
+        mock_user.username = "testuser"
+        mock_client = MagicMock()
+        mock_client.authorize.return_value = mock_user
+
+        with (
+            patch("mamfast.config.reload_settings", return_value=mock_settings),
+            patch("mamfast.abs.AbsClient", return_value=mock_client),
+            patch("mamfast.abs.build_asin_index", return_value={}),
+            patch("mamfast.abs.import_batch", return_value=BatchImportResult()) as mock_batch,
+        ):
+            result = cmd_abs_import(args)
+            assert result == 0
+            call_kwargs = mock_batch.call_args.kwargs
+            assert call_kwargs["abs_search_confidence"] == 0.6
+
+    def test_abs_import_invalid_confidence_too_high(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that confidence > 1.0 is rejected with error."""
+        from mamfast.cli import cmd_abs_import
+
+        args.confidence = 75  # Common mistake: 75 instead of 0.75
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        book_folder = staging / "Author - Book"
+        book_folder.mkdir()
+        (book_folder / "book.m4b").write_text("audio")
+
+        library = tmp_path / "audiobooks"
+        library.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+        mock_settings.paths.library_root = staging
+
+        mock_user = MagicMock()
+        mock_user.username = "testuser"
+        mock_client = MagicMock()
+        mock_client.authorize.return_value = mock_user
+
+        with (
+            patch("mamfast.config.reload_settings", return_value=mock_settings),
+            patch("mamfast.abs.AbsClient", return_value=mock_client),
+            patch("mamfast.abs.build_asin_index", return_value={}),
+        ):
+            result = cmd_abs_import(args)
+            assert result == 1  # Should fail with invalid confidence
+
+    def test_abs_import_invalid_confidence_negative(
+        self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
+    ) -> None:
+        """Test that negative confidence is rejected with error."""
+        from mamfast.cli import cmd_abs_import
+
+        args.confidence = -0.5
+
+        staging = tmp_path / "staging"
+        staging.mkdir()
+        book_folder = staging / "Author - Book"
+        book_folder.mkdir()
+        (book_folder / "book.m4b").write_text("audio")
+
+        library = tmp_path / "audiobooks"
+        library.mkdir()
+
+        mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+
+        mock_settings = MagicMock()
+        mock_settings.audiobookshelf = mock_abs_config
+        mock_settings.paths.library_root = staging
+
+        mock_user = MagicMock()
+        mock_user.username = "testuser"
+        mock_client = MagicMock()
+        mock_client.authorize.return_value = mock_user
+
+        with (
+            patch("mamfast.config.reload_settings", return_value=mock_settings),
+            patch("mamfast.abs.AbsClient", return_value=mock_client),
+            patch("mamfast.abs.build_asin_index", return_value={}),
+        ):
+            result = cmd_abs_import(args)
+            assert result == 1  # Should fail with invalid confidence
 
 
 # =============================================================================

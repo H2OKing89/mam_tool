@@ -406,9 +406,9 @@ Examples:
         help="Don't trigger ABS library scan after import",
     )
     abs_import_parser.add_argument(
-        "--no-abs-search",
+        "--abs-search",
         action="store_true",
-        help="Skip ABS metadata search for missing ASINs",
+        help="Enable ABS metadata search for missing ASINs (makes API calls)",
     )
     abs_import_parser.add_argument(
         "--confidence",
@@ -2024,9 +2024,19 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         fatal_error(f"Failed to build ASIN index: {e}")
         return 1
 
+    # Validate confidence threshold (common mistake: passing 75 instead of 0.75)
+    confidence = getattr(args, "confidence", 0.75)
+    if not 0.0 <= confidence <= 1.0:
+        client.close()
+        fatal_error(
+            f"Invalid confidence value: {confidence}",
+            "Confidence must be between 0.0 and 1.0 (e.g., 0.75 for 75%)",
+        )
+        return 1
+
     # Determine if we should use ABS search for missing ASINs
-    # Keep client open if we need it for ABS search, otherwise close to free socket
-    use_abs_search = not getattr(args, "no_abs_search", False)
+    # Default OFF: ABS search makes API calls per book, use --abs-search to enable
+    use_abs_search = getattr(args, "abs_search", False)
     abs_client_for_import = client if use_abs_search else None
     if not use_abs_search:
         client.close()
@@ -2037,9 +2047,9 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     print_info(f"Target: {abs_library_root}")
     print_info(f"Duplicate policy: {dup_policy}")
     if use_abs_search:
-        print_info(f"ABS search enabled (confidence: {args.confidence:.0%})")
+        print_info(f"ABS search enabled (confidence: {confidence:.0%})")
     else:
-        print_info("ABS search disabled (--no-abs-search)")
+        print_info("ABS search disabled (use --abs-search to enable)")
 
     if args.dry_run:
         print_dry_run(f"Would import {len(staging_folders)} book(s)")
@@ -2050,7 +2060,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             library_root=abs_library_root,
             asin_index=asin_index,
             abs_client=abs_client_for_import,
-            abs_search_confidence=args.confidence,
+            abs_search_confidence=confidence,
             staging_root=import_source,
             duplicate_policy=dup_policy,
             dry_run=args.dry_run,
