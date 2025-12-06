@@ -1983,14 +1983,24 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
 
     # Display results
     # Track categories for summary (initialized before results loop)
-    known_asin_count = 0
-    unknown_asin_count = 0
-    needs_review_count = 0
+    asin_count = 0
+    no_asin_count = 0
+    heur_count = 0
 
     # Display results
     if result.results:
         console.print()
         console.print("[bold]Import Results[/bold]")
+        console.print()
+
+        # Legend for status tags
+        console.print("[dim]Legend:[/dim]")
+        console.print("  [bold green][ASIN][/bold green]     Matched by ASIN in ABS index")
+        console.print("  [bold yellow][NO-ASIN][/bold yellow] No ASIN; imported under Unknown/")
+        console.print(
+            "  [bold magenta][HEUR][/bold magenta]     "
+            "Heuristic path (no ASIN/series; needs review)"
+        )
         console.print()
 
         # Build tree data for final layout preview
@@ -2008,24 +2018,23 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                 is_heuristic = not r.parsed.series and not r.parsed.year and not has_asin
 
             if has_asin and not is_unknown_author:
-                known_asin_count += 1
-                class_tag = "[green][ASIN][/green]"
-                class_desc = ""
+                asin_count += 1
+                class_tag = "[bold green][ASIN][/bold green]"
+                class_desc = "matched in ABS index"
+                if r.asin:
+                    class_desc = f"{r.asin} matched in ABS index"
             elif has_asin and is_unknown_author:
-                unknown_asin_count += 1
-                needs_review_count += 1
-                class_tag = "[yellow][ASIN][/yellow]"
-                class_desc = " [dim](author unknown)[/dim]"
+                asin_count += 1  # Still has ASIN, just unknown author
+                class_tag = "[bold yellow][ASIN][/bold yellow]"
+                class_desc = f"{r.asin} matched (author unknown)"
             elif is_heuristic:
-                unknown_asin_count += 1
-                needs_review_count += 1
-                class_tag = "[yellow][HEUR][/yellow]"
-                class_desc = " [dim](heuristic path)[/dim]"
+                heur_count += 1
+                class_tag = "[bold magenta][HEUR][/bold magenta]"
+                class_desc = "heuristic path (no ASIN, guessed author)"
             else:
-                unknown_asin_count += 1
-                needs_review_count += 1
-                class_tag = "[yellow][????][/yellow]"
-                class_desc = " [dim](no ASIN)[/dim]"
+                no_asin_count += 1
+                class_tag = "[bold yellow][NO-ASIN][/bold yellow]"
+                class_desc = "no ASIN in folder or mediainfo"
 
             # Status icon and color
             if r.status == "success":
@@ -2035,12 +2044,11 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             else:
                 status_icon = "[red]✗[/red]"
 
-            # Main line: status icon, folder name, ASIN
-            asin_display = f"[dim]({r.asin})[/dim]" if r.asin else ""
-            console.print(f"{status_icon} [cyan]{r.staging_path.name}[/cyan] {asin_display}")
+            # Main line: status icon, folder name
+            console.print(f"{status_icon} [cyan]{r.staging_path.name}[/cyan]")
 
-            # Classification line
-            console.print(f"  {class_tag}{class_desc}")
+            # Classification line with description
+            console.print(f"  {class_tag} {class_desc}")
 
             # Source path
             console.print(f"  [dim][SRC][/dim] {r.staging_path}")
@@ -2155,7 +2163,13 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             tree = Tree(f"[bold cyan]{abs_library_root}[/bold cyan]")
 
             for author in sorted(tree_data.keys()):
-                author_branch = tree.add(f"[blue]{author}[/blue]")
+                # Highlight "Unknown" author branch as needing attention
+                if author == "Unknown":
+                    author_branch = tree.add(
+                        f"[bold yellow]{author}[/bold yellow] [dim](needs ASIN)[/dim]"
+                    )
+                else:
+                    author_branch = tree.add(f"[blue]{author}[/blue]")
                 series_dict = tree_data[author]
 
                 for series in sorted(series_dict.keys()):
@@ -2185,9 +2199,21 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     summary_table.add_column("Value", justify="right")
 
     total_books = len(result.results)
+    needs_review_count = no_asin_count + heur_count
+
     summary_table.add_row("Books processed:", str(total_books))
-    summary_table.add_row("  • With known ASIN:", f"[green]{known_asin_count}[/green]")
-    summary_table.add_row("  • Unknown/heuristic:", f"[yellow]{unknown_asin_count}[/yellow]")
+    summary_table.add_row(
+        "  [bold green][ASIN][/bold green]",
+        f"[green]{asin_count}[/green]",
+    )
+    summary_table.add_row(
+        "  [bold yellow][NO-ASIN][/bold yellow]",
+        f"[yellow]{no_asin_count}[/yellow]",
+    )
+    summary_table.add_row(
+        "  [bold magenta][HEUR][/bold magenta]",
+        f"[magenta]{heur_count}[/magenta]",
+    )
     summary_table.add_row("", "")
     summary_table.add_row("Duplicate policy:", dup_policy)
     summary_table.add_row("Destination root:", str(abs_library_root))
@@ -2203,7 +2229,17 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     if result.failed_count > 0:
         summary_table.add_row("Failed:", f"[red]{result.failed_count}[/red]")
     if needs_review_count > 0:
-        summary_table.add_row("Needs review:", f"[yellow]{needs_review_count}[/yellow]")
+        # Build breakdown of what needs review
+        review_parts = []
+        if no_asin_count > 0:
+            review_parts.append(f"[NO-ASIN]={no_asin_count}")
+        if heur_count > 0:
+            review_parts.append(f"[HEUR]={heur_count}")
+        review_breakdown = f" ({', '.join(review_parts)})" if review_parts else ""
+        summary_table.add_row(
+            "Needs review:",
+            f"[yellow]{needs_review_count}[/yellow]{review_breakdown}",
+        )
 
     if args.dry_run:
         panel_title = "[bold yellow]DRY RUN Summary[/bold yellow]"
