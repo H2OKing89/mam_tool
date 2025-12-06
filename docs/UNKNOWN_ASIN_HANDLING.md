@@ -1,22 +1,39 @@
 # Unknown ASIN Handling Plan
 
-> **Document Version:** 1.4.0 | **Last Updated:** 2025-12-05 | **Status:** ✅ Phase 1 Complete
+> **Document Version:** 2.0.0 | **Last Updated:** 2025-12-05 | **Status:** ✅ Phase 2 Complete
 
 This document outlines the plan for handling audiobooks without ASINs during import.
 
-> **Scope:** This PR implements **Phase 1 only** (multi-file protection). Phases 2-5 are planned for future PRs.
+> **Scope:** Phases 1-2 are complete. Phases 3-5 are planned for future PRs.
 
 ---
 
-## Current Behavior (Phase 1)
+## Current Behavior (Phase 2)
 
 | Scenario | Behavior |
 |----------|----------|
 | Folder has ASIN | Normal MAM-style import with renames |
-| Single-file, no ASIN | Import to `Unknown/`, rename allowed |
-| Multi-file, no ASIN | Import to `Unknown/`, **no renames**, folder kept intact |
+| No ASIN + policy=import | Route by classification (see below) |
+| No ASIN + policy=quarantine | Move to quarantine folder, no renames |
+| No ASIN + policy=skip | Leave in staging, log warning |
 
-**Unknowns go to `Unknown/` for now.** Policies, homebrew routing, and enhanced resolution come in later phases.
+### Classification & Routing (policy=import)
+
+| Content Type | Multi-File? | Target Path | Audio Rename | Sidecar Created |
+|--------------|-------------|-------------|--------------|----------------|
+| **MISSING_ASIN** | No | `Unknown/<OriginalFolder>/` | Yes | Yes |
+| **MISSING_ASIN** | Yes | `Unknown/<OriginalFolder>/` | **Never** | Yes |
+| **HOMEBREW** | No | `<Author>/<Title (Author)>/` | Yes | Yes |
+| **HOMEBREW** | Yes | `<Author>/<Title (Author)>/` | **Never** | Yes |
+
+### Configuration
+
+```yaml
+audiobookshelf:
+  import:
+    unknown_asin_policy: import  # import | quarantine | skip
+    quarantine_path: "/path/to/quarantine"  # Required if policy=quarantine
+```
 
 ---
 
@@ -208,7 +225,7 @@ def rename_files_in_folder(
 
 ---
 
-### Phase 2: Unknown ASIN Policy (Future PR)
+### Phase 2: Unknown ASIN Policy ✅ COMPLETE
 
 **Goal:** Configurable handling for unknown-ASIN content.
 
@@ -687,32 +704,48 @@ class TestMultiFileProtection:
         # ✅ Implemented in test_abs_importer.py
 ```
 
-### Phase 2 Tests (Future)
+### Phase 2 Tests ✅ IMPLEMENTED
 
 #### Core Policy Tests
 
-| Test | Description | Assertions |
-|------|-------------|------------|
-| `test_multifile_no_asin_policy_import` | Multi-file + no ASIN + policy=IMPORT | No audio renames, folder → `Unknown/<OriginalName>/`, sidecar created |
-| `test_single_file_no_asin_policy_import` | Single-file + no ASIN + policy=IMPORT | File renamed, folder → `Unknown/<OriginalName>/` |
-| `test_homebrew_single_policy_import` | `Author - Title` single-file | Folder → `Author/Title (Author)/`, file renamed, type=HOMEBREW |
-| `test_homebrew_multi_policy_import` | `Author - Title` multi-file | Folder → `Author/Title (Author)/`, audio NOT renamed, type=HOMEBREW |
-| `test_policy_quarantine` | Unknown ASIN + policy=QUARANTINE | Folder → quarantine path, no renames |
-| `test_policy_skip` | Unknown ASIN + policy=SKIP | Folder stays in staging, warning logged |
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_policy_skip_returns_skipped` | policy=SKIP leaves folder in staging | ✅ |
+| `test_policy_quarantine_moves_to_quarantine_path` | policy=QUARANTINE moves to quarantine | ✅ |
+| `test_policy_quarantine_requires_path` | QUARANTINE fails without path | ✅ |
+| `test_policy_import_missing_asin_to_unknown` | MISSING_ASIN → `Unknown/` | ✅ |
+| `test_policy_import_homebrew_to_author` | HOMEBREW → `Author/` | ✅ |
+| `test_dry_run_does_not_move` | Dry-run preview only | ✅ |
+
+#### Classification Tests
+
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_matches_homebrew_pattern_basic` | "Author - Title" detected | ✅ |
+| `test_not_homebrew_with_asin` | ASIN present = not homebrew | ✅ |
+| `test_not_homebrew_with_year` | Year present = not homebrew | ✅ |
+| `test_classify_single_file_missing_asin` | Single-file classification | ✅ |
+| `test_classify_multi_file_missing_asin` | Multi-file classification | ✅ |
+| `test_classify_homebrew_pattern` | Homebrew classification | ✅ |
 
 #### Edge Case Tests
 
-| Test | Description | Assertions |
-|------|-------------|------------|
-| `test_zero_audio_files_skipped` | Folder with only sidecars | Warning logged, folder NOT imported |
-| `test_mixed_audio_formats` | `.m4b` + `.mp3` + `.flac` in folder | Treated as multi-file (3 files), protection applies |
-| `test_nested_disc_structure_skipped` | Audio in `Disc 1/` subfolder | `file_count=0`, warning logged, skipped |
-| `test_unicode_folder_name` | Japanese/Chinese characters | Sanitized correctly, original in sidecar |
-| `test_collision_same_title_different_year` | Two `My Book (XXXX)` folders | Both import with unique paths |
-| `test_collision_exact_folder_name` | Identical folder names | Second gets `_2` suffix |
-| `test_reimport_idempotent` | Import same folder twice | Second run skips, no duplicate |
-| `test_quarantine_path_not_writable` | Invalid quarantine path | `ConfigurationError` at load time |
-| `test_sidecar_written_with_correct_fields` | Check sidecar contents | Has `content_type`, `is_multi_file`, `original_folder` |
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_unique_destination_no_collision` | No collision handling | ✅ |
+| `test_unique_destination_with_collision` | `_2` suffix on collision | ✅ |
+| `test_unique_destination_multiple_collisions` | Increment suffix | ✅ |
+| `test_sidecar_written_correctly` | Sidecar has correct fields | ✅ |
+| `test_classify_zero_audio_files` | Zero audio = file_count=0 | ✅ |
+| `test_mixed_formats_counted_as_multi_file` | Mixed formats counted | ✅ |
+
+#### Integration Tests
+
+| Test | Description | Status |
+|------|-------------|--------|
+| `test_import_single_no_asin_uses_policy` | import_single uses policy | ✅ |
+| `test_import_single_no_asin_skip_policy` | import_single respects SKIP | ✅ |
+| `test_import_single_with_asin_ignores_unknown_policy` | ASIN present ignores policy | ✅ |
 
 ### Phase 3 Tests (Future)
 
@@ -732,14 +765,14 @@ class TestMultiFileProtection:
 | Phase | Priority | Effort | Status |
 |-------|----------|--------|--------|
 | 1. Multi-file protection | **Critical** | 1-2 hrs | ✅ **Complete** |
-| 2. Unknown ASIN policy | High | 4-5 hrs | 📋 Planned |
+| 2. Unknown ASIN policy | High | 4-5 hrs | ✅ **Complete** |
 | 3. Enhanced resolution | Medium | 2-3 hrs | 📋 Planned |
 | 4. mediainfo probe | Low | 2-3 hrs | ⏸️ Deferred |
 | 5. Audible API | Low | 4-5 hrs | ⏸️ Deferred |
 
-**Phase 1 complete:** Multi-file data loss bug fixed. Safe to import unknowns.
+**Phase 2 complete:** Unknown ASIN policy with homebrew routing and sidecar metadata.
 
-**Next:** Phase 2 (unknown ASIN policy) or merge current PR and do Phase 2 in separate PR.
+**Next:** Phase 3 (enhanced resolution from filenames and metadata.json).
 
 ---
 
@@ -752,3 +785,4 @@ class TestMultiFileProtection:
 | 1.2.0 | 2025-12-05 | Decoupled content type from file structure; added edge cases section; collision handling; assumptions/constraints; expanded test matrix |
 | 1.3.0 | 2025-12-05 | Added quick-start behavior summary; scope clarification; linked from importer.py |
 | 1.4.0 | 2025-12-05 | Added edge cases from review: sample/trailer files, partial imports, homebrew misclassification, foreign folders |
+| 2.0.0 | 2025-12-05 | **Phase 2 complete:** Added UnknownAsinPolicy enum, homebrew classification, sidecar writer, config schema, tests |

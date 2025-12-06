@@ -161,6 +161,14 @@ class AudiobookshelfImportSchema(BaseModel):
 
     duplicate_policy: str = Field(default="skip", description="What to do with duplicates")
     trigger_scan: str = Field(default="batch", description="When to trigger ABS library scan")
+    unknown_asin_policy: str = Field(
+        default="import",
+        description="How to handle books without ASIN: import | quarantine | skip",
+    )
+    quarantine_path: str | None = Field(
+        default=None,
+        description="Path for quarantined books (required if unknown_asin_policy=quarantine)",
+    )
 
     @field_validator("duplicate_policy")
     @classmethod
@@ -179,6 +187,36 @@ class AudiobookshelfImportSchema(BaseModel):
         if v.lower() not in valid:
             raise ValueError(f"Invalid trigger_scan '{v}'. Must be one of: {valid}")
         return v.lower()
+
+    @field_validator("unknown_asin_policy")
+    @classmethod
+    def validate_unknown_asin_policy(cls, v: str) -> str:
+        """Validate unknown_asin_policy is a recognized value."""
+        valid = {"import", "quarantine", "skip"}
+        if v.lower() not in valid:
+            raise ValueError(f"Invalid unknown_asin_policy '{v}'. Must be one of: {valid}")
+        return v.lower()
+
+    @field_validator("quarantine_path")
+    @classmethod
+    def validate_quarantine_path_absolute(cls, v: str | None) -> str | None:
+        """Ensure quarantine_path is absolute when provided."""
+        if v is not None and v.strip():
+            if not v.startswith("/"):
+                raise ValueError(
+                    f"quarantine_path must be an absolute path (start with /), got: {v}"
+                )
+            return v.rstrip("/")  # Normalize: remove trailing slash
+        return v
+
+    @model_validator(mode="after")
+    def validate_quarantine_requires_path(self) -> AudiobookshelfImportSchema:
+        """Ensure quarantine_path is set when policy is quarantine."""
+        if self.unknown_asin_policy == "quarantine" and (
+            not self.quarantine_path or not self.quarantine_path.strip()
+        ):
+            raise ValueError("quarantine_path is required when unknown_asin_policy is 'quarantine'")
+        return self
 
 
 class AudiobookshelfSchema(BaseModel):

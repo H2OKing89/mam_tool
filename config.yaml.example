@@ -147,6 +147,16 @@ audiobookshelf:
     # What to do when ASIN already exists in library
     duplicate_policy: skip            # skip | warn | overwrite
 
+    # How to handle books without ASIN (see docs/UNKNOWN_ASIN_HANDLING.md)
+    # - import: Import to Unknown/ (missing ASIN) or Author/ (homebrew pattern)
+    # - quarantine: Move to quarantine_path for manual review
+    # - skip: Leave in staging, log warning only
+    unknown_asin_policy: import       # import | quarantine | skip (case-insensitive)
+
+    # Path for quarantined books (required if unknown_asin_policy is 'quarantine')
+    # Must be an absolute host path, e.g. /mnt/user/data/quarantine
+    # quarantine_path: "/path/to/quarantine"
+
     # Trigger ABS library scan after import?
     # none: Don't scan (manual rescan required)
     # each: Scan after each book (slower but immediate)
