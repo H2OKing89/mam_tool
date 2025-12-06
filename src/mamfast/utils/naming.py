@@ -2194,6 +2194,9 @@ def resolve_series(
     2. Libation folder structure (reliable, confidence=0.9)
     3. Title heuristics (fallback, confidence=0.5)
 
+    If Audnex provides series name but no position, lower-confidence sources
+    are checked to fill in the missing position.
+
     Args:
         audnex_data: Audnex API response dict (may contain seriesPrimary)
         libation_path: Path to the book folder in Libation library
@@ -2205,6 +2208,22 @@ def resolve_series(
     # Import here to avoid circular imports
     from mamfast.models import SeriesInfo, SeriesSource
 
+    # Helper to get position from Libation
+    def get_libation_position() -> str | None:
+        if libation_path:
+            libation_result = parse_series_from_libation_path(libation_path)
+            if libation_result:
+                return libation_result[1]  # position
+        return None
+
+    # Helper to get position from title heuristics
+    def get_title_position() -> str | None:
+        if title:
+            title_result = parse_series_from_title(title)
+            if title_result:
+                return title_result[1]  # position
+        return None
+
     # 1. Try Audnex seriesPrimary (authoritative)
     if audnex_data:
         series_primary = audnex_data.get("seriesPrimary")
@@ -2215,6 +2234,9 @@ def resolve_series(
                 cleaned_name = clean_series_name(series_name, title)
                 if cleaned_name:
                     position = series_primary.get("position")
+                    # If Audnex has no position, try to fill from other sources
+                    if not position:
+                        position = get_libation_position() or get_title_position()
                     return SeriesInfo(
                         name=cleaned_name,
                         position=str(position) if position else None,

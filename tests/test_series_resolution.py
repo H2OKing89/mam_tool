@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from mamfast.models import SeriesInfo, SeriesSource
+from mamfast.models import AudiobookRelease, SeriesInfo, SeriesSource
 from mamfast.utils.naming import (
     parse_series_from_libation_path,
     parse_series_from_title,
@@ -312,3 +313,145 @@ class TestSeriesSourceEnum:
         """Test all sources are defined."""
         sources = list(SeriesSource)
         assert len(sources) == 3
+
+
+class TestBuildMamJsonSeriesIntegration:
+    """Integration tests for series handling in build_mam_json."""
+
+    def test_preserves_primary_and_secondary_series(self) -> None:
+        """Test that primary + secondary series from Audnex are both preserved."""
+        from mamfast.metadata import build_mam_json
+
+        release = AudiobookRelease(
+            title="Test Book",
+            asin="B09TEST123",
+        )
+        audnex = {
+            "title": "Test Book",
+            "seriesPrimary": {"name": "Sword Art Online", "position": "5"},
+            "seriesSecondary": {"name": "Progressive", "position": "10"},
+        }
+
+        with patch("mamfast.metadata.render_bbcode_description", return_value=""):
+            result = build_mam_json(release, audnex_data=audnex)
+
+        assert len(result["series"]) == 2
+        assert result["series"][0]["name"] == "Sword Art Online"
+        assert result["series"][0]["number"] == "5"
+        assert result["series"][1]["name"] == "Progressive"
+        assert result["series"][1]["number"] == "10"
+
+    def test_no_audnex_uses_libation_path(self) -> None:
+        """Test that missing Audnex series falls back to Libation path."""
+        from mamfast.metadata import build_mam_json
+
+        release = AudiobookRelease(
+            title="Test Book vol_05",
+            asin="B09TEST123",
+            source_dir=Path("/library/Author/Epic Fantasy/Test Book vol_05"),
+        )
+        audnex = {
+            "title": "Test Book",
+            # No seriesPrimary!
+        }
+
+        with patch("mamfast.metadata.render_bbcode_description", return_value=""):
+            result = build_mam_json(release, audnex_data=audnex)
+
+        assert "series" in result
+        assert len(result["series"]) == 1
+        assert result["series"][0]["name"] == "Epic Fantasy"
+        assert result["series"][0]["number"] == "05"
+
+    def test_no_audnex_no_libation_uses_title_heuristics(self) -> None:
+        """Test title heuristics as last resort when Audnex and Libation fail."""
+        from mamfast.metadata import build_mam_json
+
+        release = AudiobookRelease(
+            title="Black Summoner, Vol. 4",
+            asin="B09TEST123",
+            # No source_dir (or source_dir doesn't have series folder)
+        )
+        audnex = {
+            "title": "Black Summoner, Vol. 4",
+            # No seriesPrimary!
+        }
+
+        with patch("mamfast.metadata.render_bbcode_description", return_value=""):
+            result = build_mam_json(release, audnex_data=audnex)
+
+        assert "series" in result
+        assert len(result["series"]) == 1
+        assert result["series"][0]["name"] == "Black Summoner"
+        assert result["series"][0]["number"] == "4"
+
+    def test_fills_missing_position_from_libation(self) -> None:
+        """Test that resolver fills missing position without overwriting name."""
+        from mamfast.metadata import build_mam_json
+
+        release = AudiobookRelease(
+            title="Test Book",
+            asin="B09TEST123",
+            source_dir=Path("/library/Author/Epic Fantasy/Test Book vol_07"),
+        )
+        # Audnex has series name but NO position
+        audnex = {
+            "title": "Test Book",
+            "seriesPrimary": {"name": "Epic Fantasy", "position": ""},
+        }
+
+        with patch("mamfast.metadata.render_bbcode_description", return_value=""):
+            result = build_mam_json(release, audnex_data=audnex)
+
+        assert "series" in result
+        assert len(result["series"]) == 1
+        assert result["series"][0]["name"] == "Epic Fantasy"
+        # Position should be filled from Libation path
+        assert result["series"][0]["number"] == "07"
+
+    def test_does_not_overwrite_multiple_series_with_resolver(self) -> None:
+        """Test that resolve_series doesn't bulldoze multiple Audnex series."""
+        from mamfast.metadata import build_mam_json
+
+        release = AudiobookRelease(
+            title="Test Book",
+            asin="B09TEST123",
+            source_dir=Path("/library/Author/Different Thing/Test Book vol_99"),
+        )
+        audnex = {
+            "title": "Test Book",
+            "seriesPrimary": {"name": "Sword Art Online", "position": "1"},
+            "seriesSecondary": {"name": "Progressive", "position": "2"},
+        }
+
+        with patch("mamfast.metadata.render_bbcode_description", return_value=""):
+            result = build_mam_json(release, audnex_data=audnex)
+
+        # Should still have both Audnex series, not replaced by Libation's "Different Thing"
+        assert len(result["series"]) == 2
+        assert result["series"][0]["name"] == "Sword Art Online"
+        assert result["series"][0]["number"] == "1"
+        assert result["series"][1]["name"] == "Progressive"
+        assert result["series"][1]["number"] == "2"
+
+    def test_release_series_fallback(self) -> None:
+        """Test fallback to release.series when all other sources fail."""
+        from mamfast.metadata import build_mam_json
+
+        release = AudiobookRelease(
+            title="Standalone Title",
+            asin="B09TEST123",
+            series="Fallback Adventure",
+            series_position="3",
+        )
+        audnex = {
+            "title": "Standalone Title",
+            # No series data
+        }
+
+        with patch("mamfast.metadata.render_bbcode_description", return_value=""):
+            result = build_mam_json(release, audnex_data=audnex)
+
+        assert "series" in result
+        assert result["series"][0]["name"] == "Fallback Adventure"
+        assert result["series"][0]["number"] == "3"
