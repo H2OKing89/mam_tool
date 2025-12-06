@@ -1867,7 +1867,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         trigger_scan_safe,
         validate_import_prerequisites,
     )
-    from mamfast.abs.importer import build_clean_file_name, parse_mam_folder_name
+    from mamfast.abs.importer import build_clean_file_name
     from mamfast.config import reload_settings
 
     print_header("Audiobookshelf Import", dry_run=args.dry_run)
@@ -1982,113 +1982,242 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         return 1
 
     # Display results
+    # Track categories for summary (initialized before results loop)
+    known_asin_count = 0
+    unknown_asin_count = 0
+    needs_review_count = 0
+
+    # Display results
     if result.results:
         console.print()
         console.print("[bold]Import Results[/bold]")
         console.print()
 
+        # Build tree data for final layout preview
+        tree_data: dict[str, dict[str, dict[str, list[str]]]] = {}
+
         for r in result.results:
+            # Determine classification
+            has_asin = bool(r.asin)
+            is_unknown_author = False
+            is_heuristic = False
+
+            if r.parsed:
+                is_unknown_author = r.parsed.author in ("Unknown", "", None)
+                # Heuristic: no series info and no year typically means less metadata
+                is_heuristic = not r.parsed.series and not r.parsed.year and not has_asin
+
+            if has_asin and not is_unknown_author:
+                known_asin_count += 1
+                class_tag = "[green][ASIN][/green]"
+                class_desc = ""
+            elif has_asin and is_unknown_author:
+                unknown_asin_count += 1
+                needs_review_count += 1
+                class_tag = "[yellow][ASIN][/yellow]"
+                class_desc = " [dim](author unknown)[/dim]"
+            elif is_heuristic:
+                unknown_asin_count += 1
+                needs_review_count += 1
+                class_tag = "[yellow][HEUR][/yellow]"
+                class_desc = " [dim](heuristic path)[/dim]"
+            else:
+                unknown_asin_count += 1
+                needs_review_count += 1
+                class_tag = "[yellow][????][/yellow]"
+                class_desc = " [dim](no ASIN)[/dim]"
+
             # Status icon and color
             if r.status == "success":
-                if args.dry_run:
-                    status_icon = "[green]✓[/green]"
-                    status_text = "[green]Ready[/green]"
-                else:
-                    status_icon = "[green]✓[/green]"
-                    status_text = "[green]Imported[/green]"
-            elif r.status == "duplicate":
+                status_icon = "[green]✓[/green]"
+            elif r.status in ("duplicate", "skipped"):
                 status_icon = "[yellow]⏭[/yellow]"
-                status_text = "[yellow]Exists[/yellow]"
-            elif r.status == "skipped":
-                status_icon = "[yellow]⏭[/yellow]"
-                status_text = "[yellow]Skipped[/yellow]"
             else:
                 status_icon = "[red]✗[/red]"
-                status_text = "[red]Failed[/red]"
 
             # Main line: status icon, folder name, ASIN
             asin_display = f"[dim]({r.asin})[/dim]" if r.asin else ""
             console.print(f"{status_icon} [cyan]{r.staging_path.name}[/cyan] {asin_display}")
 
-            # Second line: status and target/error path in tree format
-            if r.status == "success" and r.target_path:
-                if r.target_path.is_relative_to(abs_library_root):
-                    rel_path = r.target_path.relative_to(abs_library_root)
-                else:
-                    # Fallback: show absolute path
-                    rel_path = r.target_path
-                console.print(f"  ├─ {status_text} → [dim]{rel_path}[/dim]")
+            # Classification line
+            console.print(f"  {class_tag}{class_desc}")
 
-                # List files in the folder (for dry-run, use staging; for actual, use target)
+            # Source path
+            console.print(f"  [dim][SRC][/dim] {r.staging_path}")
+
+            # Destination path and file handling
+            if r.status == "success" and r.target_path:
+                console.print(f"  [dim][DST][/dim] {r.target_path}")
+
+                # Build tree data for this book
+                # Build tree data using actual destination path structure
+                # Path structure: library_root/Author/[Series/]FolderName
+                if r.target_path:
+                    try:
+                        rel_path = r.target_path.relative_to(abs_library_root)
+                        parts = rel_path.parts
+
+                        if len(parts) >= 1:
+                            author = parts[0]
+                            if len(parts) == 2:
+                                # No series: Author/FolderName
+                                series = ""
+                                folder_name = parts[1]
+                            elif len(parts) >= 3:
+                                # With series: Author/Series/FolderName
+                                series = parts[1]
+                                folder_name = parts[2]
+                            else:
+                                # Just author folder somehow
+                                series = ""
+                                folder_name = author
+
+                            if author not in tree_data:
+                                tree_data[author] = {}
+                            if series not in tree_data[author]:
+                                tree_data[author][series] = {}
+                            if folder_name not in tree_data[author][series]:
+                                tree_data[author][series][folder_name] = []
+                    except ValueError:
+                        pass  # Can't make relative path
+
+                # List files with rename preview
                 source_folder = r.staging_path if args.dry_run else r.target_path
                 if source_folder.exists():
                     files = sorted(f.name for f in source_folder.iterdir() if f.is_file())
 
                     # In dry-run, compute what files would be renamed to
                     rename_map: dict[str, str] = {}
-                    if args.dry_run:
+                    if args.dry_run and r.parsed:
                         try:
-                            # Use enriched parsed data from import result if available
-                            # (includes Audnex-enriched author/series/position)
-                            if r.parsed:
-                                parsed = r.parsed
-                            else:
-                                parsed = parse_mam_folder_name(r.staging_path.name)
-                                # Use resolved ASIN from import result (may have been
-                                # discovered via mediainfo even if not in folder name)
-                                if r.asin and not parsed.asin:
-                                    parsed.asin = r.asin
+                            parsed = r.parsed
                             for f in source_folder.iterdir():
                                 if not f.is_file():
                                     continue
                                 ext = f.suffix.lower()
-                                # Handle compound extensions
                                 if f.name.lower().endswith(".metadata.json"):
                                     ext = ".metadata.json"
                                 clean_name = build_clean_file_name(parsed, extension=ext)
                                 if f.name != clean_name:
                                     rename_map[f.name] = clean_name
                         except (ValueError, KeyError):
-                            pass  # Can't parse, just show original names
+                            pass
 
-                    for i, filename in enumerate(files):
-                        is_last = i == len(files) - 1
-                        prefix = "  └─" if is_last else "  ├─"
-                        if filename in rename_map:
-                            # Show rename: old → new
-                            console.print(
-                                f"{prefix} [dim]{filename}[/dim] → "
-                                f"[green]{rename_map[filename]}[/green]"
-                            )
-                        else:
-                            console.print(f"{prefix} [dim]{filename}[/dim]")
+                    # Show files
+                    if files:
+                        console.print("  [dim]Files:[/dim]")
+                        for filename in files:
+                            new_name = rename_map.get(filename)
+                            if new_name and new_name != filename:
+                                console.print(
+                                    f"    [dim]{filename}[/dim]\n"
+                                    f"      → [green]{new_name}[/green]"
+                                )
+                            else:
+                                console.print(f"    [dim]{filename}[/dim]")
+
+                            # Add to tree data using path structure
+                            if r.target_path:
+                                try:
+                                    rel_path = r.target_path.relative_to(abs_library_root)
+                                    parts = rel_path.parts
+                                    if len(parts) >= 2:
+                                        author = parts[0]
+                                        series = parts[1] if len(parts) >= 3 else ""
+                                        folder_name = parts[-1]
+                                        final_name = new_name or filename
+                                        if folder_name in tree_data.get(author, {}).get(series, {}):
+                                            tree_data[author][series][folder_name].append(
+                                                final_name
+                                            )
+                                except ValueError:
+                                    pass
+
             elif r.status == "duplicate" and r.error:
-                # Extract path from "Already exists at {path}" message
                 if "Already exists at " in r.error:
                     existing_path = r.error.replace("Already exists at ", "")
-                    console.print(f"  └─ {status_text} → [dim]{existing_path}[/dim]")
+                    console.print(f"  [dim][DST][/dim] [yellow]EXISTS:[/yellow] {existing_path}")
                 else:
-                    console.print(f"  └─ {status_text}")
+                    console.print("  [dim][DST][/dim] [yellow]Duplicate[/yellow]")
             elif r.error:
-                console.print(f"  └─ {status_text}: [red]{r.error}[/red]")
-            else:
-                console.print(f"  └─ {status_text}")
+                console.print(f"  [red]Error:[/red] {r.error}")
 
+            console.print()
+
+        # Render library tree preview (dry-run only, and only if we have data)
+        if args.dry_run and tree_data and result.success_count > 0:
+            from rich.tree import Tree
+
+            console.print()
+            console.print("[bold]Planned Library Layout[/bold]")
+            console.print()
+
+            tree = Tree(f"[bold cyan]{abs_library_root}[/bold cyan]")
+
+            for author in sorted(tree_data.keys()):
+                author_branch = tree.add(f"[blue]{author}[/blue]")
+                series_dict = tree_data[author]
+
+                for series in sorted(series_dict.keys()):
+                    if series:
+                        series_branch = author_branch.add(f"[magenta]{series}[/magenta]")
+                        parent = series_branch
+                    else:
+                        parent = author_branch
+
+                    for folder_name in sorted(series_dict[series].keys()):
+                        folder_branch = parent.add(f"[cyan]{folder_name}[/cyan]")
+                        for file_name in sorted(series_dict[series][folder_name]):
+                            folder_branch.add(f"[dim]{file_name}[/dim]")
+
+            console.print(tree)
             console.print()
 
     # Summary
     print_step(5, 5, "Import complete")
 
+    # Build summary panel
+    from rich.panel import Panel
+    from rich.table import Table
+
+    summary_table = Table(show_header=False, box=None, padding=(0, 2))
+    summary_table.add_column("Label", style="dim")
+    summary_table.add_column("Value", justify="right")
+
+    total_books = len(result.results)
+    summary_table.add_row("Books processed:", str(total_books))
+    summary_table.add_row("  • With known ASIN:", f"[green]{known_asin_count}[/green]")
+    summary_table.add_row("  • Unknown/heuristic:", f"[yellow]{unknown_asin_count}[/yellow]")
+    summary_table.add_row("", "")
+    summary_table.add_row("Duplicate policy:", dup_policy)
+    summary_table.add_row("Destination root:", str(abs_library_root))
+    summary_table.add_row("", "")
+
     if args.dry_run:
-        print_dry_run(f"Would import {result.success_count} book(s)")
-        if result.duplicate_count > 0:
-            print_info(f"  • {result.duplicate_count} duplicate(s) would be skipped")
+        summary_table.add_row("Ready to import:", f"[green]{result.success_count}[/green]")
     else:
-        print_success(f"Imported {result.success_count} book(s)")
-        if result.duplicate_count > 0:
-            print_info(f"  • Duplicates skipped: {result.duplicate_count}")
-        if result.failed_count > 0:
-            print_warning(f"  • Failed: {result.failed_count}")
+        summary_table.add_row("Imported:", f"[green]{result.success_count}[/green]")
+
+    if result.duplicate_count > 0:
+        summary_table.add_row("Skipped (duplicate):", f"[yellow]{result.duplicate_count}[/yellow]")
+    if result.failed_count > 0:
+        summary_table.add_row("Failed:", f"[red]{result.failed_count}[/red]")
+    if needs_review_count > 0:
+        summary_table.add_row("Needs review:", f"[yellow]{needs_review_count}[/yellow]")
+
+    if args.dry_run:
+        panel_title = "[bold yellow]DRY RUN Summary[/bold yellow]"
+        panel_border = "yellow"
+        footer = "\n[yellow]⚠️  DRY RUN: No files were moved or renamed[/yellow]"
+    else:
+        panel_title = "[bold green]Import Summary[/bold green]"
+        panel_border = "green"
+        footer = f"\n[green]✅ Import completed: {result.success_count} book(s) imported[/green]"
+
+    console.print()
+    console.print(Panel(summary_table, title=panel_title, border_style=panel_border))
+    console.print(footer)
+    console.print()
 
     # Trigger ABS scan (if not dry run and not --no-scan)
     if not args.dry_run and not args.no_scan and result.success_count > 0:
