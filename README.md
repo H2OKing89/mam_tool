@@ -208,6 +208,64 @@ mamfast config            # Debug: print loaded config
 | `--dry-run` | Preview without changes |
 | `-V, --version` | Show version |
 
+## 📚 Audiobookshelf Integration
+
+MAMFast supports importing audiobooks directly to Audiobookshelf libraries with duplicate detection and quality-based replacement (trumping).
+
+### Basic Commands
+
+```bash
+mamfast abs-import            # Import staged books to ABS library
+mamfast abs-check-duplicate B0ASIN123  # Check if ASIN exists in library
+mamfast abs-trump-check       # Preview trumping decisions
+mamfast abs-restore           # List/restore archived books
+```
+
+### Trumping (Quality-Based Replacement)
+
+When enabled, trumping automatically replaces lower-quality audiobooks with higher-quality versions based on format, bitrate, and other metrics.
+
+```yaml
+# config/config.yaml
+audiobookshelf:
+  enabled: true
+  host: "http://localhost:13378"
+  api_key: "your-api-key"
+  import:
+    trumping:
+      enabled: true
+      aggressiveness: balanced  # conservative | balanced | aggressive
+      min_bitrate_increase_kbps: 64
+      archive_root: "/mnt/user/data/audio/archive"
+```
+
+**Quality Hierarchy:** m4b > m4a > opus > mp3 > flac (for audiobooks)
+
+> **Note:** FLAC is intentionally ranked lowest for audiobooks because speech doesn't benefit from lossless encoding, FLAC lacks chapter support, and file sizes are significantly larger. See [TRUMPING.md](docs/audiobookshelf/TRUMPING.md#format-tier-rationale) for detailed rationale.
+
+**Trumping Decisions:**
+- **REPLACE_WITH_NEW** - New file is better quality → archive old, import new
+- **KEEP_EXISTING** - Existing is equal or better → skip import
+- **KEEP_BOTH** - Incomparable (different language, etc.) → defer to duplicate policy
+- **REJECT_NEW** - New is worse quality → skip entirely
+
+```bash
+# Preview what would be trumped
+mamfast abs-trump-check
+
+# Preview with detailed comparison tables
+mamfast abs-trump-check --verbose
+
+# Check specific folders
+mamfast abs-trump-check /path/to/folder
+
+# List archived books
+mamfast abs-restore --list
+
+# Restore a specific archive
+mamfast abs-restore /path/to/archive/folder
+```
+
 ## 📁 Project Structure
 
 ```

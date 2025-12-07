@@ -107,9 +107,16 @@ qbittorrent:
 audnex:
   base_url: "https://api.audnex.us"
   timeout_seconds: 30
-  # Regions to try in order when fetching metadata (first success wins)
-  # Some ASINs are region-specific (e.g., US-only or UK-only books)
+  # Regions to try in order when fetching metadata
+  # Tries each region in order; returns data from first region where ASIN exists.
+  # For English audiobooks, US/UK usually has the best metadata coverage.
+  # Some ASINs are region-specific (e.g., US-only or UK-only books).
   # Valid regions: us, uk, au, ca, de, es, fr, in, it, jp
+  #
+  # Recommended for English content:
+  #   regions: [us, uk, au, ca]
+  # Full fallback (may return non-English metadata for region-specific books):
+  #   regions: [us, uk, au, ca, de, es, fr, in, it, jp]
   regions:
     - us
     # - uk  # Uncomment to add UK as fallback
@@ -168,6 +175,50 @@ audiobookshelf:
     # each: Scan after each book (slower but immediate)
     # batch: Scan once after all imports complete (recommended)
     trigger_scan: batch
+
+    # ───────────────────────────────────────────────────────────────────────
+    # ABS Search: Query Audible via ABS for books without ASIN
+    # When enabled, books missing ASIN will be searched on Audible
+    # to resolve metadata (author, year, series info, etc.)
+    # ───────────────────────────────────────────────────────────────────────
+    abs_search: true                  # Enable ABS metadata search (default: true)
+    abs_search_confidence: 0.75       # Minimum match confidence (0.0-1.0)
+
+    # ───────────────────────────────────────────────────────────────────────
+    # Trumping: Quality-Based Replacement (optional)
+    # See docs/audiobookshelf/TRUMPING.md for full documentation
+    # ───────────────────────────────────────────────────────────────────────
+    trumping:
+      # Master enable/disable (default: off - opt-in feature)
+      enabled: false
+
+      # How eager to replace existing content
+      # - conservative: Only trump for major upgrades (format tier changes)
+      # - balanced: Trump for clear improvements (recommended when enabled)
+      # - aggressive: Trump for any measurable improvement
+      aggressiveness: balanced
+
+      # Minimum bitrate improvement required (kbps) when format tier is equal
+      # Set to 0 to allow any bitrate improvement
+      min_bitrate_increase_kbps: 64
+
+      # Tiebreakers: when core metrics (format, bitrate, sample rate) are equal
+      prefer_chapters: true           # Chapter markers trump non-chaptered
+      prefer_stereo: true             # Stereo trumps mono
+
+      # Duration tolerance for sanity checks
+      # Reject incoming if significantly shorter (truncated?)
+      min_duration_ratio: 0.9         # Incoming must be >= 90% of existing duration
+      # Keep both if incoming is significantly longer (different edition?)
+      max_duration_ratio: 1.25        # Incoming > 125% triggers KEEP_BOTH
+
+      # Where to archive replaced content (REQUIRED when enabled=true)
+      # Old files moved to: {archive_root}/{year}/{ASIN}/{timestamp}/
+      # Uncomment and set this before turning on trumping:
+      # archive_root: "/mnt/user/data/audio/archive"
+
+      # Keep archive organized by year?
+      archive_by_year: true
 
   # Index database location (for ASIN caching and duplicate detection)
   index_db: "./data/abs_index.db"

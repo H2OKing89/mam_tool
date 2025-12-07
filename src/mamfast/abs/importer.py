@@ -11,10 +11,12 @@ See docs/UNKNOWN_ASIN_HANDLING.md for unknown ASIN handling design (Phase 1+).
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import logging
 import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -28,11 +30,73 @@ from mamfast.abs.asin import (
     resolve_asin_from_folder_with_mediainfo,
     resolve_asin_via_abs_search,
 )
+from mamfast.abs.paths import PathMapper
+from mamfast.abs.trumping import (
+    TrumpDecision,
+    TrumpPrefs,
+    adjust_for_aggressiveness,
+    archive_existing,
+    decide_trump,
+    extract_trumpable_meta,
+    is_multi_file_layout,
+)
 from mamfast.metadata import fetch_audnex_book
 from mamfast.utils.naming import build_mam_file_name, build_mam_folder_name, clean_series_name
 
 if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Module-level cache for format indicators loaded from naming.json
+# ─────────────────────────────────────────────────────────────────────────────
+_FORMAT_INDICATORS: list[str] | None = None
+
+# Fallback format indicators if naming.json is not available
+_DEFAULT_FORMAT_INDICATORS = [
+    "(Light Novel)",
+    "(light novel)",
+    "Light Novel",
+    "(Manga)",
+    "(Graphic Novel)",
+    "(Unabridged)",
+    "Unabridged",
+    "(Audiobook)",
+    "Audiobook",
+]
+
+
+def _get_format_indicators() -> list[str]:
+    """Load format indicators from naming.json (cached).
+
+    Reads the format_indicators.phrases from config/naming.json.
+    Falls back to hardcoded defaults if naming.json is unavailable.
+    """
+    global _FORMAT_INDICATORS
+    if _FORMAT_INDICATORS is not None:
+        return _FORMAT_INDICATORS
+
+    indicators: list[str] = []
+    try:
+        # Try to find naming.json relative to this file
+        config_dir = Path(__file__).parent.parent.parent.parent / "config"
+        naming_path = config_dir / "naming.json"
+
+        if naming_path.exists():
+            with open(naming_path, encoding="utf-8") as f:
+                data = json.load(f)
+            phrases = data.get("format_indicators", {}).get("phrases", [])
+            if phrases:
+                indicators = phrases
+    except Exception:
+        pass  # Fall through to defaults
+
+    if not indicators:
+        indicators = _DEFAULT_FORMAT_INDICATORS.copy()
+
+    _FORMAT_INDICATORS = indicators
+    return _FORMAT_INDICATORS
+
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +157,10 @@ class BatchImportResult:
     skipped_count: int = 0
     duplicate_count: int = 0
     failed_count: int = 0
+    # Trumping statistics
+    trump_replaced_count: int = 0  # Existing archived, new imported
+    trump_kept_existing_count: int = 0  # No improvement, kept existing
+    trump_rejected_count: int = 0  # Incoming was worse
 
     def add(self, result: ImportResult) -> None:
         """Add a result and update counts."""
@@ -105,6 +173,15 @@ class BatchImportResult:
             self.duplicate_count += 1
         elif result.status == "failed":
             self.failed_count += 1
+        elif result.status == "trump_replaced":
+            self.trump_replaced_count += 1
+            self.success_count += 1  # Also count as success
+        elif result.status == "trump_kept_existing":
+            self.trump_kept_existing_count += 1
+            self.skipped_count += 1  # Also count as skipped
+        elif result.status == "trump_rejected":
+            self.trump_rejected_count += 1
+            self.skipped_count += 1  # Also count as skipped
 
 
 @dataclass
@@ -162,6 +239,15 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     # Try to extract ASIN first (multiple formats supported)
     asin = extract_asin(folder_name)
 
+    # Strip format indicators BEFORE parsing to avoid "(Light Novel)" etc. being
+    # misidentified as author in Libation-style folder names
+    # Format indicators are loaded from naming.json (cached) with fallback defaults
+    clean_folder = folder_name
+    for indicator in _get_format_indicators():
+        clean_folder = clean_folder.replace(indicator, "").strip()
+    # Collapse multiple spaces
+    clean_folder = re.sub(r"\s{2,}", " ", clean_folder).strip()
+
     # Extract components using patterns
     # Pattern parts:
     # - Author at start (before first " - ")
@@ -173,7 +259,7 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     # - Optional ASIN in brackets
 
     # Strip ASIN markers from end for cleaner parsing
-    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*$", "", folder_name)
+    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*$", "", clean_folder)
     clean_name = re.sub(r"\s*\[ASIN\.[A-Z0-9]+\]\s*$", "", clean_name)
     clean_name = re.sub(r"\s*\[B0[A-Z0-9]{8,9}\]\s*$", "", clean_name)
 
@@ -306,6 +392,13 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     to fill in missing author/series/position. This provides accurate metadata
     even for poorly-named folders.
 
+    Uses normalize_audnex_book() from naming.py for consistent series extraction
+    across all pipelines. That function handles:
+    - seriesPrimary (source of truth)
+    - Subtitle fallback ("Series Name, Book 5")
+    - Title fallback ("A Most Unlikely Hero, Volume 8")
+    - Series name cleaning (removes " Series" suffix, etc.)
+
     Args:
         parsed: ParsedFolderName from parse_mam_folder_name()
         asin: Resolved ASIN to look up
@@ -313,6 +406,8 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     Returns:
         ParsedFolderName with enriched data (modified in place and returned)
     """
+    from mamfast.utils.naming import normalize_audnex_book
+
     try:
         audnex_data = fetch_audnex_book(asin)
     except Exception as e:
@@ -323,6 +418,9 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
         logger.debug(f"No Audnex data found for ASIN {asin}")
         return parsed
 
+    # Use the naming module's normalizer for consistent series extraction
+    normalized = normalize_audnex_book(audnex_data)
+
     # Extract author from Audnex (prefer first author)
     authors = audnex_data.get("authors", [])
     if authors and (parsed.author == "Unknown" or not parsed.author):
@@ -331,64 +429,31 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
             parsed.author = first_author
             logger.info(f"Enriched author from Audnex: {first_author}")
 
-    # Extract series info from Audnex - check seriesPrimary first
-    series_primary = audnex_data.get("seriesPrimary")
-    if series_primary:
-        series_name = series_primary.get("name")
-        # Coerce to string - Audnex sometimes returns int for position
-        series_position_raw = series_primary.get("position")
-        series_position = str(series_position_raw) if series_position_raw is not None else None
-
-        if series_name and not parsed.series:
-            parsed.series = series_name
-            parsed.is_standalone = False
-            logger.info(f"Enriched series from Audnex seriesPrimary: {series_name}")
-
-        if series_position and not parsed.series_position:
-            parsed.series_position = series_position
-            logger.info(f"Enriched series position from Audnex: {series_position}")
-
-    # Fallback: parse series from subtitle if seriesPrimary not available
-    # Subtitle patterns: "Series Name, Book 5" or "Series Name, Volume 3"
-    if not parsed.series:
-        subtitle = audnex_data.get("subtitle", "")
-        if subtitle:
-            # Pattern: "Series Name, Book N" or "Series Name, Volume N"
-            subtitle_match = re.match(
-                r"^(.+?),\s*(?:Book|Volume|Vol\.?|Part)\s*(\d+)$",
-                subtitle,
-                re.IGNORECASE,
+    # Apply series info from normalized data
+    # ALWAYS prefer Audnex series over parsed series - Audnex is authoritative
+    # Parsed series may be incorrect (e.g., "The Rising of the Shield Hero Volume 04"
+    # instead of "Rising of the Shield Hero")
+    if normalized.series_name:
+        if parsed.series != normalized.series_name:
+            logger.info(
+                f"Enriched series from Audnex: {normalized.series_name}"
+                + (f" (was: {parsed.series})" if parsed.series else "")
             )
-            if subtitle_match:
-                series_name = subtitle_match.group(1).strip()
-                # Coerce to string for consistency
-                series_position = str(subtitle_match.group(2))
-                parsed.series = series_name
-                parsed.is_standalone = False
-                logger.info(f"Enriched series from Audnex subtitle: {series_name}")
-                if not parsed.series_position:
-                    parsed.series_position = series_position
-                    logger.info(f"Enriched series position from subtitle: {series_position}")
+        parsed.series = normalized.series_name
+        parsed.is_standalone = False
 
-    # Extract/update title from Audnex
-    audnex_title = audnex_data.get("title")
-    if audnex_title:
-        # Always prefer Audnex title if we have it - it's authoritative
-        # But clean it up: remove series suffix if we extracted series from it
-        clean_title = audnex_title
-        if parsed.series and parsed.series in clean_title:
-            # Remove "Series Name N:" prefix pattern
-            clean_title = re.sub(
-                rf"^{re.escape(parsed.series)}\s*\d*\s*:\s*",
-                "",
-                clean_title,
-                flags=re.IGNORECASE,
-            ).strip()
-        if clean_title and (
-            parsed.title in ("Unknown", "") or len(audnex_title) < len(parsed.title)
-        ):
-            parsed.title = clean_title
-            logger.info(f"Enriched title from Audnex: {clean_title}")
+    if normalized.series_position:
+        if parsed.series_position != normalized.series_position:
+            logger.info(
+                f"Enriched series position from Audnex: {normalized.series_position}"
+                + (f" (was: {parsed.series_position})" if parsed.series_position else "")
+            )
+        parsed.series_position = normalized.series_position
+
+    # Apply title from normalized data (uses display_title which handles swaps)
+    if normalized.display_title and (parsed.title in ("Unknown", "") or not parsed.title):
+        parsed.title = normalized.display_title
+        logger.info(f"Enriched title from Audnex: {normalized.display_title}")
 
     # Extract year from release date if missing
     release_date = audnex_data.get("releaseDate")
@@ -568,6 +633,63 @@ def rename_files_in_folder(
         renamed.append((file_path.name, new_name))
 
     return renamed
+
+
+def remove_ignored_files(
+    folder_path: Path,
+    ignore_patterns: list[str],
+    *,
+    dry_run: bool = False,
+) -> list[str]:
+    """Remove files matching ignore patterns from a folder.
+
+    Supports two pattern types:
+    - Simple extension: ".json" matches any file ending in .json
+    - Glob pattern: "*.metadata.json" matches files ending in .metadata.json
+
+    Args:
+        folder_path: Path to folder to clean
+        ignore_patterns: List of patterns (e.g., [".json", "*.metadata.json"])
+        dry_run: If True, only log what would happen
+
+    Returns:
+        List of removed filenames
+    """
+    if not ignore_patterns:
+        return []
+
+    removed: list[str] = []
+
+    for file_path in folder_path.iterdir():
+        if not file_path.is_file():
+            continue
+
+        filename = file_path.name
+        filename_lower = filename.lower()
+        should_remove = False
+
+        for pattern in ignore_patterns:
+            pattern_lower = pattern.lower()
+            # Glob pattern (contains *) or simple extension match
+            if ("*" in pattern and fnmatch.fnmatch(filename_lower, pattern_lower)) or (
+                pattern.startswith(".") and filename_lower.endswith(pattern_lower)
+            ):
+                should_remove = True
+                break
+
+        if should_remove:
+            if dry_run:
+                logger.info("[DRY RUN] Would remove ignored file: %s", file_path)
+            else:
+                try:
+                    file_path.unlink()
+                    logger.info("Removed ignored file: %s", filename)
+                except OSError as e:
+                    logger.warning("Failed to remove %s: %s", filename, e)
+                    continue
+            removed.append(filename)
+
+    return removed
 
 
 # =============================================================================
@@ -871,24 +993,20 @@ def handle_unknown_asin(
     )
 
 
-def _normalize_folder_name(name: str) -> str:
-    """Normalize folder name for comparison.
+def _normalize_for_comparison(name: str) -> str:
+    """Normalize a name for case-insensitive comparison.
 
-    Normalizes:
-    - Lowercase
-    - Remove common suffixes: " Series", " Trilogy", " Saga"
-    - Collapse whitespace
-    - Remove punctuation
+    Used to match folder names that may differ only in case, punctuation,
+    or whitespace. Does NOT remove semantic suffixes like "Series" -
+    use clean_series_name() for that before calling this.
 
     Args:
-        name: Folder name
+        name: Name to normalize (already cleaned of semantic suffixes)
 
     Returns:
-        Normalized name for comparison
+        Lowercase, punctuation-stripped, whitespace-collapsed string
     """
     result = name.lower()
-    # Remove common suffixes
-    result = re.sub(r"\s+(series|trilogy|saga)\s*$", "", result)
     # Replace punctuation with spaces
     result = re.sub(r"[.,;:/\-_]+", " ", result)
     # Collapse whitespace
@@ -909,11 +1027,11 @@ def _find_matching_author_folder(library_root: Path, author: str) -> Path | None
     if not library_root.exists():
         return None
 
-    normalized_author = _normalize_folder_name(author)
+    normalized_author = _normalize_for_comparison(author)
     for folder in library_root.iterdir():
         if not folder.is_dir():
             continue
-        if _normalize_folder_name(folder.name) == normalized_author:
+        if _normalize_for_comparison(folder.name) == normalized_author:
             logger.debug("Matched author '%s' to existing folder '%s'", author, folder.name)
             return folder
     return None
@@ -921,7 +1039,7 @@ def _find_matching_author_folder(library_root: Path, author: str) -> Path | None
 
 def _find_matching_series_folder(
     author_folder: Path, series: str, book_title: str | None = None
-) -> Path | None:
+) -> tuple[Path | None, str | None]:
     """Find existing series folder with normalized matching.
 
     Handles:
@@ -935,24 +1053,25 @@ def _find_matching_series_folder(
         book_title: Optional book title for " The" prefix inheritance
 
     Returns:
-        Path to existing series folder if found, else None
+        Tuple of (path to existing series folder if found, canonical cleaned name)
+        The canonical name is returned so callers can decide whether to rename
     """
     if not author_folder.exists():
-        return None
+        return None, None
 
     # Clean and normalize the input series name
     cleaned_series = clean_series_name(series, book_title) or series
-    normalized_series = _normalize_folder_name(cleaned_series)
+    normalized_series = _normalize_for_comparison(cleaned_series)
 
     for folder in author_folder.iterdir():
         if not folder.is_dir():
             continue
         # Try normalized match against cleaned folder name
         folder_cleaned = clean_series_name(folder.name) or folder.name
-        if _normalize_folder_name(folder_cleaned) == normalized_series:
+        if _normalize_for_comparison(folder_cleaned) == normalized_series:
             logger.debug("Matched series '%s' to existing folder '%s'", series, folder.name)
-            return folder
-    return None
+            return folder, cleaned_series
+    return None, cleaned_series
 
 
 def _same_filesystem(path1: Path, path2: Path) -> bool:
@@ -1070,12 +1189,14 @@ def build_target_path(
     existing_author = _find_matching_author_folder(library_root, author_name)
     author_folder = existing_author or (library_root / author_name)
 
-    # Determine series - prefer staging path, fall back to parsed
-    series_name = staging_series or parsed.series
+    # Determine series - PREFER parsed (enriched from Audnex) over staging path
+    # Staging path may have incorrect/duplicate series names (e.g., "Black Summoner Black Summoner")
+    # while Audnex data is authoritative
+    series_name = parsed.series or staging_series
 
-    # Use series folder if we have a series name from staging path
-    # OR from parsed (and not standalone)
-    has_series = staging_series or (parsed.series and not parsed.is_standalone)
+    # Use series folder if we have a series name from parsed (Audnex-enriched)
+    # OR from staging path (fallback)
+    has_series = (parsed.series and not parsed.is_standalone) or staging_series
 
     # Build clean folder name using naming module
     clean_folder_name = build_clean_folder_name(parsed)
@@ -1085,14 +1206,27 @@ def build_target_path(
         cleaned_series = clean_series_name(series_name, parsed.title) or series_name
 
         # Find existing series folder
-        existing_series = _find_matching_series_folder(
+        existing_series, canonical_series = _find_matching_series_folder(
             author_folder if existing_author else library_root / author_name,
             cleaned_series,
             parsed.title,
         )
 
-        # Use existing series folder or create new with cleaned name
-        series_folder = existing_series or (author_folder / cleaned_series)
+        # Use canonical name (may differ from existing folder name)
+        final_series_name = canonical_series or cleaned_series
+
+        if existing_series:
+            # Check if existing folder name differs from canonical
+            if existing_series.name != final_series_name:
+                logger.info(
+                    "Using existing series folder '%s' (canonical: '%s')",
+                    existing_series.name,
+                    final_series_name,
+                )
+            series_folder = existing_series
+        else:
+            # Create new folder with canonical (cleaned) name
+            series_folder = author_folder / final_series_name
 
         return series_folder / clean_folder_name
     else:
@@ -1111,6 +1245,9 @@ def import_single(
     duplicate_policy: str = "skip",
     unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
     quarantine_path: Path | None = None,
+    ignore_patterns: list[str] | None = None,
+    trump_prefs: TrumpPrefs | None = None,
+    path_mapper: PathMapper | None = None,
     dry_run: bool = False,
 ) -> ImportResult:
     """Import a single audiobook from staging to library.
@@ -1125,6 +1262,9 @@ def import_single(
         duplicate_policy: "skip", "warn", or "overwrite"
         unknown_asin_policy: How to handle books without ASIN
         quarantine_path: Path for quarantine (required if policy=QUARANTINE)
+        ignore_patterns: File patterns to remove before import (e.g., [".json", "*.metadata.json"])
+        trump_prefs: Trumping preferences (None = disabled)
+        path_mapper: Optional path mapper for container↔host conversion
         dry_run: If True, don't actually move files
 
     Returns:
@@ -1179,6 +1319,11 @@ def import_single(
         if resolution.found:
             asin = resolution.asin
             parsed.asin = asin
+            # Update author from search result if we don't have one
+            # (e.g., Libation folder without author in name)
+            if resolution.resolved_author and (not parsed.author or parsed.author == "Unknown"):
+                parsed.author = resolution.resolved_author
+                logger.debug("Updated author from ABS search: %s", resolution.resolved_author)
             logger.info(
                 "Resolved ASIN %s from %s (%s)",
                 asin,
@@ -1200,6 +1345,97 @@ def import_single(
     # Check for duplicates (we have ASIN) - do this BEFORE Audnex enrichment
     # to avoid unnecessary network calls for books we'll skip anyway
     is_dup, existing_path = asin_exists(asin_index, asin)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Trumping: Quality-based replacement check (runs BEFORE duplicate_policy)
+    # ─────────────────────────────────────────────────────────────────────
+    trump_decision: TrumpDecision | None = None
+    trump_reason: str | None = None
+
+    if is_dup and trump_prefs and trump_prefs.enabled:
+        existing_entry = asin_index[asin]
+        # Convert container path to host path if path_mapper provided
+        existing_folder = (
+            path_mapper.to_host(existing_entry.path) if path_mapper else Path(existing_entry.path)
+        )
+
+        # v1: Skip trumping entirely for multi-file layouts
+        # Fall through to duplicate_policy handling instead
+        if is_multi_file_layout(staging_folder) or is_multi_file_layout(existing_folder):
+            logger.debug(
+                "Multi-file layout detected - skipping trumping, "
+                "falling back to duplicate_policy=%s",
+                duplicate_policy,
+            )
+            # trump_decision stays None → fall through to duplicate handling
+        else:
+            # Single-file layout - proceed with trumping comparison
+            existing_meta = extract_trumpable_meta(existing_folder, asin)
+            incoming_meta = extract_trumpable_meta(staging_folder, asin)
+
+            trump_decision, trump_reason = decide_trump(existing_meta, incoming_meta, trump_prefs)
+            trump_decision, trump_reason = adjust_for_aggressiveness(
+                trump_decision, trump_reason, trump_prefs
+            )
+
+            # Log with context (ASIN and title) for easier log review
+            short_title = parsed.title[:50] + "..." if len(parsed.title) > 50 else parsed.title
+            logger.info(
+                "Trump decision: %s - %s (ASIN=%s, title=%s)",
+                trump_decision.name,
+                trump_reason,
+                asin,
+                short_title,
+            )
+
+            match trump_decision:
+                case TrumpDecision.REPLACE_WITH_NEW:
+                    # Archive existing, then import new (continue with normal flow)
+                    archive_existing(
+                        existing_folder,
+                        existing_meta,
+                        incoming_meta,
+                        trump_decision,
+                        trump_reason,
+                        trump_prefs,
+                        dry_run=dry_run,
+                    )
+                    # Remove from index so duplicate check below doesn't trigger
+                    # (the existing folder is now archived)
+                    if not dry_run:
+                        del asin_index[asin]
+                    # Mark as no longer duplicate so we proceed with import
+                    is_dup = False
+                    # Continue with normal import flow below
+
+                case TrumpDecision.KEEP_EXISTING:
+                    return ImportResult(
+                        staging_path=staging_folder,
+                        target_path=None,
+                        asin=asin,
+                        status="trump_kept_existing",
+                        error=f"Trumping: {trump_reason}",
+                        parsed=parsed,
+                    )
+
+                case TrumpDecision.REJECT_NEW:
+                    return ImportResult(
+                        staging_path=staging_folder,
+                        target_path=None,
+                        asin=asin,
+                        status="trump_rejected",
+                        error=f"Rejected: {trump_reason}",
+                        parsed=parsed,
+                    )
+
+                case TrumpDecision.KEEP_BOTH:
+                    # Fall through to existing duplicate_policy handling
+                    logger.info("Trumping inconclusive: %s", trump_reason)
+                    # trump_decision stays KEEP_BOTH → duplicate handling applies
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Standard duplicate handling (trumping may have already handled this)
+    # ─────────────────────────────────────────────────────────────────────
     if is_dup:
         if duplicate_policy == "skip":
             return ImportResult(
@@ -1260,6 +1496,10 @@ def import_single(
                 parsed=parsed,
             )
 
+    # Remove ignored files before moving (e.g., .metadata.json)
+    if ignore_patterns:
+        remove_ignored_files(staging_folder, ignore_patterns, dry_run=dry_run)
+
     if dry_run:
         logger.info("[DRY RUN] Would move %s → %s", staging_folder, target_path)
         # Preview file renames
@@ -1300,11 +1540,17 @@ def import_single(
     # Rename files to match clean MAM naming convention
     rename_files_in_folder(target_path, parsed)
 
+    # Determine status based on whether trumping was involved
+    if trump_decision == TrumpDecision.REPLACE_WITH_NEW:
+        final_status = "trump_replaced"
+    else:
+        final_status = "success"
+
     return ImportResult(
         staging_path=staging_folder,
         target_path=target_path,
         asin=asin,
-        status="success",
+        status=final_status,
         parsed=parsed,
     )
 
@@ -1320,6 +1566,10 @@ def import_batch(
     duplicate_policy: str = "skip",
     unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
     quarantine_path: Path | None = None,
+    ignore_patterns: list[str] | None = None,
+    trump_prefs: TrumpPrefs | None = None,
+    path_mapper: PathMapper | None = None,
+    progress_callback: Callable[[int, int, Path], None] | None = None,
     dry_run: bool = False,
 ) -> BatchImportResult:
     """Import multiple audiobooks from staging to library.
@@ -1334,14 +1584,23 @@ def import_batch(
         duplicate_policy: "skip", "warn", or "overwrite"
         unknown_asin_policy: How to handle books without ASIN
         quarantine_path: Path for quarantine (required if policy=QUARANTINE)
+        ignore_patterns: File patterns to remove before import (e.g., [".json", "*.metadata.json"])
+        trump_prefs: Trumping preferences (None = disabled)
+        path_mapper: Optional path mapper for container↔host conversion
+        progress_callback: Optional callback(current, total, folder) for progress updates
         dry_run: If True, don't actually move files
 
     Returns:
         BatchImportResult with all results and counts
     """
     batch_result = BatchImportResult()
+    total = len(staging_folders)
 
-    for folder in staging_folders:
+    for i, folder in enumerate(staging_folders):
+        # Call progress callback before processing each folder
+        if progress_callback:
+            progress_callback(i, total, folder)
+
         result = import_single(
             staging_folder=folder,
             library_root=library_root,
@@ -1352,6 +1611,9 @@ def import_batch(
             duplicate_policy=duplicate_policy,
             unknown_asin_policy=unknown_asin_policy,
             quarantine_path=quarantine_path,
+            ignore_patterns=ignore_patterns,
+            trump_prefs=trump_prefs,
+            path_mapper=path_mapper,
             dry_run=dry_run,
         )
         batch_result.add(result)

@@ -408,7 +408,7 @@ class AbsClient:
             )
 
         total = validated.total
-        logger.info(f"Fetched {len(items)} items from library (total: {total})")
+        logger.debug(f"Fetched page with {len(items)} items (library total: {total})")
         return items, total
 
     def get_all_library_items(
@@ -427,6 +427,7 @@ class AbsClient:
         """
         all_items: list[AbsLibraryItem] = []
         page = 0
+        total = 0
 
         while True:
             items, total = self.get_library_items(
@@ -436,7 +437,8 @@ class AbsClient:
             )
             all_items.extend(items)
 
-            logger.debug(f"Fetched page {page + 1}, {len(all_items)}/{total} items")
+            # Log progress as "fetched so far / total"
+            logger.info(f"Fetched {len(all_items)}/{total} items from library")
 
             if len(all_items) >= total or not items:
                 break

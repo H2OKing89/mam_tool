@@ -17,6 +17,7 @@ Phase 4 adds mediainfo probe to extract ASIN from embedded file metadata.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -32,6 +33,18 @@ if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
 
 logger = logging.getLogger(__name__)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Matching Constants
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Volume matching score adjustments for series books
+# These values significantly affect matching accuracy for series:
+# - Exact volume match gets bonus to prefer correct volume
+# - Close mismatch (±2) gets penalty to avoid adjacent volumes
+# - Large mismatch (>2) gets no penalty (likely different series entirely)
+_VOLUME_MATCH_BONUS = 0.15  # Bonus when volumes match exactly
+_VOLUME_CLOSE_MISMATCH_PENALTY = -0.20  # Penalty for close volume mismatch (±2)
 
 # Supported audio file extensions for ASIN extraction from filenames
 AUDIO_EXTENSIONS = (".m4b", ".mp3", ".m4a", ".opus", ".flac")
@@ -49,8 +62,9 @@ ASIN_PATTERNS = [
     re.compile(r"(?<![A-Z0-9])(B0[A-Z0-9]{8})(?![A-Z0-9])"),
 ]
 
-# ASIN validation pattern
-ASIN_REGEX = re.compile(r"^[A-Z0-9]{10}$")
+# ASIN validation pattern - matches discovery.py for consistency
+# Valid ASINs are 10 characters: B + 9 alphanumeric (Audible) or 10 digits (ISBN-10)
+ASIN_REGEX = re.compile(r"^(?:B[0-9A-Z]{9}|[0-9]{10})$")
 
 
 @dataclass
@@ -217,11 +231,15 @@ class AsinResolution:
         asin: Resolved ASIN or None if not found
         source: Where the ASIN was found ("folder", "filename", "metadata", "unknown")
         source_detail: Additional detail (e.g., which file contained the ASIN)
+        resolved_author: Author name from search result (only for abs_search source)
+        resolved_title: Title from search result (only for abs_search source)
     """
 
     asin: str | None
     source: str
     source_detail: str | None = None
+    resolved_author: str | None = None
+    resolved_title: str | None = None
 
     @property
     def found(self) -> bool:
@@ -610,6 +628,7 @@ def build_asin_index(
     items = client.get_library_items_cached(library_id)
     index: dict[str, AsinEntry] = {}
     no_asin_count = 0
+    duplicate_count = 0
 
     for item in items:
         # Get ASIN from the item (metadata, folder name, or file name)
@@ -626,6 +645,7 @@ def build_asin_index(
         # Skip if we've seen this ASIN (keep first occurrence)
         if asin in index:
             logger.debug(f"Duplicate ASIN {asin} found, keeping first at {index[asin].path}")
+            duplicate_count += 1
             continue
 
         index[asin] = AsinEntry(
@@ -636,7 +656,16 @@ def build_asin_index(
             author=item.author_name,
         )
 
-    logger.info(f"Built ASIN index: {len(index)} books with ASIN, {no_asin_count} without")
+    # Log detailed breakdown: indexed + no_asin + duplicates should equal total items
+    total = len(items)
+    indexed = len(index)
+    logger.info(
+        "Built ASIN index: %d indexed, %d without ASIN, %d duplicate ASINs (total: %d items)",
+        indexed,
+        no_asin_count,
+        duplicate_count,
+        total,
+    )
     return index
 
 
@@ -677,6 +706,29 @@ class SearchMatch:
     sequence: str | None
 
 
+def _extract_volume_number(s: str) -> int | None:
+    """Extract volume/book number from a title string.
+
+    Returns volume number if found, None otherwise.
+    Avoids treating years (1900-2099) as volume numbers.
+    """
+    if not s:
+        return None
+    # Match patterns like "Vol. 7", "Volume 7", "Book 7", "Part 7"
+    match = re.search(r"\b(?:vol\.?|volume|book|part)\s*(\d+)\b", s, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    # Also try trailing number like "Title 7"
+    # But avoid treating years (1900-2099) as volumes
+    match = re.search(r"\s(\d+)$", s.strip())
+    if match:
+        value = int(match.group(1))
+        # Treat 1-99 as volumes, ignore obvious years
+        if 1 <= value <= 99:
+            return value
+    return None
+
+
 def _normalize_for_matching(s: str) -> str:
     """Normalize a string for fuzzy matching.
 
@@ -702,6 +754,48 @@ def _normalize_for_matching(s: str) -> str:
     return result
 
 
+def _extract_core_title(s: str) -> str:
+    """Extract the core title, removing subtitles and series markers.
+
+    "Primal Imperative Provide, Defend, Breed A Monster Girl Men's Fantasy"
+    → "Primal Imperative Provide Defend Breed"
+
+    "Adachi and Shimamura (Light Novel) Vol. 7"
+    → "Adachi and Shimamura"
+    """
+    if not s:
+        return ""
+
+    result = s
+
+    # Remove parenthetical content like (Light Novel), (Manga), etc.
+    result = re.sub(r"\s*\([^)]+\)\s*", " ", result)
+
+    # Remove volume/book/part indicators
+    result = re.sub(r"\b(vol\.?|volume|book|part)\s*\d+\b", "", result, flags=re.IGNORECASE)
+
+    # Remove common subtitle patterns after colon
+    # Keep content before colon if there's significant content after
+    if ":" in result:
+        parts = result.split(":", 1)
+        if len(parts[0].strip()) >= 5:  # If title before colon is substantial
+            result = parts[0]
+
+    # Remove trailing genre descriptors (A X X Fantasy, A LitRPG, etc.)
+    result = re.sub(
+        r"\s+A\s+[\w\s]+(?:Fantasy|LitRPG|Romance|Thriller|Adventure)\s*$",
+        "",
+        result,
+        flags=re.IGNORECASE,
+    )
+
+    # Clean up
+    result = re.sub(r"[^\w\s-]", " ", result)
+    result = re.sub(r"\s+", " ", result).strip()
+
+    return result.lower()
+
+
 def match_search_results(
     results: list[dict[str, Any]],
     folder_title: str,
@@ -713,6 +807,11 @@ def match_search_results(
 
     Uses fuzzy matching to compare folder metadata against search results
     and returns the best match above the confidence threshold.
+
+    Enhanced matching:
+    - Volume number matching with bonus for exact match
+    - Core title extraction to handle subtitles/genre tags
+    - Series sequence matching
 
     Args:
         results: Search results from AbsClient.search_books()
@@ -729,8 +828,17 @@ def match_search_results(
     if not results:
         return None
 
+    # Extract volume number from folder title
+    folder_volume = _extract_volume_number(folder_title)
+
+    # Normalize folder title for fuzzy matching
     folder_title_norm = _normalize_for_matching(folder_title)
+    folder_title_core = _extract_core_title(folder_title)
     folder_author_norm = _normalize_for_matching(folder_author or "")
+
+    # Skip "Unknown" as author for matching purposes
+    if folder_author_norm == "unknown":
+        folder_author_norm = ""
 
     best_match: SearchMatch | None = None
     best_score = 0.0
@@ -745,9 +853,36 @@ def match_search_results(
         if not result_asin or not is_valid_asin(result_asin):
             continue
 
-        # Calculate title similarity
+        # Extract volume number from result
+        result_volume = _extract_volume_number(result_title)
+
+        # Get series sequence as fallback volume
+        series_seq: int | None = None
+        series_list = result.get("series")
+        if series_list and isinstance(series_list, list) and len(series_list) > 0:
+            first_series = series_list[0]
+            if isinstance(first_series, dict):
+                seq = first_series.get("sequence")
+                if seq:
+                    with contextlib.suppress(ValueError, TypeError):
+                        series_seq = int(float(seq))
+
+        # Use series sequence if no volume in title
+        if result_volume is None and series_seq is not None:
+            result_volume = series_seq
+
+        # Calculate title similarity using multiple methods
         result_title_norm = _normalize_for_matching(result_title)
-        title_score = similarity_ratio(folder_title_norm, result_title_norm) / 100.0
+        result_title_core = _extract_core_title(result_title)
+
+        # Score 1: Standard normalized comparison
+        title_score_norm = similarity_ratio(folder_title_norm, result_title_norm) / 100.0
+
+        # Score 2: Core title comparison (handles subtitles better)
+        title_score_core = similarity_ratio(folder_title_core, result_title_core) / 100.0
+
+        # Use the better of the two title scores
+        title_score = max(title_score_norm, title_score_core)
 
         # Calculate author similarity (if we have author to compare)
         author_score = 1.0  # Default to perfect if no author to compare
@@ -758,6 +893,21 @@ def match_search_results(
         # Combined score (title weighted more heavily)
         combined_score = (title_score * 0.7) + (author_score * 0.3)
 
+        # Volume number matching - bonus for exact match, penalty for close mismatch
+        # Only apply penalty if volumes are close (±2) to avoid penalizing wrong series
+        # Don't penalize if result has no volume (different book structure)
+        volume_match_bonus = 0.0
+        if folder_volume is not None and result_volume is not None:
+            if folder_volume == result_volume:
+                # Exact match - significant bonus
+                volume_match_bonus = _VOLUME_MATCH_BONUS
+            elif abs(folder_volume - result_volume) <= 2:
+                # Close mismatch (e.g., Vol 7 vs Vol 8) - penalty to prefer exact
+                volume_match_bonus = _VOLUME_CLOSE_MISMATCH_PENALTY
+            # If volumes differ by >2, no penalty - likely different series
+
+        combined_score += volume_match_bonus
+
         # Bonus for English (if preferred)
         if prefer_english and result_language and result_language.lower() == "english":
             combined_score *= 1.05  # 5% bonus
@@ -767,9 +917,15 @@ def match_search_results(
         if prefer_english and result_language and result_language.lower() not in ("english", ""):
             combined_score *= 0.8  # 20% penalty
 
+        # Ensure score is in valid range
+        combined_score = max(0.0, min(1.0, combined_score))
+
         logger.debug(
             f"Match candidate: {result_title!r} by {result_author!r} "
-            f"(ASIN={result_asin}, lang={result_language}, score={combined_score:.2f})"
+            f"(ASIN={result_asin}, lang={result_language}, "
+            f"vol={result_volume}, score={combined_score:.2f}, "
+            f"title_norm={title_score_norm:.2f}, title_core={title_score_core:.2f}, "
+            f"vol_bonus={volume_match_bonus:+.2f})"
         )
 
         if combined_score > best_score:
@@ -777,13 +933,12 @@ def match_search_results(
 
             # Extract series info
             series_name = None
-            series_seq = None
-            series_list = result.get("series")
+            series_seq_str = None
             if series_list and isinstance(series_list, list) and len(series_list) > 0:
                 first_series = series_list[0]
                 if isinstance(first_series, dict):
                     series_name = first_series.get("series")
-                    series_seq = first_series.get("sequence")
+                    series_seq_str = first_series.get("sequence")
 
             best_match = SearchMatch(
                 asin=result_asin,
@@ -792,7 +947,7 @@ def match_search_results(
                 confidence=combined_score,
                 language=result_language,
                 series=series_name,
-                sequence=series_seq,
+                sequence=series_seq_str,
             )
 
     # Only return if above threshold
@@ -836,6 +991,7 @@ def resolve_asin_via_abs_search(
 
     Returns:
         AsinResolution with ASIN if found, source="abs_search"
+        Also includes resolved_author and resolved_title from the search result.
     """
     try:
         results = client.search_books(title=title, author=author, provider="audible")
@@ -855,6 +1011,8 @@ def resolve_asin_via_abs_search(
             asin=match.asin,
             source="abs_search",
             source_detail=f"{match.title} (confidence={match.confidence:.0%})",
+            resolved_author=match.author,
+            resolved_title=match.title,
         )
 
     return AsinResolution(asin=None, source="unknown")

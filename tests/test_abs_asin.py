@@ -1188,3 +1188,147 @@ class TestSearchMatch:
         assert match.language == "English"
         assert match.series == "Sword of Truth"
         assert match.sequence == "1"
+
+
+class TestExtractVolumeNumber:
+    """Tests for _extract_volume_number helper function."""
+
+    def test_vol_pattern(self) -> None:
+        """Extract volume from 'Vol.' pattern."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number("Adachi and Shimamura Vol. 7") == 7
+        assert _extract_volume_number("Series Name Vol.12") == 12
+        assert _extract_volume_number("Title Vol 5") == 5
+
+    def test_volume_pattern(self) -> None:
+        """Extract volume from 'Volume' pattern."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number("Series Volume 3") == 3
+        assert _extract_volume_number("Title Volume 10") == 10
+
+    def test_book_pattern(self) -> None:
+        """Extract volume from 'Book' pattern."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number("Harry Potter Book 4") == 4
+        assert _extract_volume_number("Series Book 1") == 1
+
+    def test_part_pattern(self) -> None:
+        """Extract volume from 'Part' pattern."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number("Story Part 2") == 2
+
+    def test_trailing_number(self) -> None:
+        """Extract trailing number like 'Title 7'."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number("Series Name 7") == 7
+        assert _extract_volume_number("Title 15") == 15
+
+    def test_no_volume(self) -> None:
+        """Returns None when no volume found."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number("Simple Title") is None
+        assert _extract_volume_number("") is None
+        assert _extract_volume_number("Book Title Without Number") is None
+
+    def test_ignores_years(self) -> None:
+        """Should not treat years as volume numbers (trailing number heuristic only)."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        # Years in trailing position should NOT be treated as volumes
+        # (the year guard only applies to the "Title 7" trailing number pattern)
+        assert _extract_volume_number("Deluxe Edition 2021") is None
+        assert _extract_volume_number("Some Title 2019") is None
+        assert _extract_volume_number("Novel 1984") is None
+        assert _extract_volume_number("Story 2000") is None
+        # But explicit "Volume/Book/Vol" markers should still work even with large numbers
+        assert _extract_volume_number("Volume 2019") == 2019
+        assert _extract_volume_number("Book 100") == 100
+        # And edge case: "Book" in title with trailing year is actually explicit
+        assert _extract_volume_number("Some Book 2019") == 2019  # "Book 2019" pattern
+
+    def test_none_input(self) -> None:
+        """Returns None for None input."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        assert _extract_volume_number(None) is None  # type: ignore[arg-type]
+
+
+class TestExtractCoreTitle:
+    """Tests for _extract_core_title helper function."""
+
+    def test_remove_light_novel_marker(self) -> None:
+        """Remove (Light Novel) from title."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("Adachi and Shimamura (Light Novel) Vol. 7")
+        assert "light novel" not in result.lower()
+        assert "adachi" in result.lower()
+
+    def test_remove_manga_marker(self) -> None:
+        """Remove (Manga) from title."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("One Piece (Manga) Volume 100")
+        assert "manga" not in result.lower()
+        assert "one piece" in result.lower()
+
+    def test_remove_volume_indicators(self) -> None:
+        """Remove volume/book/part indicators."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("Series Name Vol. 5")
+        assert "vol" not in result.lower()
+        assert "5" not in result
+        assert "series name" in result.lower()
+
+    def test_remove_genre_suffix(self) -> None:
+        """Remove genre descriptor suffix."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("Hero Story A LitRPG Adventure")
+        assert "litrpg" not in result.lower()
+        assert "adventure" not in result.lower()
+        assert "hero story" in result.lower()
+
+    def test_subtitle_handling(self) -> None:
+        """Subtitle after colon is removed when main title is substantial."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("Series Name: Long Subtitle Here")
+        assert "subtitle" not in result.lower()
+        assert "series name" in result.lower()
+
+    def test_complex_title(self) -> None:
+        """Handle complex title with multiple patterns."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("Series Name: Long Subtitle - Vol. 5 A Fantasy LitRPG")
+        # Should extract core "Series Name"
+        assert "series name" in result.lower()
+        # Remove volume, genre indicators
+        assert "vol" not in result.lower()
+        assert "litrpg" not in result.lower()
+
+    def test_empty_input(self) -> None:
+        """Handle empty string."""
+        from mamfast.abs.asin import _extract_core_title
+
+        assert _extract_core_title("") == ""
+
+    def test_preserves_meaningful_content(self) -> None:
+        """Core title extraction preserves meaningful words."""
+        from mamfast.abs.asin import _extract_core_title
+
+        result = _extract_core_title("Hero's Journey: The Beginning A LitRPG Adventure")
+        # Should remove the genre suffix
+        assert "litrpg" not in result.lower()
+        assert "adventure" not in result.lower()
+        # But keep the main content words
+        assert "hero" in result.lower()
+        assert "journey" in result.lower()

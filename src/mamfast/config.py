@@ -44,11 +44,14 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from dotenv import load_dotenv
 from pydantic import ValidationError as PydanticValidationError
+
+if TYPE_CHECKING:
+    from mamfast.abs.trumping import TrumpPrefs
 
 logger = logging.getLogger(__name__)
 
@@ -256,11 +259,88 @@ class AudiobookshelfLibrary:
 
 
 @dataclass
+class TrumpingConfig:
+    """Trumping (quality-based replacement) settings."""
+
+    enabled: bool = False
+    aggressiveness: str = "balanced"  # conservative | balanced | aggressive
+    min_bitrate_increase_kbps: int = 64
+    prefer_chapters: bool = True
+    prefer_stereo: bool = True
+    min_duration_ratio: float = 0.9
+    max_duration_ratio: float = 1.25
+    archive_root: str | None = None
+    archive_by_year: bool = True
+
+
+def build_trump_prefs(
+    trumping_config: TrumpingConfig,
+    *,
+    enabled_override: bool | None = None,
+    aggressiveness_override: str | None = None,
+) -> TrumpPrefs | None:
+    """Build TrumpPrefs from config with optional CLI overrides.
+
+    Centralizes trumping preference construction so CLI and importer
+    don't need to know config structure details.
+
+    Args:
+        trumping_config: TrumpingConfig from AudiobookshelfImportConfig
+        enabled_override: If False, disable trumping regardless of config
+        aggressiveness_override: Override aggressiveness level (conservative/balanced/aggressive)
+
+    Returns:
+        TrumpPrefs instance if enabled, None if disabled
+    """
+    # Import here to avoid circular dependency
+    from mamfast.abs.trumping import TrumpPrefs
+
+    # Check if trumping is enabled (CLI override takes precedence)
+    enabled = trumping_config.enabled
+    if enabled_override is not None:
+        enabled = enabled_override
+
+    if not enabled:
+        return None
+
+    # Apply aggressiveness override if provided
+    aggressiveness = trumping_config.aggressiveness
+    if aggressiveness_override is not None:
+        aggressiveness = aggressiveness_override
+
+    # Create a modified config for TrumpPrefs.from_config
+    # We create a temporary config with overrides applied
+    modified_config = TrumpingConfig(
+        enabled=enabled,
+        aggressiveness=aggressiveness,
+        min_bitrate_increase_kbps=trumping_config.min_bitrate_increase_kbps,
+        prefer_chapters=trumping_config.prefer_chapters,
+        prefer_stereo=trumping_config.prefer_stereo,
+        min_duration_ratio=trumping_config.min_duration_ratio,
+        max_duration_ratio=trumping_config.max_duration_ratio,
+        archive_root=trumping_config.archive_root,
+        archive_by_year=trumping_config.archive_by_year,
+    )
+
+    return TrumpPrefs.from_config(modified_config)
+
+
+@dataclass
 class AudiobookshelfImportConfig:
     """Audiobookshelf import settings."""
 
     duplicate_policy: str = "skip"  # skip | warn | overwrite
     trigger_scan: str = "batch"  # none | each | batch
+    trumping: TrumpingConfig = field(default_factory=TrumpingConfig)
+    # ABS search: query Audible via ABS for missing ASINs (default: enabled)
+    abs_search: bool = True
+    abs_search_confidence: float = 0.75  # Minimum confidence threshold (0.0-1.0)
+    # How to handle books without ASIN: import | quarantine | skip
+    unknown_asin_policy: str = "import"
+    # Path for quarantined books (required if unknown_asin_policy=quarantine)
+    quarantine_path: str | None = None
+    # File patterns to ignore during import (e.g., [".json", "*.metadata.json"])
+    ignore_file_extensions: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -559,6 +639,31 @@ def _get_env_int(key: str, default: int) -> int:
     if value is None:
         return default
     return int(value)
+
+
+def _parse_trumping_config(data: dict[str, Any]) -> TrumpingConfig:
+    """Parse trumping config from YAML data.
+
+    Args:
+        data: Dict from YAML audiobookshelf.import.trumping section
+
+    Returns:
+        TrumpingConfig with values from YAML or defaults
+    """
+    if not data:
+        return TrumpingConfig()
+
+    return TrumpingConfig(
+        enabled=data.get("enabled", False),
+        aggressiveness=data.get("aggressiveness", "balanced"),
+        min_bitrate_increase_kbps=data.get("min_bitrate_increase_kbps", 64),
+        prefer_chapters=data.get("prefer_chapters", True),
+        prefer_stereo=data.get("prefer_stereo", True),
+        min_duration_ratio=data.get("min_duration_ratio", 0.9),
+        max_duration_ratio=data.get("max_duration_ratio", 1.25),
+        archive_root=data.get("archive_root"),
+        archive_by_year=data.get("archive_by_year", True),
+    )
 
 
 def _load_categories(config_dir: Path) -> CategoriesConfig:
@@ -986,6 +1091,12 @@ def load_settings(
         import_settings=AudiobookshelfImportConfig(
             duplicate_policy=abs_import_data.get("duplicate_policy", "skip"),
             trigger_scan=abs_import_data.get("trigger_scan", "batch"),
+            trumping=_parse_trumping_config(abs_import_data.get("trumping", {})),
+            abs_search=abs_import_data.get("abs_search", True),
+            abs_search_confidence=abs_import_data.get("abs_search_confidence", 0.75),
+            unknown_asin_policy=abs_import_data.get("unknown_asin_policy", "import"),
+            quarantine_path=abs_import_data.get("quarantine_path"),
+            ignore_file_extensions=abs_import_data.get("ignore_file_extensions", []),
         ),
         index_db=abs_data.get("index_db", "./data/abs_index.db"),
     )
