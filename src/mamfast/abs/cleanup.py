@@ -552,3 +552,94 @@ def cleanup_source(
             strategy=strategy,
             error=error_msg,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Empty Directory Pruning
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def prune_empty_dirs(root: Path, *, dry_run: bool = False) -> int:
+    """Remove empty directories under root (but never root itself).
+
+    This is useful after import with trumping, where shutil.move() removes
+    staging files but leaves empty author/series directory structures behind.
+
+    Uses bottom-up traversal to handle nested empty directories correctly.
+    Safe to run multiple times - idempotent.
+
+    Args:
+        root: Root directory to prune (this directory itself is never removed)
+        dry_run: If True, don't actually remove directories, just count
+
+    Returns:
+        Number of directories removed (or that would be removed in dry_run)
+    """
+    removed = 0
+    root = root.resolve()
+
+    if not root.exists():
+        logger.debug("Prune root does not exist: %s", root)
+        return 0
+
+    if not root.is_dir():
+        logger.warning("Prune root is not a directory: %s", root)
+        return 0
+
+    # Track directories "removed" in dry-run mode to handle nested empties
+    dry_run_removed: set[Path] = set()
+
+    # Walk bottom-up so we remove leaf directories first
+    for dirpath, dirnames, filenames in os.walk(root, topdown=False):
+        path = Path(dirpath)
+
+        # Never remove the root directory itself
+        if path == root:
+            continue
+
+        # Skip if directory has files
+        if filenames:
+            continue
+
+        # Skip if directory still has subdirectories
+        # (may have been emptied during this walk but not yet processed)
+        if dirnames:
+            # Check if any subdirs actually exist (they may have been removed)
+            # In dry-run mode, also check our simulated removal set
+            remaining_dirs = [
+                d
+                for d in dirnames
+                if (path / d).exists() and (path / d) not in dry_run_removed
+            ]
+            if remaining_dirs:
+                continue
+
+        # Directory is empty (or only had subdirs that were already removed)
+        # Double-check by listing directory contents
+        # In dry-run mode, filter out dirs we've already "removed"
+        try:
+            contents = [
+                c for c in path.iterdir() if c not in dry_run_removed
+            ]
+            if contents:
+                # Not actually empty, skip
+                continue
+        except OSError as e:
+            logger.debug("Cannot list directory %s: %s", path, e)
+            continue
+
+        # Directory is empty - remove it
+        if dry_run:
+            logger.debug("[DRY RUN] Would remove empty directory: %s", path)
+            dry_run_removed.add(path)
+            removed += 1
+        else:
+            try:
+                path.rmdir()
+                logger.debug("Removed empty directory: %s", path)
+                removed += 1
+            except OSError as e:
+                # Race condition or permissions issue - ignore and continue
+                logger.debug("Failed to remove empty directory %s: %s", path, e)
+
+    return removed
