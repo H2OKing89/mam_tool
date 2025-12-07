@@ -29,7 +29,9 @@ logger = logging.getLogger(__name__)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Import statuses that are eligible for cleanup
-CLEANUP_ELIGIBLE_STATUSES = frozenset({"success", "trump_replaced"})
+# Note: "trump_replaced" is NOT included because shutil.move() already removed
+# the staging files - only "success" (hardlink) imports leave files to clean up
+CLEANUP_ELIGIBLE_STATUSES = frozenset({"success"})
 
 # Default marker file name for hide strategy
 DEFAULT_HIDE_MARKER = ".mamfast_imported"
