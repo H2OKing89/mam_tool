@@ -2107,6 +2107,19 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     else:
         print_info("ABS search disabled (set abs_search: true in config or remove --no-abs-search)")
 
+    # Get unknown ASIN policy from config
+    from mamfast.abs.importer import UnknownAsinPolicy
+
+    unknown_asin_policy_str = abs_config.import_settings.unknown_asin_policy
+    # UnknownAsinPolicy enum uses lowercase values (import, quarantine, skip)
+    unknown_asin_policy = UnknownAsinPolicy(unknown_asin_policy_str.lower())
+    quarantine_path_str = abs_config.import_settings.quarantine_path
+    quarantine_path = Path(quarantine_path_str) if quarantine_path_str else None
+
+    print_info(f"Unknown ASIN policy: {unknown_asin_policy_str}")
+    if quarantine_path:
+        print_info(f"Quarantine path: {quarantine_path}")
+
     if args.dry_run:
         print_dry_run(f"Would import {len(staging_folders)} book(s)")
 
@@ -2134,6 +2147,8 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             abs_search_confidence=confidence,
             staging_root=import_source,
             duplicate_policy=dup_policy,
+            unknown_asin_policy=unknown_asin_policy,
+            quarantine_path=quarantine_path,
             trump_prefs=trump_prefs,
             path_mapper=path_mapper,
             dry_run=args.dry_run,

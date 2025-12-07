@@ -44,6 +44,58 @@ from mamfast.utils.naming import build_mam_file_name, build_mam_folder_name, cle
 if TYPE_CHECKING:
     from mamfast.abs.client import AbsClient
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Module-level cache for format indicators loaded from naming.json
+# ─────────────────────────────────────────────────────────────────────────────
+_FORMAT_INDICATORS: list[str] | None = None
+
+# Fallback format indicators if naming.json is not available
+_DEFAULT_FORMAT_INDICATORS = [
+    "(Light Novel)",
+    "(light novel)",
+    "Light Novel",
+    "(Manga)",
+    "(Graphic Novel)",
+    "(Unabridged)",
+    "Unabridged",
+    "(Audiobook)",
+    "Audiobook",
+]
+
+
+def _get_format_indicators() -> list[str]:
+    """Load format indicators from naming.json (cached).
+
+    Reads the format_indicators.phrases from config/naming.json.
+    Falls back to hardcoded defaults if naming.json is unavailable.
+    """
+    global _FORMAT_INDICATORS
+    if _FORMAT_INDICATORS is not None:
+        return _FORMAT_INDICATORS
+
+    indicators: list[str] = []
+    try:
+        # Try to find naming.json relative to this file
+        config_dir = Path(__file__).parent.parent.parent.parent / "config"
+        naming_path = config_dir / "naming.json"
+
+        if naming_path.exists():
+            with open(naming_path, encoding="utf-8") as f:
+                data = json.load(f)
+            phrases = data.get("format_indicators", {}).get("phrases", [])
+            if phrases:
+                indicators = phrases
+    except Exception:
+        pass  # Fall through to defaults
+
+    if not indicators:
+        indicators = _DEFAULT_FORMAT_INDICATORS.copy()
+
+    _FORMAT_INDICATORS = indicators
+    return _FORMAT_INDICATORS
+
+
 logger = logging.getLogger(__name__)
 
 # Audio extensions recognized by the importer
@@ -187,20 +239,9 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
 
     # Strip format indicators BEFORE parsing to avoid "(Light Novel)" etc. being
     # misidentified as author in Libation-style folder names
-    # Common format indicators that should never be authors
-    format_indicators = [
-        "(Light Novel)",
-        "(light novel)",
-        "Light Novel",
-        "(Manga)",
-        "(Graphic Novel)",
-        "(Unabridged)",
-        "Unabridged",
-        "(Audiobook)",
-        "Audiobook",
-    ]
+    # Format indicators are loaded from naming.json (cached) with fallback defaults
     clean_folder = folder_name
-    for indicator in format_indicators:
+    for indicator in _get_format_indicators():
         clean_folder = clean_folder.replace(indicator, "").strip()
     # Collapse multiple spaces
     clean_folder = re.sub(r"\s{2,}", " ", clean_folder).strip()

@@ -861,11 +861,18 @@ def match_search_results(
         # Combined score (title weighted more heavily)
         combined_score = (title_score * 0.7) + (author_score * 0.3)
 
-        # Volume number matching - significant bonus/penalty
+        # Volume number matching - bonus for exact match, penalty for close mismatch
+        # Only apply penalty if volumes are close (±2) to avoid penalizing wrong series
+        # Don't penalize if result has no volume (different book structure)
         volume_match_bonus = 0.0
         if folder_volume is not None and result_volume is not None:
-            # Exact match gets bonus, mismatch gets penalty
-            volume_match_bonus = 0.15 if folder_volume == result_volume else -0.20
+            if folder_volume == result_volume:
+                # Exact match - significant bonus
+                volume_match_bonus = 0.15
+            elif abs(folder_volume - result_volume) <= 2:
+                # Close mismatch (e.g., Vol 7 vs Vol 8) - penalty to prefer exact
+                volume_match_bonus = -0.20
+            # If volumes differ by >2, no penalty - likely different series
 
         combined_score += volume_match_bonus
 

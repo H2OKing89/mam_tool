@@ -638,21 +638,26 @@ def archive_existing(
     if not prefs.archive_root:
         raise TrumpingError("archive_root required for trumping")
 
-    # Build archive path
-    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
+    # Build archive path - use single datetime to avoid race condition at year boundary
+    # Structure: archive_root/[year]/ASIN/timestamp/original_folder_name/
+    # This preserves the original folder name for proper restoration
+    now = datetime.now(UTC)
+    timestamp = now.strftime("%Y-%m-%dT%H-%M-%S")
+    original_folder_name = existing_path.name
 
     if prefs.archive_by_year:
-        year = datetime.now(UTC).strftime("%Y")
-        archive_dest = prefs.archive_root / year / existing_meta.asin / timestamp
+        year = now.strftime("%Y")
+        archive_parent = prefs.archive_root / year / existing_meta.asin / timestamp
     else:
-        archive_dest = prefs.archive_root / existing_meta.asin / timestamp
+        archive_parent = prefs.archive_root / existing_meta.asin / timestamp
+
+    archive_dest = archive_parent / original_folder_name
 
     if dry_run:
         logger.info("[DRY RUN] Would archive %s → %s", existing_path, archive_dest)
         return None
 
-    # Create parent directory (archive_dest itself will be the moved folder)
-    archive_parent = archive_dest.parent
+    # Create parent directory
     archive_parent.mkdir(parents=True, exist_ok=True)
 
     # Atomically move the entire folder
@@ -666,6 +671,8 @@ def archive_existing(
         "archived_at": datetime.now(UTC).isoformat(),
         "reason": reason,
         "decision": decision.name,
+        "original_folder_name": original_folder_name,
+        "original_path": str(existing_path),
         "existing_meta": _meta_to_dict(existing_meta),
         "incoming_meta": _meta_to_dict(incoming_meta),
         "config": {
@@ -763,16 +770,15 @@ def restore_from_archive(
 ) -> Path | None:
     """Restore an archived book back to the library.
 
-    Reads the trump sidecar to find the original ASIN, then moves
-    the archived folder back to the library under the appropriate
-    author/series structure.
+    Reads the trump sidecar to find the original path and restores the folder
+    to its original location within the library. If the original path is no
+    longer valid (outside library_root), falls back to library_root directly.
 
-    Note: This is a basic restoration that places the book back
-    in the library. It does NOT remove the book that replaced it.
-    Users should manually handle any conflicts.
+    Note: This restoration does NOT remove the book that replaced it.
+    Users should manually handle any conflicts or run a rescan.
 
     Args:
-        archive_path: Path to the archived book folder
+        archive_path: Path to the archived book folder (contains .mamfast_trump.json)
         library_root: Root of the ABS library to restore to
         dry_run: If True, log but don't actually move
 
@@ -789,19 +795,33 @@ def restore_from_archive(
 
     try:
         with sidecar_path.open() as f:
-            json.load(f)  # Validate JSON is parseable
+            sidecar_data = json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         raise TrumpingError(f"Failed to read sidecar: {e}") from e
 
-    # The archive folder name IS the original folder name
-    # Archive structure: archive_root/[year]/ASIN/timestamp/<original_folder>
-    # But actually we move the whole original folder, so archive_path is the restored folder
-    # Let's just restore it with the current folder name
+    # Get original path from sidecar if available (schema_version 1.0+)
+    original_path_str = sidecar_data.get("original_path")
+    original_folder_name = sidecar_data.get("original_folder_name", archive_path.name)
 
-    # Build a restore path - we'll put it in library_root directly
-    # User will need to organize/rescan after restore
-    folder_name = archive_path.name
-    restore_dest = library_root / folder_name
+    # Determine restore destination
+    # Try to restore to original location if it was within library_root
+    if original_path_str:
+        original_path = Path(original_path_str)
+        try:
+            # Check if original path was within library_root
+            original_path.relative_to(library_root)
+            restore_dest = original_path
+        except ValueError:
+            # Original path was outside library_root, use library_root directly
+            logger.warning(
+                "Original path %s is outside library root, restoring to %s",
+                original_path,
+                library_root / original_folder_name,
+            )
+            restore_dest = library_root / original_folder_name
+    else:
+        # Legacy archive without original_path - use folder name
+        restore_dest = library_root / original_folder_name
 
     # Check for conflicts
     if restore_dest.exists():
@@ -811,7 +831,10 @@ def restore_from_archive(
         logger.info("[DRY RUN] Would restore %s → %s", archive_path, restore_dest)
         return None
 
-    # Move the archive folder to library root
+    # Ensure parent directory exists
+    restore_dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # Move the archive folder to restored location
     shutil.move(str(archive_path), str(restore_dest))
 
     # Remove the sidecar from restored location

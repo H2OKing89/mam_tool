@@ -308,6 +308,9 @@ class TestAbsImportCommand:
         config.import_settings.trumping.max_duration_ratio = 1.25
         config.import_settings.trumping.archive_root = None
         config.import_settings.trumping.archive_by_year = True
+        # Unknown ASIN policy settings
+        config.import_settings.unknown_asin_policy = "import"
+        config.import_settings.quarantine_path = None
         return config
 
     def test_abs_import_config_not_found(self, args: argparse.Namespace) -> None:
