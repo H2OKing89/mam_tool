@@ -260,6 +260,11 @@ audiobookshelf:
       # Useful for keeping recent imports available for troubleshooting
       min_age_days: 0
 
+      # Prune empty directories left in staging area after import?
+      # When books are trumped (replaced), shutil.move() leaves empty parent dirs.
+      # This option removes those empty author/series directories.
+      prune_empty_dirs: false
+
       # Directories to always ignore during standalone cleanup
       ignore_dirs:
         - "__import_test"
