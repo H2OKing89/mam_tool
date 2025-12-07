@@ -28,6 +28,15 @@ from mamfast.abs.asin import (
     resolve_asin_from_folder_with_mediainfo,
     resolve_asin_via_abs_search,
 )
+from mamfast.abs.trumping import (
+    TrumpDecision,
+    TrumpPrefs,
+    adjust_for_aggressiveness,
+    archive_existing,
+    decide_trump,
+    extract_trumpable_meta,
+    is_multi_file_layout,
+)
 from mamfast.metadata import fetch_audnex_book
 from mamfast.utils.naming import build_mam_file_name, build_mam_folder_name, clean_series_name
 
@@ -93,6 +102,10 @@ class BatchImportResult:
     skipped_count: int = 0
     duplicate_count: int = 0
     failed_count: int = 0
+    # Trumping statistics
+    trump_replaced_count: int = 0  # Existing archived, new imported
+    trump_kept_existing_count: int = 0  # No improvement, kept existing
+    trump_rejected_count: int = 0  # Incoming was worse
 
     def add(self, result: ImportResult) -> None:
         """Add a result and update counts."""
@@ -105,6 +118,15 @@ class BatchImportResult:
             self.duplicate_count += 1
         elif result.status == "failed":
             self.failed_count += 1
+        elif result.status == "trump_replaced":
+            self.trump_replaced_count += 1
+            self.success_count += 1  # Also count as success
+        elif result.status == "trump_kept_existing":
+            self.trump_kept_existing_count += 1
+            self.skipped_count += 1  # Also count as skipped
+        elif result.status == "trump_rejected":
+            self.trump_rejected_count += 1
+            self.skipped_count += 1  # Also count as skipped
 
 
 @dataclass
@@ -1111,6 +1133,7 @@ def import_single(
     duplicate_policy: str = "skip",
     unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
     quarantine_path: Path | None = None,
+    trump_prefs: TrumpPrefs | None = None,
     dry_run: bool = False,
 ) -> ImportResult:
     """Import a single audiobook from staging to library.
@@ -1125,6 +1148,7 @@ def import_single(
         duplicate_policy: "skip", "warn", or "overwrite"
         unknown_asin_policy: How to handle books without ASIN
         quarantine_path: Path for quarantine (required if policy=QUARANTINE)
+        trump_prefs: Trumping preferences (None = disabled)
         dry_run: If True, don't actually move files
 
     Returns:
@@ -1200,6 +1224,85 @@ def import_single(
     # Check for duplicates (we have ASIN) - do this BEFORE Audnex enrichment
     # to avoid unnecessary network calls for books we'll skip anyway
     is_dup, existing_path = asin_exists(asin_index, asin)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Trumping: Quality-based replacement check (runs BEFORE duplicate_policy)
+    # ─────────────────────────────────────────────────────────────────────
+    trump_decision: TrumpDecision | None = None
+    trump_reason: str | None = None
+
+    if is_dup and trump_prefs and trump_prefs.enabled:
+        existing_entry = asin_index[asin]
+        existing_folder = Path(existing_entry.path)
+
+        # v1: Skip trumping entirely for multi-file layouts
+        # Fall through to duplicate_policy handling instead
+        if is_multi_file_layout(staging_folder) or is_multi_file_layout(existing_folder):
+            logger.debug(
+                "Multi-file layout detected - skipping trumping, "
+                "falling back to duplicate_policy=%s",
+                duplicate_policy,
+            )
+            # trump_decision stays None → fall through to duplicate handling
+        else:
+            # Single-file layout - proceed with trumping comparison
+            existing_meta = extract_trumpable_meta(existing_folder, asin)
+            incoming_meta = extract_trumpable_meta(staging_folder, asin)
+
+            trump_decision, trump_reason = decide_trump(existing_meta, incoming_meta, trump_prefs)
+            trump_decision, trump_reason = adjust_for_aggressiveness(
+                trump_decision, trump_reason, trump_prefs
+            )
+
+            logger.info("Trump decision: %s - %s", trump_decision.name, trump_reason)
+
+            match trump_decision:
+                case TrumpDecision.REPLACE_WITH_NEW:
+                    # Archive existing, then import new (continue with normal flow)
+                    archive_existing(
+                        existing_folder,
+                        existing_meta,
+                        incoming_meta,
+                        trump_decision,
+                        trump_reason,
+                        trump_prefs,
+                        dry_run=dry_run,
+                    )
+                    # Remove from index so duplicate check below doesn't trigger
+                    # (the existing folder is now archived)
+                    if not dry_run:
+                        del asin_index[asin]
+                        is_dup = False
+                    # Continue with normal import flow below
+
+                case TrumpDecision.KEEP_EXISTING:
+                    return ImportResult(
+                        staging_path=staging_folder,
+                        target_path=None,
+                        asin=asin,
+                        status="trump_kept_existing",
+                        error=f"Trumping: {trump_reason}",
+                        parsed=parsed,
+                    )
+
+                case TrumpDecision.REJECT_NEW:
+                    return ImportResult(
+                        staging_path=staging_folder,
+                        target_path=None,
+                        asin=asin,
+                        status="trump_rejected",
+                        error=f"Rejected: {trump_reason}",
+                        parsed=parsed,
+                    )
+
+                case TrumpDecision.KEEP_BOTH:
+                    # Fall through to existing duplicate_policy handling
+                    logger.info("Trumping inconclusive: %s", trump_reason)
+                    # trump_decision stays KEEP_BOTH → duplicate handling applies
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Standard duplicate handling (trumping may have already handled this)
+    # ─────────────────────────────────────────────────────────────────────
     if is_dup:
         if duplicate_policy == "skip":
             return ImportResult(
@@ -1300,11 +1403,17 @@ def import_single(
     # Rename files to match clean MAM naming convention
     rename_files_in_folder(target_path, parsed)
 
+    # Determine status based on whether trumping was involved
+    if trump_decision == TrumpDecision.REPLACE_WITH_NEW:
+        final_status = "trump_replaced"
+    else:
+        final_status = "success"
+
     return ImportResult(
         staging_path=staging_folder,
         target_path=target_path,
         asin=asin,
-        status="success",
+        status=final_status,
         parsed=parsed,
     )
 
@@ -1320,6 +1429,7 @@ def import_batch(
     duplicate_policy: str = "skip",
     unknown_asin_policy: UnknownAsinPolicy = UnknownAsinPolicy.IMPORT,
     quarantine_path: Path | None = None,
+    trump_prefs: TrumpPrefs | None = None,
     dry_run: bool = False,
 ) -> BatchImportResult:
     """Import multiple audiobooks from staging to library.
@@ -1334,6 +1444,7 @@ def import_batch(
         duplicate_policy: "skip", "warn", or "overwrite"
         unknown_asin_policy: How to handle books without ASIN
         quarantine_path: Path for quarantine (required if policy=QUARANTINE)
+        trump_prefs: Trumping preferences (None = disabled)
         dry_run: If True, don't actually move files
 
     Returns:
@@ -1352,6 +1463,7 @@ def import_batch(
             duplicate_policy=duplicate_policy,
             unknown_asin_policy=unknown_asin_policy,
             quarantine_path=quarantine_path,
+            trump_prefs=trump_prefs,
             dry_run=dry_run,
         )
         batch_result.add(result)

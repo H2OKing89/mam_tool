@@ -1443,3 +1443,191 @@ class TestClassifyUnknownAsinErrorHandling:
         # Should not raise, returns 0 files
         ctx = classify_unknown_asin(folder, parsed)
         assert ctx.file_count == 0
+
+
+# =============================================================================
+# Tests: Trumping Integration
+# =============================================================================
+
+
+class TestImportSingleWithTrumping:
+    """Tests for import_single with trumping enabled."""
+
+    def test_trumping_disabled_by_default(
+        self, temp_staging: Path, temp_library: Path, mock_asin_index: dict[str, AsinEntry]
+    ) -> None:
+        """Trumping does not run when trump_prefs is None."""
+        # Create incoming book with same ASIN as existing
+        folder = create_audiobook_folder(
+            temp_staging,
+            "Andy Weir - Project Hail Mary (2021) {ASIN.B08G9PRS1K}",
+        )
+
+        result = import_single(
+            staging_folder=folder,
+            library_root=temp_library,
+            asin_index=mock_asin_index,
+            duplicate_policy="skip",
+            trump_prefs=None,  # Disabled
+            dry_run=True,
+        )
+
+        # Should be duplicate, not trumped
+        assert result.status == "duplicate"
+
+    def test_trumping_enabled_but_disabled_in_prefs(
+        self, temp_staging: Path, temp_library: Path, mock_asin_index: dict[str, AsinEntry]
+    ) -> None:
+        """Trumping does not run when TrumpPrefs.enabled is False."""
+        from mamfast.abs.trumping import TrumpPrefs
+
+        folder = create_audiobook_folder(
+            temp_staging,
+            "Andy Weir - Project Hail Mary (2021) {ASIN.B08G9PRS1K}",
+        )
+
+        prefs = TrumpPrefs(enabled=False)
+        result = import_single(
+            staging_folder=folder,
+            library_root=temp_library,
+            asin_index=mock_asin_index,
+            duplicate_policy="skip",
+            trump_prefs=prefs,
+            dry_run=True,
+        )
+
+        # Should be duplicate, not trumped
+        assert result.status == "duplicate"
+
+    def test_trumping_skip_for_non_duplicate(
+        self, temp_staging: Path, temp_library: Path, empty_asin_index: dict[str, AsinEntry]
+    ) -> None:
+        """Trumping is not triggered for new books (no existing duplicate)."""
+        from mamfast.abs.trumping import TrumpPrefs
+
+        folder = create_audiobook_folder(
+            temp_staging,
+            "New Author - New Book (2024) {ASIN.B0NEWBOOK1}",
+        )
+
+        prefs = TrumpPrefs(enabled=True, archive_root=Path("/archive"))
+        result = import_single(
+            staging_folder=folder,
+            library_root=temp_library,
+            asin_index=empty_asin_index,
+            duplicate_policy="skip",
+            trump_prefs=prefs,
+            dry_run=True,
+        )
+
+        # Should succeed normally, no trumping involved
+        assert result.status == "success"
+
+    def test_trumping_multi_file_skips_to_duplicate_policy(
+        self, temp_staging: Path, temp_library: Path, tmp_path: Path
+    ) -> None:
+        """Multi-file layouts skip trumping and fall through to duplicate_policy."""
+        from mamfast.abs.trumping import TrumpPrefs
+
+        # Create existing multi-file book
+        existing_folder = tmp_path / "existing_audiobooks" / "Andy Weir" / "Project Hail Mary"
+        existing_folder.mkdir(parents=True)
+        (existing_folder / "cd1.mp3").touch()
+        (existing_folder / "cd2.mp3").touch()
+
+        asin_index = {
+            "B08G9PRS1K": AsinEntry(
+                asin="B08G9PRS1K",
+                path=str(existing_folder),
+                library_item_id="li_multi",
+                title="Project Hail Mary",
+                author="Andy Weir",
+            ),
+        }
+
+        # Create incoming single-file book with same ASIN
+        folder = create_audiobook_folder(
+            temp_staging,
+            "Andy Weir - Project Hail Mary (2021) {ASIN.B08G9PRS1K}",
+        )
+
+        prefs = TrumpPrefs(enabled=True, archive_root=Path("/archive"))
+        result = import_single(
+            staging_folder=folder,
+            library_root=temp_library,
+            asin_index=asin_index,
+            duplicate_policy="skip",
+            trump_prefs=prefs,
+            dry_run=True,
+        )
+
+        # Multi-file existing → trumping skipped → duplicate_policy=skip
+        assert result.status == "duplicate"
+
+
+class TestBatchImportResultTrumpCounts:
+    """Tests for BatchImportResult trumping statistics."""
+
+    def test_trump_replaced_count(self) -> None:
+        """trump_replaced status updates both trump_replaced_count and success_count."""
+        batch = BatchImportResult()
+        result = ImportResult(
+            staging_path=Path("/staging/book"),
+            target_path=Path("/lib/book"),
+            asin="B0TEST",
+            status="trump_replaced",
+        )
+        batch.add(result)
+
+        assert batch.trump_replaced_count == 1
+        assert batch.success_count == 1  # Also counts as success
+
+    def test_trump_kept_existing_count(self) -> None:
+        """trump_kept_existing status updates trump_kept_existing_count and skipped_count."""
+        batch = BatchImportResult()
+        result = ImportResult(
+            staging_path=Path("/staging/book"),
+            target_path=None,
+            asin="B0TEST",
+            status="trump_kept_existing",
+        )
+        batch.add(result)
+
+        assert batch.trump_kept_existing_count == 1
+        assert batch.skipped_count == 1  # Also counts as skipped
+
+    def test_trump_rejected_count(self) -> None:
+        """trump_rejected status updates trump_rejected_count and skipped_count."""
+        batch = BatchImportResult()
+        result = ImportResult(
+            staging_path=Path("/staging/book"),
+            target_path=None,
+            asin="B0TEST",
+            status="trump_rejected",
+        )
+        batch.add(result)
+
+        assert batch.trump_rejected_count == 1
+        assert batch.skipped_count == 1  # Also counts as skipped
+
+    def test_mixed_results_with_trumping(self) -> None:
+        """Mixed batch with trumping and non-trumping results."""
+        batch = BatchImportResult()
+
+        # Normal success
+        batch.add(ImportResult(Path("/s/1"), Path("/l/1"), "A1", "success"))
+        # Trump replaced
+        batch.add(ImportResult(Path("/s/2"), Path("/l/2"), "A2", "trump_replaced"))
+        # Trump kept existing
+        batch.add(ImportResult(Path("/s/3"), None, "A3", "trump_kept_existing"))
+        # Normal duplicate
+        batch.add(ImportResult(Path("/s/4"), None, "A4", "duplicate"))
+        # Trump rejected
+        batch.add(ImportResult(Path("/s/5"), None, "A5", "trump_rejected"))
+
+        assert batch.success_count == 2  # 1 normal + 1 trump_replaced
+        assert batch.skipped_count == 2  # trump_kept_existing + trump_rejected
+        assert batch.duplicate_count == 1
+        assert batch.trump_replaced_count == 1
+        assert batch.trump_kept_existing_count == 1
+        assert batch.trump_rejected_count == 1

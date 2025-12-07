@@ -1075,81 +1075,91 @@ def print_trump_decision(
 
 ## Implementation Phases
 
-### Phase 1: Foundation ⏳
+### Phase 1: Foundation ✅
 
 **Goal:** Core trumping types and metadata extraction.
 
 **Deliverables:**
-- [ ] Create `src/mamfast/abs/trumping.py` with:
-  - [ ] `TrumpDecision` enum
-  - [ ] `TrumpableMeta` frozen dataclass
-  - [ ] `TrumpPrefs` runtime dataclass
-  - [ ] `extract_trumpable_meta()` function (uses existing mediainfo infra)
-- [ ] Add `TrumpingSchema` to `src/mamfast/schemas/config.py`
-- [ ] Add `trumping` field to `AudiobookshelfImportSchema`
-- [ ] Add trumping section to `config.yaml.example`
-- [ ] Create `tests/test_trumping.py` with metadata extraction tests
+- [x] Create `src/mamfast/abs/trumping.py` with:
+  - [x] `TrumpDecision` enum
+  - [x] `TrumpableMeta` frozen dataclass
+  - [x] `TrumpPrefs` runtime dataclass (with `from_schema()` factory)
+  - [x] `extract_trumpable_meta()` function (uses existing mediainfo infra)
+- [x] Add `TrumpingSchema` to `src/mamfast/schemas/config.py`
+- [x] Add `trumping` field to `AudiobookshelfImportSchema`
+- [x] Add trumping section to `config.yaml.example`
+- [x] Create `tests/test_trumping.py` with metadata extraction tests
 
 **Acceptance Criteria:**
-- [ ] Can extract quality metadata from any audiobook folder
-- [ ] Schema validates config correctly (enabled requires archive_root)
-- [ ] Tests pass for metadata extraction edge cases
+- [x] Can extract quality metadata from any audiobook folder
+- [x] Schema validates config correctly (enabled requires archive_root)
+- [x] Tests pass for metadata extraction edge cases
+
+**Commits:**
+- `306b206` feat(trumping): Phase 1 - Foundation types and decision logic
+- `e5415d3` fix(trumping): Address code review findings (mediainfo config, opus tier, from_schema)
 
 ---
 
-### Phase 2: Decision Logic ⏳
+### Phase 2: Decision Logic ✅
 
 **Goal:** Implement comparison and decision tree.
 
 **Deliverables:**
-- [ ] `decide_trump()` function in `abs/trumping.py`
-- [ ] `adjust_for_aggressiveness()` modifier
-- [ ] Duration guardrail checks
-- [ ] Unit tests for all decision paths
+- [x] `decide_trump()` function in `abs/trumping.py`
+- [x] `adjust_for_aggressiveness()` modifier
+- [x] Duration guardrail checks
+- [x] Unit tests for all decision paths
 
 **Acceptance Criteria:**
-- [ ] Format tier comparison works correctly
-- [ ] Bitrate threshold respects config
-- [ ] Duration sanity checks catch truncated/extended files
-- [ ] Tiebreakers apply when enabled
-- [ ] Aggressiveness modifies decisions appropriately
+- [x] Format tier comparison works correctly (m4b > m4a > opus > mp3 > flac)
+- [x] Bitrate threshold respects config
+- [x] Duration sanity checks catch truncated/extended files
+- [x] Tiebreakers apply when enabled
+- [x] Aggressiveness modifies decisions appropriately
+
+**Note:** Decision logic was implemented alongside Phase 1 as both are in `trumping.py`.
 
 ---
 
-### Phase 3: Archive System ⏳
+### Phase 3: Archive System ✅
 
 **Goal:** Implement safe archival of trumped content.
 
 **Deliverables:**
-- [ ] `archive_existing()` function in `abs/trumping.py`
-- [ ] `TrumpSidecar` schema in `schemas/trumping.py`
-- [ ] Archive path building with year support
-- [ ] `TrumpingError` exception class
+- [x] `archive_existing()` function in `abs/trumping.py`
+- [x] Inline sidecar JSON writing (TrumpSidecar schema not needed - simple dict)
+- [x] Archive path building with year support
+- [x] `TrumpingError` exception class
 
 **Acceptance Criteria:**
-- [ ] Files moved to archive, not deleted
-- [ ] Sidecar contains full decision audit trail
-- [ ] Archive path handles collisions (timestamp uniqueness)
-- [ ] Works with dry_run mode
-- [ ] Respects `archive_by_year` setting
+- [x] Files moved to archive, not deleted
+- [x] Sidecar contains full decision audit trail
+- [x] Archive path handles collisions (timestamp uniqueness)
+- [x] Works with dry_run mode
+- [x] Respects `archive_by_year` setting
+
+**Note:** Archive system was implemented alongside Phase 1-2 in initial commit.
 
 ---
 
-### Phase 4: Import Integration ⏳
+### Phase 4: Import Integration ✅
 
 **Goal:** Wire trumping into import flow.
 
 **Deliverables:**
-- [ ] Add `trump_prefs` parameter to `import_single()` in `abs/importer.py`
-- [ ] Insert trumping check before existing duplicate handling
-- [ ] Add CLI output for trump decisions in `console.py`
-- [ ] Update `BatchImportResult` with trump counts
+- [x] Add `trump_prefs` parameter to `import_single()` in `abs/importer.py`
+- [x] Insert trumping check before existing duplicate handling
+- [x] Add CLI output for trump decisions in `console.py`
+- [x] Update `BatchImportResult` with trump counts
 
 **Acceptance Criteria:**
-- [ ] Trumping runs automatically when enabled and duplicate detected
-- [ ] Import continues correctly after archiving
-- [ ] Statistics include trump counts (replaced, rejected, kept)
-- [ ] Dry run shows what would be trumped
+- [x] Trumping runs automatically when enabled and duplicate detected
+- [x] Import continues correctly after archiving
+- [x] Statistics include trump counts (replaced, rejected, kept)
+- [x] Dry run shows what would be trumped
+
+**Tests:** 8 integration tests in `test_abs_importer.py`
 
 ---
 
