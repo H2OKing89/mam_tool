@@ -107,7 +107,7 @@ class TestQBittorrentConfig:
 class TestLoadYamlConfig:
     """Tests for YAML config loading."""
 
-    def test_load_valid_yaml(self) -> None:
+    def test_load_valid_yaml(self, tmp_path: Path) -> None:
         """Test loading a valid YAML config file."""
         yaml_content = """
 paths:
@@ -118,10 +118,9 @@ paths:
 mam:
   max_filename_length: 200
 """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write(yaml_content)
-            f.flush()
-            config = load_yaml_config(Path(f.name))
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(yaml_content)
+        config = load_yaml_config(config_file)
 
         assert config["paths"]["library_root"] == "/tmp/library"
         assert config["mam"]["max_filename_length"] == 200
@@ -131,12 +130,11 @@ mam:
         with pytest.raises(FileNotFoundError):
             load_yaml_config(Path("/nonexistent/config.yaml"))
 
-    def test_load_empty_yaml(self) -> None:
+    def test_load_empty_yaml(self, tmp_path: Path) -> None:
         """Test loading empty YAML returns empty dict."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
-            f.write("")
-            f.flush()
-            config = load_yaml_config(Path(f.name))
+        config_file = tmp_path / "empty.yaml"
+        config_file.write_text("")
+        config = load_yaml_config(config_file)
 
         assert config == {} or config is None
 

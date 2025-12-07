@@ -17,11 +17,13 @@ from mamfast.models import AudiobookRelease
 
 
 @pytest.fixture
-def mock_settings():
-    """Create mock settings for tests."""
+def mock_settings(tmp_path: Path):
+    """Create mock settings for tests using pytest's tmp_path fixture."""
     settings = MagicMock()
-    settings.paths.seed_root = Path(tempfile.mkdtemp())
-    settings.paths.library_root = Path(tempfile.mkdtemp())
+    settings.paths.seed_root = tmp_path / "seed_root"
+    settings.paths.library_root = tmp_path / "library_root"
+    settings.paths.seed_root.mkdir()
+    settings.paths.library_root.mkdir()
     settings.mam.max_filename_length = 225
     settings.mam.allowed_extensions = [".m4b", ".jpg", ".pdf", ".cue"]
     settings.filters.remove_phrases = []

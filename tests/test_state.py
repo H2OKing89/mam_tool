@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -25,11 +24,11 @@ from mamfast.utils.state import (
 
 
 @pytest.fixture
-def temp_state_file():
-    """Create a temporary state file."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump({"version": 1, "processed": {}, "failed": {}}, f)
-        return Path(f.name)
+def temp_state_file(tmp_path: Path):
+    """Create a temporary state file using pytest's tmp_path fixture."""
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({"version": 1, "processed": {}, "failed": {}}))
+    return state_file
 
 
 @pytest.fixture

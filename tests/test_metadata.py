@@ -421,7 +421,7 @@ class TestRunMediainfo:
 
         assert result is None
 
-    def test_run_mediainfo_success(self):
+    def test_run_mediainfo_success(self, tmp_path: Path):
         """Test successful mediainfo extraction."""
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -431,9 +431,8 @@ class TestRunMediainfo:
         mock_settings.mediainfo.binary = "mediainfo"
 
         # Create a temp file
-        with tempfile.NamedTemporaryFile(suffix=".m4b", delete=False) as f:
-            f.write(b"fake audio data")
-            temp_path = Path(f.name)
+        temp_path = tmp_path / "test.m4b"
+        temp_path.write_bytes(b"fake audio data")
 
         with (
             patch("subprocess.run", return_value=mock_result),
@@ -1216,40 +1215,44 @@ class TestFetchAudnexEdgeCases:
 class TestRunMediainfoEdgeCases:
     """Additional tests for run_mediainfo."""
 
-    def test_binary_not_found(self):
+    def test_binary_not_found(self, tmp_path: Path):
         """Test handling missing mediainfo binary."""
         mock_settings = MagicMock()
         mock_settings.mediainfo.binary = "/nonexistent/mediainfo"
 
+        temp_file = tmp_path / "test.m4b"
+        temp_file.write_bytes(b"fake")
+
         with (
-            tempfile.NamedTemporaryFile(suffix=".m4b", delete=False) as f,
             patch("subprocess.run", side_effect=FileNotFoundError()),
             patch("mamfast.metadata.get_settings", return_value=mock_settings),
         ):
-            result = run_mediainfo(Path(f.name))
+            result = run_mediainfo(temp_file)
 
         assert result is None
 
-    def test_process_error(self):
+    def test_process_error(self, tmp_path: Path):
         """Test handling subprocess error."""
         import subprocess
 
         mock_settings = MagicMock()
         mock_settings.mediainfo.binary = "mediainfo"
 
+        temp_file = tmp_path / "test.m4b"
+        temp_file.write_bytes(b"fake")
+
         with (
-            tempfile.NamedTemporaryFile(suffix=".m4b", delete=False) as f,
             patch(
                 "subprocess.run",
                 side_effect=subprocess.CalledProcessError(1, "mediainfo", stderr="Error"),
             ),
             patch("mamfast.metadata.get_settings", return_value=mock_settings),
         ):
-            result = run_mediainfo(Path(f.name))
+            result = run_mediainfo(temp_file)
 
         assert result is None
 
-    def test_invalid_json_output(self):
+    def test_invalid_json_output(self, tmp_path: Path):
         """Test handling invalid JSON output from mediainfo."""
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -1258,12 +1261,14 @@ class TestRunMediainfoEdgeCases:
         mock_settings = MagicMock()
         mock_settings.mediainfo.binary = "mediainfo"
 
+        temp_file = tmp_path / "test.m4b"
+        temp_file.write_bytes(b"fake")
+
         with (
-            tempfile.NamedTemporaryFile(suffix=".m4b", delete=False) as f,
             patch("subprocess.run", return_value=mock_result),
             patch("mamfast.metadata.get_settings", return_value=mock_settings),
         ):
-            result = run_mediainfo(Path(f.name))
+            result = run_mediainfo(temp_file)
 
         assert result is None
 
