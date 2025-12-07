@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -114,6 +115,7 @@ class TrumpableMeta:
     # Source metadata
     source_path: Path | None = None  # For logging/debugging
     trusted_source: bool = False  # Future: trusted ripper/source flag
+    ripper_tag: str | None = None  # e.g., "H2OKing" from folder name
 
     @property
     def format_tier(self) -> int:
@@ -138,6 +140,9 @@ class TrumpPrefs:
     max_duration_ratio: float = 1.25
     archive_root: Path | None = None
     archive_by_year: bool = True
+
+    # Own ripper tags: auto-trump if incoming has one of these (your uploads)
+    own_ripper_tags: tuple[str, ...] = ()
 
     # Future: canonical ASIN prefs (v1 uses defaults)
     canonical_asin_strategy: str = "none"  # "none" | "preferred_market"
@@ -166,6 +171,7 @@ class TrumpPrefs:
             max_duration_ratio=schema.max_duration_ratio,
             archive_root=Path(schema.archive_root) if schema.archive_root else None,
             archive_by_year=schema.archive_by_year,
+            own_ripper_tags=tuple(schema.own_ripper_tags) if schema.own_ripper_tags else (),
         )
 
     @classmethod
@@ -188,6 +194,7 @@ class TrumpPrefs:
             max_duration_ratio=config.max_duration_ratio,
             archive_root=Path(config.archive_root) if config.archive_root else None,
             archive_by_year=config.archive_by_year,
+            own_ripper_tags=tuple(config.own_ripper_tags) if config.own_ripper_tags else (),
         )
 
 
@@ -315,6 +322,32 @@ def _detect_chapters(track: dict[str, Any]) -> bool:
     return False
 
 
+def _extract_ripper_tag(folder_name: str) -> str | None:
+    """Extract ripper tag from folder name if present.
+
+    Supports both bracket and brace formats:
+    - [H2OKing] at the end
+    - {H2OKing} at the end
+
+    Args:
+        folder_name: Folder name to extract from
+
+    Returns:
+        Ripper tag without brackets, or None if not found
+    """
+    # Try bracket format first [Tag] - must be at end, after stripping ASIN markers
+    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*$", "", folder_name)
+    clean_name = re.sub(r"\s*\[ASIN\.[A-Z0-9]+\]\s*$", "", clean_name)
+    clean_name = re.sub(r"\s*\[B0[A-Z0-9]{8,9}\]\s*$", "", clean_name)
+
+    # Look for ripper tag at end - brackets or braces
+    match = re.search(r"\[([^\]]+)\]\s*$", clean_name)
+    if not match:
+        match = re.search(r"\{([^}]+)\}\s*$", clean_name)
+
+    return match.group(1) if match else None
+
+
 def extract_trumpable_meta(folder: Path, asin: str) -> TrumpableMeta:
     """Extract quality metadata from audio files in folder.
 
@@ -334,11 +367,14 @@ def extract_trumpable_meta(folder: Path, asin: str) -> TrumpableMeta:
     Returns:
         TrumpableMeta with extracted quality metrics
     """
+    # Extract ripper tag from folder name for own-upload detection
+    ripper_tag = _extract_ripper_tag(folder.name)
+
     audio_files = sorted(
         f for f in folder.iterdir() if f.is_file() and f.suffix.lower() in AUDIO_EXTENSIONS
     )
     if not audio_files:
-        return TrumpableMeta(asin=asin, source_path=folder)
+        return TrumpableMeta(asin=asin, source_path=folder, ripper_tag=ripper_tag)
 
     # v1 rule: only single-file layouts participate in trumping.
     # Caller should normally skip trumping for multi-file layouts using
@@ -353,6 +389,7 @@ def extract_trumpable_meta(folder: Path, asin: str) -> TrumpableMeta:
         return TrumpableMeta(
             asin=asin,
             source_path=folder,
+            ripper_tag=ripper_tag,
             # No quality metrics → triggers KEEP_EXISTING fallback
         )
 
@@ -367,6 +404,7 @@ def extract_trumpable_meta(folder: Path, asin: str) -> TrumpableMeta:
             asin=asin,
             format=probe_file.suffix.lower().lstrip("."),
             source_path=folder,
+            ripper_tag=ripper_tag,
         )
 
     # Run mediainfo (same pattern as extract_asin_from_mediainfo)
@@ -385,6 +423,7 @@ def extract_trumpable_meta(folder: Path, asin: str) -> TrumpableMeta:
             asin=asin,
             format=probe_file.suffix.lower().lstrip("."),
             source_path=folder,
+            ripper_tag=ripper_tag,
         )
 
     # Parse mediainfo JSON (structure: {"media": {"track": [...]}})
@@ -408,6 +447,7 @@ def extract_trumpable_meta(folder: Path, asin: str) -> TrumpableMeta:
         is_abridged=None,  # Difficult to detect automatically
         narrator=None,  # Would need metadata lookup
         source_path=folder,
+        ripper_tag=ripper_tag,
     )
 
 
@@ -457,6 +497,20 @@ def decide_trump(
         and existing.is_abridged != incoming.is_abridged
     ):
         return TrumpDecision.KEEP_BOTH, "Abridgement status differs"
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Stage 1.1: Own Ripper Tag Auto-Trump
+    # If incoming has one of the user's own ripper tags, ALWAYS replace
+    # regardless of quality. This maintains consistent naming/structure.
+    # ─────────────────────────────────────────────────────────────────────
+    if prefs.own_ripper_tags and incoming.ripper_tag:
+        incoming_tag_lower = incoming.ripper_tag.lower()
+        for own_tag in prefs.own_ripper_tags:
+            if own_tag.lower() == incoming_tag_lower:
+                return (
+                    TrumpDecision.REPLACE_WITH_NEW,
+                    f"Own ripper tag match: [{incoming.ripper_tag}]",
+                )
 
     # ─────────────────────────────────────────────────────────────────────
     # Stage 1.5: Duration Sanity Check (catch truncated/extended versions)

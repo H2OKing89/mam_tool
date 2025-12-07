@@ -9,6 +9,7 @@ Tests cover:
 - adjust_for_aggressiveness() modifier
 - archive_existing() function
 - TrumpingSchema validation
+- _extract_ripper_tag() helper
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from mamfast.abs.trumping import (
     TrumpDecision,
     TrumpingError,
     TrumpPrefs,
+    _extract_ripper_tag,
     adjust_for_aggressiveness,
     archive_existing,
     decide_trump,
@@ -307,6 +309,66 @@ class TestIsMultiFileLayout:
 
 class TestDecideTrump:
     """Test decide_trump() decision tree."""
+
+    def test_own_ripper_tag_auto_trumps(self) -> None:
+        """Own ripper tag auto-trumps regardless of quality."""
+        # Incoming is WORSE quality (mp3 vs m4b) but has our ripper tag
+        existing = TrumpableMeta(asin="B0TEST", format="m4b", bitrate_kbps=256)
+        incoming = TrumpableMeta(
+            asin="B0TEST", format="mp3", bitrate_kbps=128, ripper_tag="H2OKing"
+        )
+        prefs = TrumpPrefs(own_ripper_tags=("H2OKing",))
+
+        decision, reason = decide_trump(existing, incoming, prefs)
+        assert decision == TrumpDecision.REPLACE_WITH_NEW
+        assert "own ripper tag" in reason.lower()
+
+    def test_own_ripper_tag_case_insensitive(self) -> None:
+        """Own ripper tag comparison is case-insensitive."""
+        existing = TrumpableMeta(asin="B0TEST", format="m4b")
+        incoming = TrumpableMeta(asin="B0TEST", format="mp3", ripper_tag="h2oking")  # lowercase
+        prefs = TrumpPrefs(own_ripper_tags=("H2OKing",))  # Uppercase
+
+        decision, reason = decide_trump(existing, incoming, prefs)
+        assert decision == TrumpDecision.REPLACE_WITH_NEW
+        assert "own ripper tag" in reason.lower()
+
+    def test_own_ripper_tag_multiple_tags(self) -> None:
+        """Multiple own ripper tags are checked."""
+        existing = TrumpableMeta(asin="B0TEST", format="m4b")
+        incoming = TrumpableMeta(asin="B0TEST", format="mp3", ripper_tag="SecondTag")
+        prefs = TrumpPrefs(own_ripper_tags=("H2OKing", "SecondTag"))
+
+        decision, reason = decide_trump(existing, incoming, prefs)
+        assert decision == TrumpDecision.REPLACE_WITH_NEW
+
+    def test_own_ripper_tag_non_match_proceeds_normally(self) -> None:
+        """Non-matching ripper tag falls through to normal quality comparison."""
+        existing = TrumpableMeta(asin="B0TEST", format="m4b", bitrate_kbps=256)
+        incoming = TrumpableMeta(
+            asin="B0TEST", format="mp3", bitrate_kbps=128, ripper_tag="OtherUser"
+        )
+        prefs = TrumpPrefs(own_ripper_tags=("H2OKing",))
+
+        decision, reason = decide_trump(existing, incoming, prefs)
+        # Should NOT auto-trump, should follow normal logic (mp3 < m4b = format downgrade)
+        assert decision == TrumpDecision.REJECT_NEW
+        assert "own ripper tag" not in reason.lower()
+        assert "downgrade" in reason.lower()
+
+    def test_own_ripper_tag_empty_list_skips_check(self) -> None:
+        """Empty own_ripper_tags list skips the check entirely."""
+        existing = TrumpableMeta(asin="B0TEST", format="mp3", bitrate_kbps=128)
+        incoming = TrumpableMeta(
+            asin="B0TEST", format="m4b", bitrate_kbps=256, ripper_tag="H2OKing"
+        )
+        prefs = TrumpPrefs(own_ripper_tags=())  # Empty
+
+        decision, reason = decide_trump(existing, incoming, prefs)
+        # Should follow normal quality comparison (m4b > mp3)
+        assert decision == TrumpDecision.REPLACE_WITH_NEW
+        assert "own ripper tag" not in reason.lower()
+        assert "Format upgrade" in reason
 
     def test_different_asin_keeps_both(self) -> None:
         """Different ASINs return KEEP_BOTH."""
@@ -938,3 +1000,98 @@ class TestRestoreFromArchive:
 
         with pytest.raises(TrumpingError, match="destination exists"):
             restore_from_archive(archive, library)
+
+
+class TestExtractRipperTag:
+    """Tests for _extract_ripper_tag helper function."""
+
+    def test_bracket_format(self) -> None:
+        """Extracts tag from [Tag] format at end."""
+        assert _extract_ripper_tag("Author - Title (2024) (Narrator) [H2OKing]") == "H2OKing"
+
+    def test_brace_format(self) -> None:
+        """Extracts tag from {Tag} format at end."""
+        assert _extract_ripper_tag("Author - Title (2024) {RipperName}") == "RipperName"
+
+    def test_with_asin_bracket(self) -> None:
+        """Strips ASIN markers before extracting ripper tag."""
+        folder = "Author - Title (2024) [H2OKing] {ASIN.B0123456789}"
+        assert _extract_ripper_tag(folder) == "H2OKing"
+
+    def test_with_asin_bare(self) -> None:
+        """Strips bare ASIN marker before extracting ripper tag."""
+        folder = "Author - Title (2024) [MyTag] [B0123456789]"
+        assert _extract_ripper_tag(folder) == "MyTag"
+
+    def test_no_ripper_tag(self) -> None:
+        """Returns None when no ripper tag present."""
+        assert _extract_ripper_tag("Author - Title (2024) (Narrator)") is None
+
+    def test_asin_only_no_ripper(self) -> None:
+        """Returns None when only ASIN marker present."""
+        assert _extract_ripper_tag("Author - Title {ASIN.B0123456789}") is None
+        assert _extract_ripper_tag("Author - Title [B0123456789]") is None
+
+    def test_complex_folder_name(self) -> None:
+        """Handles complex MAM-style folder names."""
+        folder = (
+            "Brandon Sanderson - Stormlight Archive vol_01 - "
+            "The Way of Kings (2010) (Kate Reading) [H2OKing] {ASIN.B003ZWFO7E}"
+        )
+        assert _extract_ripper_tag(folder) == "H2OKing"
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Edge cases
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def test_empty_string(self) -> None:
+        """Returns None for empty string input."""
+        assert _extract_ripper_tag("") is None
+
+    def test_whitespace_only(self) -> None:
+        """Returns None for whitespace-only input."""
+        assert _extract_ripper_tag("   ") is None
+
+    def test_nested_brackets(self) -> None:
+        """Nested brackets are not supported by current regex (documents behavior)."""
+        # The regex uses [^\\]] which doesn't match nested brackets
+        # This documents the current behavior - nested brackets return None
+        assert _extract_ripper_tag("Author - Title [outer [inner]] {ASIN.B012345678}") is None
+
+    def test_empty_brackets(self) -> None:
+        """Empty brackets return None (regex requires at least one char)."""
+        # The regex pattern [^\\]]+ requires at least one character
+        assert _extract_ripper_tag("Author - Title []") is None
+
+    def test_empty_braces(self) -> None:
+        """Empty braces return None (regex requires at least one char)."""
+        # The regex pattern [^}]+ requires at least one character
+        assert _extract_ripper_tag("Author - Title {}") is None
+
+    def test_brackets_in_middle(self) -> None:
+        """Returns None when brackets are in middle, not at end."""
+        # Brackets followed by other text shouldn't match
+        assert _extract_ripper_tag("Author [Tag] - Title (2024)") is None
+
+    def test_mixed_brackets_and_parens(self) -> None:
+        """Handles mixed bracket and parenthesis patterns."""
+        # Tag in brackets at end, with ASIN in braces stripped first
+        folder = "Author - (A Book) Title [MyTag] {ASIN.B012345678}"
+        assert _extract_ripper_tag(folder) == "MyTag"
+
+    def test_special_characters_in_tag(self) -> None:
+        """Handles special characters in ripper tag."""
+        assert _extract_ripper_tag("Author - Title [H2O_King-123]") == "H2O_King-123"
+
+    def test_unicode_in_tag(self) -> None:
+        """Handles unicode characters in ripper tag."""
+        assert _extract_ripper_tag("Author - Title [日本語Tag]") == "日本語Tag"
+
+    def test_multiple_valid_tags_takes_last(self) -> None:
+        """When multiple bracket patterns exist, takes the rightmost before ASIN."""
+        folder = "Author [FirstTag] - Title [SecondTag] {ASIN.B012345678}"
+        assert _extract_ripper_tag(folder) == "SecondTag"
+
+    def test_only_parentheses_no_brackets(self) -> None:
+        """Returns None when only parentheses exist (no brackets/braces)."""
+        assert _extract_ripper_tag("Author - Title (2024) (Narrator)") is None
