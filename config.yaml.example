@@ -107,9 +107,16 @@ qbittorrent:
 audnex:
   base_url: "https://api.audnex.us"
   timeout_seconds: 30
-  # Regions to try in order when fetching metadata (first success wins)
-  # Some ASINs are region-specific (e.g., US-only or UK-only books)
+  # Regions to try in order when fetching metadata
+  # Tries each region in order; returns data from first region where ASIN exists.
+  # For English audiobooks, US/UK usually has the best metadata coverage.
+  # Some ASINs are region-specific (e.g., US-only or UK-only books).
   # Valid regions: us, uk, au, ca, de, es, fr, in, it, jp
+  #
+  # Recommended for English content:
+  #   regions: [us, uk, au, ca]
+  # Full fallback (may return non-English metadata for region-specific books):
+  #   regions: [us, uk, au, ca, de, es, fr, in, it, jp]
   regions:
     - us
     # - uk  # Uncomment to add UK as fallback

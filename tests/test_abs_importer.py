@@ -209,7 +209,7 @@ class TestEnrichFromAudnex:
             "title": "Test Book",
             "authors": [{"name": "Test Author"}],
             "seriesPrimary": {
-                "name": "Test Series",
+                "name": "Epic Adventure",
                 "position": 5,  # int, not string!
             },
         }
@@ -217,7 +217,7 @@ class TestEnrichFromAudnex:
         with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
             result = enrich_from_audnex(parsed, "B0TEST1234")
 
-        assert result.series == "Test Series"
+        assert result.series == "Epic Adventure"
         assert result.series_position == "5"  # Must be string
         assert isinstance(result.series_position, str)
 
@@ -241,7 +241,7 @@ class TestEnrichFromAudnex:
 
         mock_audnex_data = {
             "seriesPrimary": {
-                "name": "Test Series",
+                "name": "Epic Adventure",
                 "position": 1.5,  # float
             },
         }
@@ -249,6 +249,7 @@ class TestEnrichFromAudnex:
         with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
             result = enrich_from_audnex(parsed, "B0TEST1234")
 
+        assert result.series == "Epic Adventure"
         assert result.series_position == "1.5"
         assert isinstance(result.series_position, str)
 
@@ -272,7 +273,7 @@ class TestEnrichFromAudnex:
 
         mock_audnex_data = {
             "seriesPrimary": {
-                "name": "Test Series",
+                "name": "Epic Adventure",
                 "position": None,  # explicitly None
             },
         }
@@ -280,7 +281,7 @@ class TestEnrichFromAudnex:
         with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
             result = enrich_from_audnex(parsed, "B0TEST1234")
 
-        assert result.series == "Test Series"
+        assert result.series == "Epic Adventure"
         assert result.series_position is None  # Should remain None
 
     def test_subtitle_series_position_coerced(self) -> None:
@@ -303,15 +304,156 @@ class TestEnrichFromAudnex:
 
         # No seriesPrimary, but subtitle has series info
         mock_audnex_data = {
-            "subtitle": "My Series, Book 3",
+            "title": "Test Book",
+            "subtitle": "Epic Adventure, Book 3",
         }
 
         with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
             result = enrich_from_audnex(parsed, "B0TEST1234")
 
-        assert result.series == "My Series"
+        assert result.series == "Epic Adventure"
         assert result.series_position == "3"
         assert isinstance(result.series_position, str)
+
+    def test_series_extracted_from_title_pattern(self) -> None:
+        """Extract series from title when no seriesPrimary or subtitle available.
+
+        Bug fix: "A Most Unlikely Hero, Volume 8" should extract series from title.
+        """
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Unknown",
+            title="A Most Unlikely Hero, Volume 8",
+            series=None,
+            series_position=None,
+            asin="B0FZLQ9LQD",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        # Real-world case: Audnex has title but no seriesPrimary
+        mock_audnex_data = {
+            "title": "A Most Unlikely Hero, Volume 8",
+            "authors": [{"name": "Brandon Varnell"}],
+            "releaseDate": "2025-11-04T00:00:00.000Z",
+            # No seriesPrimary, no parseable subtitle
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B0FZLQ9LQD")
+
+        assert result.author == "Brandon Varnell"
+        assert result.series == "A Most Unlikely Hero"
+        assert result.series_position == "8"
+        assert result.is_standalone is False
+
+    def test_series_extracted_from_title_vol_dot_pattern(self) -> None:
+        """Extract series from title with 'Vol.' notation."""
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Unknown",
+            title="Epic Adventure Vol. 5",
+            series=None,
+            series_position=None,
+            asin="B012345678",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        mock_audnex_data = {
+            "title": "Epic Adventure Vol. 5",
+            "authors": [{"name": "Author Name"}],
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B012345678")
+
+        assert result.series == "Epic Adventure"
+        assert result.series_position == "5"
+
+    def test_series_not_extracted_when_series_primary_exists(self) -> None:
+        """Don't extract from title if seriesPrimary already provided series."""
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Unknown",
+            title="Book Title Volume 3",
+            series=None,
+            series_position=None,
+            asin="B012345678",
+            year=None,
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        # seriesPrimary takes precedence - don't re-extract from title
+        mock_audnex_data = {
+            "title": "Book Title Volume 3",
+            "seriesPrimary": {
+                "name": "Actual Series Name",
+                "position": 3,
+            },
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B012345678")
+
+        # Should use seriesPrimary, NOT extract from title
+        assert result.series == "Actual Series Name"
+        assert result.series_position == "3"
+
+    def test_audnex_series_overrides_incorrect_parsed_series(self) -> None:
+        """Audnex series should override incorrectly parsed series from folder name.
+
+        Bug fix: Folder names like "The Rising of the Shield Hero Volume 04 vol_04"
+        incorrectly parse series as "The Rising of the Shield Hero Volume 04".
+        Audnex data with correct series "Rising of the Shield Hero" should override.
+        """
+        from unittest.mock import patch
+
+        from mamfast.abs.importer import enrich_from_audnex
+
+        parsed = ParsedFolderName(
+            author="Aneko Yusagi",
+            title="The Rising of the Shield Hero Volume 04",
+            series="The Rising of the Shield Hero Volume 04",  # Incorrectly includes Volume
+            series_position="04",
+            asin="B0BN2GGTCK",
+            year="2022",
+            narrator=None,
+            ripper_tag="H2OKing",
+            is_standalone=False,
+        )
+
+        # Audnex has the correct series name without "Volume 04"
+        mock_audnex_data = {
+            "title": "The Rising of the Shield Hero, Volume 04",
+            "seriesPrimary": {
+                "name": "Rising of the Shield Hero",  # Correct!
+                "position": "4",
+            },
+        }
+
+        with patch("mamfast.abs.importer.fetch_audnex_book", return_value=mock_audnex_data):
+            result = enrich_from_audnex(parsed, "B0BN2GGTCK")
+
+        # Audnex should override the incorrect parsed series
+        assert result.series == "The Rising of the Shield Hero"  # "The" inherited
+        assert result.series_position == "4"
+        assert result.is_standalone is False
 
 
 # =============================================================================
@@ -367,6 +509,62 @@ class TestBuildTargetPath:
         assert target.parent == temp_library / "Andy Weir"
         assert "Project Hail Mary" in target.name
         assert "{ASIN.B08G9PRS1K}" in target.name
+
+    def test_audnex_series_preferred_over_staging_path(self, temp_library: Path) -> None:
+        """Audnex-enriched series should be preferred over staging path series.
+
+        Bug fix: "Black Summoner Black Summoner" in staging path should not
+        override the correct "Black Summoner" from Audnex.
+        """
+        # Parsed data has been enriched from Audnex with correct series
+        parsed = ParsedFolderName(
+            author="Doufu Mayoi",
+            title="The False Champions",
+            series="Black Summoner",  # Correct from Audnex
+            series_position="2",
+            asin="B0C5NSRFWC",
+            year="2023",
+            narrator=None,
+            ripper_tag="H2OKing",
+            is_standalone=False,
+        )
+
+        # Staging path has incorrect doubled series name
+        staging_folder = Path(
+            "/staging/Doufu Mayoi/Black Summoner Black Summoner/The False Champions vol_02"
+        )
+        staging_root = Path("/staging")
+
+        target = build_target_path(temp_library, parsed, staging_folder, staging_root=staging_root)
+
+        # Should use Audnex series "Black Summoner", not staging "Black Summoner Black Summoner"
+        assert target.parent == temp_library / "Doufu Mayoi" / "Black Summoner"
+        assert "Black Summoner Black Summoner" not in str(target)
+        assert "The False Champions" in target.name or "Black Summoner vol_02" in target.name
+
+    def test_staging_series_used_as_fallback(self, temp_library: Path) -> None:
+        """Staging path series should be used when parsed.series is None."""
+        parsed = ParsedFolderName(
+            author="Author Name",
+            title="Book Title",
+            series=None,  # No series from Audnex
+            series_position=None,
+            asin="B012345678",
+            year="2024",
+            narrator=None,
+            ripper_tag=None,
+            is_standalone=True,
+        )
+
+        # Staging path has series structure
+        # Note: avoid using "My Series" as clean_series_name() would strip "Series" suffix
+        staging_folder = Path("/staging/Author Name/Epic Adventure/Book Title vol_01")
+        staging_root = Path("/staging")
+
+        target = build_target_path(temp_library, parsed, staging_folder, staging_root=staging_root)
+
+        # Should use staging series as fallback
+        assert target.parent == temp_library / "Author Name" / "Epic Adventure"
 
 
 # =============================================================================
@@ -1219,6 +1417,7 @@ class TestUnknownAsinPolicyHandler:
         )
 
         assert result.status == "skipped"
+        assert result.error is not None
         assert "policy=skip" in result.error
         assert staging_folder.exists()  # Not moved
 
@@ -1245,6 +1444,7 @@ class TestUnknownAsinPolicyHandler:
         )
 
         assert result.status == "success"
+        assert result.target_path is not None
         assert result.target_path == quarantine / "Unknown Book vol_01 (2024)"
         assert not staging_folder.exists()  # Moved
         assert result.target_path.exists()  # Target folder exists
@@ -1273,6 +1473,7 @@ class TestUnknownAsinPolicyHandler:
         )
 
         assert result.status == "failed"
+        assert result.error is not None
         assert "quarantine_path" in result.error
 
     def test_policy_import_missing_asin_to_unknown(self, tmp_path: Path) -> None:
@@ -1294,6 +1495,7 @@ class TestUnknownAsinPolicyHandler:
         )
 
         assert result.status == "success"
+        assert result.target_path is not None
         assert result.target_path == library_root / "Unknown" / "Unknown Book vol_01 (2024)"
         assert not staging_folder.exists()  # Moved
         assert result.target_path.exists()  # Target folder exists
@@ -1343,6 +1545,7 @@ class TestUnknownAsinPolicyHandler:
         )
 
         assert result.status == "success"
+        assert result.target_path is not None
         assert staging_folder.exists()  # Still there!
         assert not result.target_path.exists()
 

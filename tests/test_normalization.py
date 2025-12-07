@@ -13,6 +13,7 @@ from mamfast.utils.naming import (
     clean_series_name,
     detect_swapped_title_subtitle,
     extract_arc_name,
+    extract_series_from_title,
     normalize_audnex_book,
 )
 
@@ -101,6 +102,64 @@ class TestCleanSeriesName:
             clean_series_name("Terminal List Series", title="The Terminal List")
             == "The Terminal List"
         )
+
+
+class TestExtractSeriesFromTitle:
+    """Tests for extract_series_from_title function."""
+
+    def test_empty_title_returns_none(self) -> None:
+        """Empty or None title returns (None, None)."""
+        assert extract_series_from_title("") == (None, None)
+        assert extract_series_from_title(None) == (None, None)  # type: ignore[arg-type]
+
+    def test_no_volume_pattern_returns_none(self) -> None:
+        """Title without volume pattern returns (None, None)."""
+        assert extract_series_from_title("The Hunger Games") == (None, None)
+        assert extract_series_from_title("A Simple Title") == (None, None)
+
+    def test_volume_with_comma(self) -> None:
+        """'Series Name, Volume N' pattern is extracted."""
+        series, pos = extract_series_from_title("A Most Unlikely Hero, Volume 8")
+        assert series == "A Most Unlikely Hero"
+        assert pos == "8"
+
+    def test_volume_with_colon(self) -> None:
+        """'Series Name: Volume N' pattern is extracted."""
+        series, pos = extract_series_from_title("Black Summoner: Volume 1")
+        assert series == "Black Summoner"
+        assert pos == "1"
+
+    def test_vol_dot_abbreviation(self) -> None:
+        """'Series Name Vol. N' pattern is extracted."""
+        series, pos = extract_series_from_title("Reborn as a Space Mercenary Vol. 3")
+        assert series == "Reborn as a Space Mercenary"
+        assert pos == "3"
+
+    def test_vol_no_dot_abbreviation(self) -> None:
+        """'Series Name Vol N' pattern is extracted."""
+        series, pos = extract_series_from_title("Solo Leveling Vol 2")
+        assert series == "Solo Leveling"
+        assert pos == "2"
+
+    def test_book_pattern(self) -> None:
+        """'Series Name Book N' pattern is extracted."""
+        series, pos = extract_series_from_title("The Dresden Files Book 7")
+        assert series == "The Dresden Files"
+        assert pos == "7"
+
+    def test_part_pattern(self) -> None:
+        """'Series Name Part N' pattern is extracted."""
+        series, pos = extract_series_from_title("Epic Fantasy Part 3")
+        assert series == "Epic Fantasy"
+        assert pos == "3"
+
+    def test_case_insensitive(self) -> None:
+        """Volume/Book/Part matching is case-insensitive."""
+        series1, _ = extract_series_from_title("My Series VOLUME 1")
+        assert series1 == "My Series"
+
+        series2, _ = extract_series_from_title("My Series book 5")
+        assert series2 == "My Series"
 
         # Bracket tag removal
         assert (
@@ -275,6 +334,46 @@ class TestNormalizeAudnexBook:
         result = normalize_audnex_book(data)
 
         assert result.series_position == "5"
+
+    def test_series_from_subtitle_fallback(self) -> None:
+        """Series extracted from subtitle when seriesPrimary missing."""
+        data = {
+            "asin": "TEST_SUBTITLE",
+            "title": "The Great Adventure",
+            "subtitle": "Epic Fantasy Collection, Book 3",
+            # No seriesPrimary
+        }
+        result = normalize_audnex_book(data)
+
+        assert result.series_name == "Epic Fantasy Collection"
+        assert result.series_position == "3"
+
+    def test_series_from_title_fallback(self) -> None:
+        """Series extracted from title when no seriesPrimary or parseable subtitle."""
+        data = {
+            "asin": "B0FZLQ9LQD",
+            "title": "A Most Unlikely Hero, Volume 8",
+            "subtitle": None,
+            # No seriesPrimary - this is the real-world bug case
+        }
+        result = normalize_audnex_book(data)
+
+        assert result.series_name == "A Most Unlikely Hero"
+        assert result.series_position == "8"
+
+    def test_series_primary_takes_precedence_over_title_pattern(self) -> None:
+        """seriesPrimary is preferred even when title has volume pattern."""
+        data = {
+            "asin": "TEST_PRECEDENCE",
+            "title": "Black Summoner: Volume 1",
+            "subtitle": None,
+            "seriesPrimary": {"name": "Black Summoner", "position": "1"},
+        }
+        result = normalize_audnex_book(data)
+
+        # Should use seriesPrimary, not re-extract from title
+        assert result.series_name == "Black Summoner"
+        assert result.series_position == "1"
 
 
 class TestNormalizationFixtures:

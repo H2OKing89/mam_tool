@@ -392,6 +392,13 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     to fill in missing author/series/position. This provides accurate metadata
     even for poorly-named folders.
 
+    Uses normalize_audnex_book() from naming.py for consistent series extraction
+    across all pipelines. That function handles:
+    - seriesPrimary (source of truth)
+    - Subtitle fallback ("Series Name, Book 5")
+    - Title fallback ("A Most Unlikely Hero, Volume 8")
+    - Series name cleaning (removes " Series" suffix, etc.)
+
     Args:
         parsed: ParsedFolderName from parse_mam_folder_name()
         asin: Resolved ASIN to look up
@@ -399,6 +406,8 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     Returns:
         ParsedFolderName with enriched data (modified in place and returned)
     """
+    from mamfast.utils.naming import normalize_audnex_book
+
     try:
         audnex_data = fetch_audnex_book(asin)
     except Exception as e:
@@ -409,6 +418,9 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
         logger.debug(f"No Audnex data found for ASIN {asin}")
         return parsed
 
+    # Use the naming module's normalizer for consistent series extraction
+    normalized = normalize_audnex_book(audnex_data)
+
     # Extract author from Audnex (prefer first author)
     authors = audnex_data.get("authors", [])
     if authors and (parsed.author == "Unknown" or not parsed.author):
@@ -417,64 +429,31 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
             parsed.author = first_author
             logger.info(f"Enriched author from Audnex: {first_author}")
 
-    # Extract series info from Audnex - check seriesPrimary first
-    series_primary = audnex_data.get("seriesPrimary")
-    if series_primary:
-        series_name = series_primary.get("name")
-        # Coerce to string - Audnex sometimes returns int for position
-        series_position_raw = series_primary.get("position")
-        series_position = str(series_position_raw) if series_position_raw is not None else None
-
-        if series_name and not parsed.series:
-            parsed.series = series_name
-            parsed.is_standalone = False
-            logger.info(f"Enriched series from Audnex seriesPrimary: {series_name}")
-
-        if series_position and not parsed.series_position:
-            parsed.series_position = series_position
-            logger.info(f"Enriched series position from Audnex: {series_position}")
-
-    # Fallback: parse series from subtitle if seriesPrimary not available
-    # Subtitle patterns: "Series Name, Book 5" or "Series Name, Volume 3"
-    if not parsed.series:
-        subtitle = audnex_data.get("subtitle", "")
-        if subtitle:
-            # Pattern: "Series Name, Book N" or "Series Name, Volume N"
-            subtitle_match = re.match(
-                r"^(.+?),\s*(?:Book|Volume|Vol\.?|Part)\s*(\d+)$",
-                subtitle,
-                re.IGNORECASE,
+    # Apply series info from normalized data
+    # ALWAYS prefer Audnex series over parsed series - Audnex is authoritative
+    # Parsed series may be incorrect (e.g., "The Rising of the Shield Hero Volume 04"
+    # instead of "Rising of the Shield Hero")
+    if normalized.series_name:
+        if parsed.series != normalized.series_name:
+            logger.info(
+                f"Enriched series from Audnex: {normalized.series_name}"
+                + (f" (was: {parsed.series})" if parsed.series else "")
             )
-            if subtitle_match:
-                series_name = subtitle_match.group(1).strip()
-                # Coerce to string for consistency
-                series_position = str(subtitle_match.group(2))
-                parsed.series = series_name
-                parsed.is_standalone = False
-                logger.info(f"Enriched series from Audnex subtitle: {series_name}")
-                if not parsed.series_position:
-                    parsed.series_position = series_position
-                    logger.info(f"Enriched series position from subtitle: {series_position}")
+        parsed.series = normalized.series_name
+        parsed.is_standalone = False
 
-    # Extract/update title from Audnex
-    audnex_title = audnex_data.get("title")
-    if audnex_title:
-        # Always prefer Audnex title if we have it - it's authoritative
-        # But clean it up: remove series suffix if we extracted series from it
-        clean_title = audnex_title
-        if parsed.series and parsed.series in clean_title:
-            # Remove "Series Name N:" prefix pattern
-            clean_title = re.sub(
-                rf"^{re.escape(parsed.series)}\s*\d*\s*:\s*",
-                "",
-                clean_title,
-                flags=re.IGNORECASE,
-            ).strip()
-        if clean_title and (
-            parsed.title in ("Unknown", "") or len(audnex_title) < len(parsed.title)
-        ):
-            parsed.title = clean_title
-            logger.info(f"Enriched title from Audnex: {clean_title}")
+    if normalized.series_position:
+        if parsed.series_position != normalized.series_position:
+            logger.info(
+                f"Enriched series position from Audnex: {normalized.series_position}"
+                + (f" (was: {parsed.series_position})" if parsed.series_position else "")
+            )
+        parsed.series_position = normalized.series_position
+
+    # Apply title from normalized data (uses display_title which handles swaps)
+    if normalized.display_title and (parsed.title in ("Unknown", "") or not parsed.title):
+        parsed.title = normalized.display_title
+        logger.info(f"Enriched title from Audnex: {normalized.display_title}")
 
     # Extract year from release date if missing
     release_date = audnex_data.get("releaseDate")
@@ -1014,24 +993,20 @@ def handle_unknown_asin(
     )
 
 
-def _normalize_folder_name(name: str) -> str:
-    """Normalize folder name for comparison.
+def _normalize_for_comparison(name: str) -> str:
+    """Normalize a name for case-insensitive comparison.
 
-    Normalizes:
-    - Lowercase
-    - Remove common suffixes: " Series", " Trilogy", " Saga"
-    - Collapse whitespace
-    - Remove punctuation
+    Used to match folder names that may differ only in case, punctuation,
+    or whitespace. Does NOT remove semantic suffixes like "Series" -
+    use clean_series_name() for that before calling this.
 
     Args:
-        name: Folder name
+        name: Name to normalize (already cleaned of semantic suffixes)
 
     Returns:
-        Normalized name for comparison
+        Lowercase, punctuation-stripped, whitespace-collapsed string
     """
     result = name.lower()
-    # Remove common suffixes
-    result = re.sub(r"\s+(series|trilogy|saga)\s*$", "", result)
     # Replace punctuation with spaces
     result = re.sub(r"[.,;:/\-_]+", " ", result)
     # Collapse whitespace
@@ -1052,11 +1027,11 @@ def _find_matching_author_folder(library_root: Path, author: str) -> Path | None
     if not library_root.exists():
         return None
 
-    normalized_author = _normalize_folder_name(author)
+    normalized_author = _normalize_for_comparison(author)
     for folder in library_root.iterdir():
         if not folder.is_dir():
             continue
-        if _normalize_folder_name(folder.name) == normalized_author:
+        if _normalize_for_comparison(folder.name) == normalized_author:
             logger.debug("Matched author '%s' to existing folder '%s'", author, folder.name)
             return folder
     return None
@@ -1064,7 +1039,7 @@ def _find_matching_author_folder(library_root: Path, author: str) -> Path | None
 
 def _find_matching_series_folder(
     author_folder: Path, series: str, book_title: str | None = None
-) -> Path | None:
+) -> tuple[Path | None, str | None]:
     """Find existing series folder with normalized matching.
 
     Handles:
@@ -1078,24 +1053,25 @@ def _find_matching_series_folder(
         book_title: Optional book title for " The" prefix inheritance
 
     Returns:
-        Path to existing series folder if found, else None
+        Tuple of (path to existing series folder if found, canonical cleaned name)
+        The canonical name is returned so callers can decide whether to rename
     """
     if not author_folder.exists():
-        return None
+        return None, None
 
     # Clean and normalize the input series name
     cleaned_series = clean_series_name(series, book_title) or series
-    normalized_series = _normalize_folder_name(cleaned_series)
+    normalized_series = _normalize_for_comparison(cleaned_series)
 
     for folder in author_folder.iterdir():
         if not folder.is_dir():
             continue
         # Try normalized match against cleaned folder name
         folder_cleaned = clean_series_name(folder.name) or folder.name
-        if _normalize_folder_name(folder_cleaned) == normalized_series:
+        if _normalize_for_comparison(folder_cleaned) == normalized_series:
             logger.debug("Matched series '%s' to existing folder '%s'", series, folder.name)
-            return folder
-    return None
+            return folder, cleaned_series
+    return None, cleaned_series
 
 
 def _same_filesystem(path1: Path, path2: Path) -> bool:
@@ -1213,12 +1189,14 @@ def build_target_path(
     existing_author = _find_matching_author_folder(library_root, author_name)
     author_folder = existing_author or (library_root / author_name)
 
-    # Determine series - prefer staging path, fall back to parsed
-    series_name = staging_series or parsed.series
+    # Determine series - PREFER parsed (enriched from Audnex) over staging path
+    # Staging path may have incorrect/duplicate series names (e.g., "Black Summoner Black Summoner")
+    # while Audnex data is authoritative
+    series_name = parsed.series or staging_series
 
-    # Use series folder if we have a series name from staging path
-    # OR from parsed (and not standalone)
-    has_series = staging_series or (parsed.series and not parsed.is_standalone)
+    # Use series folder if we have a series name from parsed (Audnex-enriched)
+    # OR from staging path (fallback)
+    has_series = (parsed.series and not parsed.is_standalone) or staging_series
 
     # Build clean folder name using naming module
     clean_folder_name = build_clean_folder_name(parsed)
@@ -1228,14 +1206,27 @@ def build_target_path(
         cleaned_series = clean_series_name(series_name, parsed.title) or series_name
 
         # Find existing series folder
-        existing_series = _find_matching_series_folder(
+        existing_series, canonical_series = _find_matching_series_folder(
             author_folder if existing_author else library_root / author_name,
             cleaned_series,
             parsed.title,
         )
 
-        # Use existing series folder or create new with cleaned name
-        series_folder = existing_series or (author_folder / cleaned_series)
+        # Use canonical name (may differ from existing folder name)
+        final_series_name = canonical_series or cleaned_series
+
+        if existing_series:
+            # Check if existing folder name differs from canonical
+            if existing_series.name != final_series_name:
+                logger.info(
+                    "Using existing series folder '%s' (canonical: '%s')",
+                    existing_series.name,
+                    final_series_name,
+                )
+            series_folder = existing_series
+        else:
+            # Create new folder with canonical (cleaned) name
+            series_folder = author_folder / final_series_name
 
         return series_folder / clean_folder_name
     else:
@@ -1387,7 +1378,15 @@ def import_single(
                 trump_decision, trump_reason, trump_prefs
             )
 
-            logger.info("Trump decision: %s - %s", trump_decision.name, trump_reason)
+            # Log with context (ASIN and title) for easier log review
+            short_title = parsed.title[:50] + "..." if len(parsed.title) > 50 else parsed.title
+            logger.info(
+                "Trump decision: %s - %s (ASIN=%s, title=%s)",
+                trump_decision.name,
+                trump_reason,
+                asin,
+                short_title,
+            )
 
             match trump_decision:
                 case TrumpDecision.REPLACE_WITH_NEW:

@@ -382,6 +382,46 @@ def extract_arc_name(
     return None
 
 
+def extract_series_from_title(title: str) -> tuple[str | None, str | None]:
+    """
+    Extract series name and position from title when seriesPrimary is missing.
+
+    Some Audnex entries have no seriesPrimary but encode series info in the title:
+    - "A Most Unlikely Hero, Volume 8" → ("A Most Unlikely Hero", "8")
+    - "Black Summoner: Volume 1" → ("Black Summoner", "1")
+    - "Reborn as a Space Mercenary Vol. 3" → ("Reborn as a Space Mercenary", "3")
+
+    Args:
+        title: Raw title from Audnex
+
+    Returns:
+        Tuple of (series_name, series_position) or (None, None) if no pattern matches
+    """
+    if not title:
+        return None, None
+
+    # Pattern: "Series Name, Volume N" or "Series Name: Volume N" or "Series Name Volume N"
+    # Also handles Vol., Book, Part variants
+    match = re.match(
+        r"^(.+?)[,:\s]+(?:Volume|Vol\.?|Book|Part)\s*(\d+)$",
+        title,
+        re.IGNORECASE,
+    )
+    if match:
+        series_name = match.group(1).strip()
+        series_position = match.group(2)
+        if series_name:
+            logger.debug(
+                "[normalize] Extracted series from title: %r -> series=%r, position=%r",
+                title,
+                series_name,
+                series_position,
+            )
+            return series_name, series_position
+
+    return None, None
+
+
 def normalize_audnex_book(
     audnex_data: dict[str, Any],
 ) -> NormalizedBook:
@@ -390,10 +430,11 @@ def normalize_audnex_book(
 
     This is the main entry point for Audnex normalization. It:
     1. Extracts series info from seriesPrimary (source of truth)
-    2. Cleans series name (removes suffixes, inherits "The" prefix)
-    3. Detects and fixes title/subtitle swaps
-    4. Extracts arc name from the appropriate field
-    5. Returns a NormalizedBook with canonical values
+    2. Falls back to parsing subtitle or title for series patterns
+    3. Cleans series name (removes suffixes, inherits "The" prefix)
+    4. Detects and fixes title/subtitle swaps
+    5. Extracts arc name from the appropriate field
+    6. Returns a NormalizedBook with canonical values
 
     Args:
         audnex_data: Raw Audnex API response for a book
@@ -413,6 +454,35 @@ def normalize_audnex_book(
     series_position = series_primary.get("position")
     if series_position is not None:
         series_position = str(series_position)
+
+    # Fallback 1: Parse series from subtitle if seriesPrimary not available
+    # Subtitle patterns: "Series Name, Book 5" or "Series Name, Volume 3"
+    if not raw_series_name and raw_subtitle:
+        subtitle_match = re.match(
+            r"^(.+?),\s*(?:Book|Volume|Vol\.?|Part)\s*(\d+)$",
+            raw_subtitle,
+            re.IGNORECASE,
+        )
+        if subtitle_match:
+            raw_series_name = subtitle_match.group(1).strip()
+            if not series_position:
+                series_position = subtitle_match.group(2)
+            logger.debug(
+                "[normalize] %s: Extracted series from subtitle: %r -> series=%r, position=%r",
+                asin,
+                raw_subtitle,
+                raw_series_name,
+                series_position,
+            )
+
+    # Fallback 2: Parse series from title if still missing
+    # Title patterns: "A Most Unlikely Hero, Volume 8"
+    if not raw_series_name:
+        title_series, title_position = extract_series_from_title(raw_title)
+        if title_series:
+            raw_series_name = title_series
+            if not series_position:
+                series_position = title_position
 
     # Clean series name (remove suffixes, inherit "The" prefix)
     series_name = clean_series_name(raw_series_name, raw_title)

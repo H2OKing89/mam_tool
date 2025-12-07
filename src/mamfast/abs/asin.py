@@ -62,8 +62,9 @@ ASIN_PATTERNS = [
     re.compile(r"(?<![A-Z0-9])(B0[A-Z0-9]{8})(?![A-Z0-9])"),
 ]
 
-# ASIN validation pattern
-ASIN_REGEX = re.compile(r"^[A-Z0-9]{10}$")
+# ASIN validation pattern - matches discovery.py for consistency
+# Valid ASINs are 10 characters: B + 9 alphanumeric (Audible) or 10 digits (ISBN-10)
+ASIN_REGEX = re.compile(r"^(?:B[0-9A-Z]{9}|[0-9]{10})$")
 
 
 @dataclass
@@ -627,6 +628,7 @@ def build_asin_index(
     items = client.get_library_items_cached(library_id)
     index: dict[str, AsinEntry] = {}
     no_asin_count = 0
+    duplicate_count = 0
 
     for item in items:
         # Get ASIN from the item (metadata, folder name, or file name)
@@ -643,6 +645,7 @@ def build_asin_index(
         # Skip if we've seen this ASIN (keep first occurrence)
         if asin in index:
             logger.debug(f"Duplicate ASIN {asin} found, keeping first at {index[asin].path}")
+            duplicate_count += 1
             continue
 
         index[asin] = AsinEntry(
@@ -653,7 +656,16 @@ def build_asin_index(
             author=item.author_name,
         )
 
-    logger.info(f"Built ASIN index: {len(index)} books with ASIN, {no_asin_count} without")
+    # Log detailed breakdown: indexed + no_asin + duplicates should equal total items
+    total = len(items)
+    indexed = len(index)
+    logger.info(
+        "Built ASIN index: %d indexed, %d without ASIN, %d duplicate ASINs (total: %d items)",
+        indexed,
+        no_asin_count,
+        duplicate_count,
+        total,
+    )
     return index
 
 
