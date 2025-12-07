@@ -606,6 +606,11 @@ Examples:
         help="Prompt for confirmation on each rename",
     )
     abs_rename_parser.add_argument(
+        "--rename-files-inside",
+        action="store_true",
+        help="Also rename media files inside folder to match folder name",
+    )
+    abs_rename_parser.add_argument(
         "--report",
         type=Path,
         default=None,
@@ -3637,7 +3642,7 @@ def cmd_abs_rename(args: argparse.Namespace) -> int:
 
     # Run the rename pipeline
     try:
-        results, summary = run_rename_pipeline(
+        results, summary, candidates = run_rename_pipeline(
             source_dir=source_dir,
             pattern=args.pattern,
             fetch_metadata=args.fetch_metadata,
@@ -3646,6 +3651,7 @@ def cmd_abs_rename(args: argparse.Namespace) -> int:
             naming_config=getattr(settings, "naming", None),
             dry_run=args.dry_run,
             interactive=args.interactive,
+            rename_files_inside=args.rename_files_inside,
         )
     finally:
         if abs_client:
@@ -3653,7 +3659,14 @@ def cmd_abs_rename(args: argparse.Namespace) -> int:
 
     # Generate report if requested
     if args.report:
-        generate_report(results, summary, args.report)
+        generate_report(
+            results,
+            candidates,
+            summary,
+            args.report,
+            source_dir=source_dir,
+            dry_run=args.dry_run,
+        )
         print_success(f"Report written to {args.report}")
 
     # Return error code if there were failures

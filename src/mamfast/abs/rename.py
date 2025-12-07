@@ -605,16 +605,62 @@ def check_target_exists(
 # Rename Execution
 # =============================================================================
 
+# Files to skip when renaming files inside folder
+SKIP_FILES = frozenset({"cover.jpg", "cover.png", "metadata.json", "desc.txt", "reader.txt"})
+
+
+def _rename_files_inside(target_path: Path, new_stem: str) -> list[str]:
+    """Rename media files inside folder to match new folder name.
+
+    Preserves cover.jpg, metadata.json and other sidecar files.
+
+    Args:
+        target_path: The renamed folder path
+        new_stem: New filename stem (folder name)
+
+    Returns:
+        List of original filenames that were renamed
+    """
+    renamed: list[str] = []
+
+    try:
+        for f in target_path.iterdir():
+            if not f.is_file():
+                continue
+
+            # Skip sidecar files
+            if f.name.lower() in SKIP_FILES:
+                continue
+
+            new_name = f"{new_stem}{f.suffix}"
+
+            # Skip if already named correctly
+            if f.name == new_name:
+                continue
+
+            try:
+                f.rename(f.with_name(new_name))
+                renamed.append(f.name)
+                logger.debug(f"Renamed file: {f.name} → {new_name}")
+            except OSError as e:
+                logger.warning(f"Failed to rename file {f.name}: {e}")
+    except PermissionError as e:
+        logger.warning(f"Cannot read folder {target_path}: {e}")
+
+    return renamed
+
 
 def rename_folder(
     candidate: RenameCandidate,
     dry_run: bool = False,
+    rename_files_inside: bool = False,
 ) -> RenameResult:
     """Execute folder rename.
 
     Args:
         candidate: Candidate to rename
         dry_run: If True, don't actually rename
+        rename_files_inside: If True, also rename media files to match folder name
 
     Returns:
         RenameResult with operation status
@@ -646,10 +692,17 @@ def rename_folder(
 
     try:
         candidate.source_path.rename(target_path)
+
+        # Optionally rename files inside the folder
+        files_renamed: list[str] = []
+        if rename_files_inside:
+            files_renamed = _rename_files_inside(target_path, candidate.target_name)
+
         return RenameResult(
             source_path=candidate.source_path,
             target_path=target_path,
             status="success",
+            files_renamed=files_renamed if files_renamed else None,
         )
     except OSError as e:
         return RenameResult(
@@ -675,7 +728,8 @@ def run_rename_pipeline(
     naming_config: NamingConfig | None = None,
     dry_run: bool = False,
     interactive: bool = False,
-) -> tuple[list[RenameResult], RenameSummary]:
+    rename_files_inside: bool = False,
+) -> tuple[list[RenameResult], RenameSummary, list[RenameCandidate]]:
     """Run the full rename pipeline.
 
     Args:
@@ -687,9 +741,10 @@ def run_rename_pipeline(
         naming_config: Optional naming configuration
         dry_run: If True, don't actually rename
         interactive: If True, prompt for each rename
+        rename_files_inside: If True, also rename media files to match folder
 
     Returns:
-        Tuple of (list of results, summary)
+        Tuple of (list of results, summary, list of candidates)
     """
     results: list[RenameResult] = []
     summary = RenameSummary()
@@ -701,7 +756,7 @@ def run_rename_pipeline(
     logger.info(f"Found {len(folders)} folders to process")
 
     if not folders:
-        return results, summary
+        return results, summary, []
 
     # Stage 2: Parse existing names
     print_step(2, 6, "Parsing folder names")
@@ -741,7 +796,7 @@ def run_rename_pipeline(
                 results.append(result)
                 continue
 
-        result = rename_folder(candidate, dry_run=dry_run)
+        result = rename_folder(candidate, dry_run=dry_run, rename_files_inside=rename_files_inside)
         results.append(result)
 
         # Update summary
@@ -777,7 +832,7 @@ def run_rename_pipeline(
     if summary.errors:
         print_warning(f"Errors: {summary.errors}")
 
-    return results, summary
+    return results, summary, candidates
 
 
 # =============================================================================
@@ -787,17 +842,43 @@ def run_rename_pipeline(
 
 def generate_report(
     results: list[RenameResult],
+    candidates: list[RenameCandidate],
     summary: RenameSummary,
     output_path: Path,
+    *,
+    source_dir: Path | None = None,
+    dry_run: bool = False,
 ) -> None:
     """Generate JSON report of rename operations.
 
     Args:
         results: List of rename results
+        candidates: List of candidates (for ASIN info)
         summary: Summary statistics
         output_path: Path to write JSON report
+        source_dir: Source directory scanned
+        dry_run: Whether this was a dry run
     """
+    from datetime import UTC, datetime
+
+    # Build results with candidate info
+    result_items = []
+    for result, candidate in zip(results, candidates, strict=False):
+        item = {
+            "source": result.source_path.name,
+            "target": result.target_path.name if result.target_path else None,
+            "status": result.status,
+            "error": result.error,
+            "files_renamed": result.files_renamed,
+            "asin": candidate.parsed.asin if candidate.parsed else None,
+            "asin_source": candidate.asin_source,
+        }
+        result_items.append(item)
+
     report = {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "source_dir": str(source_dir) if source_dir else None,
+        "dry_run": dry_run,
         "summary": {
             "total": summary.total_candidates,
             "renamed": summary.renamed,
@@ -807,15 +888,7 @@ def generate_report(
             "skipped_target_exists": summary.skipped_target_exists,
             "errors": summary.errors,
         },
-        "results": [
-            {
-                "source": str(r.source_path),
-                "target": str(r.target_path) if r.target_path else None,
-                "status": r.status,
-                "error": r.error,
-            }
-            for r in results
-        ],
+        "results": result_items,
     }
 
     with open(output_path, "w", encoding="utf-8") as f:

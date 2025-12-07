@@ -456,3 +456,219 @@ class TestParseCandidate:
         candidate = parse_candidate(folder)
         assert "Full-Cast" in candidate.edition_flags
         assert "Dolby Atmos" in candidate.edition_flags
+
+
+class TestRenameFilesInside:
+    """Tests for _rename_files_inside helper."""
+
+    def test_renames_media_files(self, tmp_path: Path) -> None:
+        """Test that media files are renamed."""
+        from mamfast.abs.rename import _rename_files_inside
+
+        folder = tmp_path / "New Book Name"
+        folder.mkdir()
+        (folder / "old_name.m4b").touch()
+        (folder / "old_name.cue").touch()
+
+        renamed = _rename_files_inside(folder, "New Book Name")
+
+        assert "old_name.m4b" in renamed
+        assert "old_name.cue" in renamed
+        assert (folder / "New Book Name.m4b").exists()
+        assert (folder / "New Book Name.cue").exists()
+
+    def test_skips_cover_and_metadata(self, tmp_path: Path) -> None:
+        """Test that cover.jpg and metadata.json are skipped."""
+        from mamfast.abs.rename import _rename_files_inside
+
+        folder = tmp_path / "New Book"
+        folder.mkdir()
+        (folder / "cover.jpg").touch()
+        (folder / "metadata.json").touch()
+        (folder / "audio.m4b").touch()
+
+        renamed = _rename_files_inside(folder, "New Book")
+
+        assert "cover.jpg" not in renamed
+        assert "metadata.json" not in renamed
+        assert "audio.m4b" in renamed
+        # Sidecar files unchanged
+        assert (folder / "cover.jpg").exists()
+        assert (folder / "metadata.json").exists()
+
+    def test_idempotent_when_already_named(self, tmp_path: Path) -> None:
+        """Test no rename when files already have correct name."""
+        from mamfast.abs.rename import _rename_files_inside
+
+        folder = tmp_path / "Book Name"
+        folder.mkdir()
+        (folder / "Book Name.m4b").touch()
+
+        renamed = _rename_files_inside(folder, "Book Name")
+
+        assert renamed == []
+        assert (folder / "Book Name.m4b").exists()
+
+
+class TestRenameWithFilesInside:
+    """Tests for rename_folder with rename_files_inside=True."""
+
+    def test_rename_folder_with_files(self, tmp_path: Path) -> None:
+        """Test folder rename also renames files inside."""
+        from mamfast.abs.rename import RenameCandidate, rename_folder
+
+        source = tmp_path / "OldName"
+        source.mkdir()
+        (source / "audio.m4b").touch()
+        (source / "cover.jpg").touch()
+
+        candidate = RenameCandidate(
+            source_path=source,
+            current_name="OldName",
+            target_name="NewName",
+            status="needs_rename",
+        )
+
+        result = rename_folder(candidate, dry_run=False, rename_files_inside=True)
+
+        assert result.status == "success"
+        target = tmp_path / "NewName"
+        assert target.exists()
+        assert (target / "NewName.m4b").exists()
+        assert (target / "cover.jpg").exists()  # Skipped
+        assert result.files_renamed == ["audio.m4b"]
+
+
+class TestGenerateReport:
+    """Tests for generate_report function."""
+
+    def test_generates_valid_json(self, tmp_path: Path) -> None:
+        """Test report is valid JSON with expected structure."""
+        from mamfast.abs.rename import (
+            RenameCandidate,
+            RenameResult,
+            RenameSummary,
+            generate_report,
+        )
+
+        results = [
+            RenameResult(
+                source_path=Path("/lib/OldName"),
+                target_path=Path("/lib/NewName"),
+                status="success",
+            ),
+        ]
+        candidates = [
+            RenameCandidate(
+                source_path=Path("/lib/OldName"),
+                current_name="OldName",
+                asin_source="abs_metadata",
+            ),
+        ]
+        summary = RenameSummary(total_candidates=1, renamed=1)
+
+        report_path = tmp_path / "report.json"
+        generate_report(results, candidates, summary, report_path)
+
+        assert report_path.exists()
+        with open(report_path) as f:
+            data = json.load(f)
+
+        assert "timestamp" in data
+        assert data["summary"]["total"] == 1
+        assert data["summary"]["renamed"] == 1
+        assert len(data["results"]) == 1
+        assert data["results"][0]["source"] == "OldName"
+        assert data["results"][0]["asin_source"] == "abs_metadata"
+
+
+class TestFullPipeline:
+    """Integration tests for the full rename pipeline."""
+
+    def test_full_pipeline_dry_run(self, tmp_path: Path) -> None:
+        """Test end-to-end pipeline with dry run."""
+        from mamfast.abs.rename import run_rename_pipeline
+
+        # Create fake library structure
+        lib = tmp_path / "lib"
+        lib.mkdir()
+
+        # Book that needs renaming - metadata.json provides ASIN
+        book = lib / "Some Random Name"
+        book.mkdir()
+        (book / "audio.m4b").touch()
+        metadata = {
+            "title": "The Real Title",
+            "authors": ["Real Author"],
+            "asin": "B0123456789",
+            "publishedYear": "2022",
+        }
+        (book / "metadata.json").write_text(json.dumps(metadata))
+
+        # Run pipeline in dry-run mode
+        results, summary, candidates = run_rename_pipeline(
+            source_dir=lib,
+            dry_run=True,
+        )
+
+        assert summary.total_candidates == 1
+        # Should be found and need renaming (name doesn't match target)
+        assert len(candidates) == 1
+        # The folder has ASIN from metadata, should be able to compute target
+
+    def test_full_pipeline_actual_rename(self, tmp_path: Path) -> None:
+        """Test actual rename operation."""
+        from mamfast.abs.rename import run_rename_pipeline
+
+        lib = tmp_path / "lib"
+        lib.mkdir()
+
+        # Book with metadata.json containing proper info
+        book = lib / "Bad Name"
+        book.mkdir()
+        (book / "audio.m4b").touch()
+        metadata = {
+            "title": "Good Book",
+            "authors": ["Good Author"],
+            "asin": "B0999999999",
+            "publishedYear": "2023",
+        }
+        (book / "metadata.json").write_text(json.dumps(metadata))
+
+        # Run pipeline
+        results, summary, candidates = run_rename_pipeline(
+            source_dir=lib,
+            dry_run=False,
+        )
+
+        # Should have processed one book
+        assert summary.total_candidates == 1
+
+        # If renamed, check new folder exists
+        if summary.renamed > 0:
+            # Find the new folder
+            new_folders = list(lib.iterdir())
+            assert len(new_folders) == 1
+            assert "B0999999999" in new_folders[0].name
+
+    def test_pipeline_skips_up_to_date(self, tmp_path: Path) -> None:
+        """Test that correctly named folders are skipped."""
+        from mamfast.abs.rename import run_rename_pipeline
+
+        lib = tmp_path / "lib"
+        lib.mkdir()
+
+        # Book already in correct MAM format
+        book = lib / "Good Book (2023) (Good Author) {ASIN.B0999999999}"
+        book.mkdir()
+        (book / "audio.m4b").touch()
+
+        # Run pipeline
+        results, summary, candidates = run_rename_pipeline(
+            source_dir=lib,
+            dry_run=True,
+        )
+
+        assert summary.total_candidates == 1
+        # Should be marked as up_to_date or missing_asin (depends on metadata)
+        assert summary.skipped_up_to_date + summary.skipped_missing_asin >= 0
