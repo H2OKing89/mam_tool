@@ -2567,6 +2567,9 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     cleanup_success_count = 0
     cleanup_skipped_count = 0
     cleanup_failed_count = 0
+    # Track which source paths would be cleaned (for dry-run "remaining" simulation)
+    cleanup_would_succeed_paths: set[Path] = set()
+    cleanup_would_skip_paths: set[Path] = set()
 
     if cleanup_prefs.strategy != CleanupStrategy.NONE:
         print_step(5, 6, "Post-import cleanup")
@@ -2627,8 +2630,10 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
 
                     if cleanup_result.status in ("success", "dry_run"):
                         cleanup_success_count += 1
+                        cleanup_would_succeed_paths.add(source_path)
                     elif cleanup_result.status == "skipped":
                         cleanup_skipped_count += 1
+                        cleanup_would_skip_paths.add(source_path)
                     else:
                         cleanup_failed_count += 1
 
@@ -2640,28 +2645,67 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                 )
 
         # Show remaining folders in source directory after cleanup
+        # In dry-run: simulate what would remain (trumped + cleanup-skipped)
+        # In real run: show actual filesystem state
         console.print()
-        print_info("Remaining in source directory:")
-        remaining_folders = []
-        try:
-            if import_source.exists():
-                for item in sorted(import_source.iterdir()):
-                    if item.is_dir() and not item.name.startswith("."):
-                        remaining_folders.append(item.name)
-        except OSError:
-            pass
 
-        if remaining_folders:
-            from rich.tree import Tree as RemainingTree
+        if args.dry_run:
+            # Simulate: remaining = all sources - cleanup successes
+            # Trumped folders stay (not imported), cleanup-skipped stay (no seed)
+            trumped_paths = {
+                r.staging_path
+                for r in result.results
+                if r.status in ("trump_kept_existing", "trump_rejected", "duplicate")
+            }
+            # Remaining = trumped + cleanup-skipped (cleanup successes would be moved)
+            simulated_remaining = trumped_paths | cleanup_would_skip_paths
 
-            remaining_tree = RemainingTree(f"[dim]{import_source}[/dim]")
-            for folder in remaining_folders[:20]:  # Limit to 20 folders
-                remaining_tree.add(f"[yellow]{folder}[/yellow]")
-            if len(remaining_folders) > 20:
-                remaining_tree.add(f"[dim]... and {len(remaining_folders) - 20} more[/dim]")
-            console.print(remaining_tree)
+            print_info(
+                f"Would remain in source directory " f"({len(simulated_remaining)} folder(s)):"
+            )
+
+            if simulated_remaining:
+                from rich.tree import Tree as RemainingTree
+
+                remaining_tree = RemainingTree(f"[dim]{import_source}[/dim]")
+                sorted_remaining = sorted(simulated_remaining, key=lambda p: p.name)
+                for folder in sorted_remaining[:20]:
+                    # Color-code by reason
+                    if folder in trumped_paths:
+                        remaining_tree.add(f"[dim]{folder.name}[/dim] [cyan](trumped)[/cyan]")
+                    else:
+                        remaining_tree.add(f"[yellow]{folder.name}[/yellow] [red](no seed)[/red]")
+                if len(sorted_remaining) > 20:
+                    remaining_tree.add(f"[dim]... and {len(sorted_remaining) - 20} more[/dim]")
+                console.print(remaining_tree)
+            else:
+                print_success("Source directory would be empty (all folders cleaned up)")
         else:
-            print_success("Source directory is empty (all folders cleaned up)")
+            # Real run: show actual filesystem state
+            print_info("Remaining in source directory:")
+            remaining_folder_names: list[str] = []
+            try:
+                if import_source.exists():
+                    for item in sorted(import_source.iterdir()):
+                        if item.is_dir() and not item.name.startswith("."):
+                            remaining_folder_names.append(item.name)
+            except OSError:
+                pass
+
+            if remaining_folder_names:
+                from rich.tree import Tree as RemainingTree
+
+                remaining_tree = RemainingTree(f"[dim]{import_source}[/dim]")
+                for folder_name in remaining_folder_names[:20]:
+                    remaining_tree.add(f"[yellow]{folder_name}[/yellow]")
+                if len(remaining_folder_names) > 20:
+                    remaining_tree.add(
+                        f"[dim]... and {len(remaining_folder_names) - 20} more[/dim]"
+                    )
+                console.print(remaining_tree)
+            else:
+                print_success("Source directory is empty (all folders cleaned up)")
+
         console.print()
 
     else:
@@ -2727,12 +2771,24 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         )
 
     # Cleanup statistics (if cleanup was enabled)
+    # Use "would" language in dry-run mode to make it clear these are predictions
     if cleanup_success_count > 0:
-        summary_table.add_row("Cleanup (success):", f"[green]{cleanup_success_count}[/green]")
+        if args.dry_run:
+            summary_table.add_row(
+                "Cleanup (would succeed):", f"[green]{cleanup_success_count}[/green]"
+            )
+        else:
+            summary_table.add_row("Cleanup (success):", f"[green]{cleanup_success_count}[/green]")
     if cleanup_skipped_count > 0:
-        summary_table.add_row("Cleanup (skipped):", f"[dim]{cleanup_skipped_count}[/dim]")
+        if args.dry_run:
+            summary_table.add_row("Cleanup (would skip):", f"[dim]{cleanup_skipped_count}[/dim]")
+        else:
+            summary_table.add_row("Cleanup (skipped):", f"[dim]{cleanup_skipped_count}[/dim]")
     if cleanup_failed_count > 0:
-        summary_table.add_row("Cleanup (failed):", f"[red]{cleanup_failed_count}[/red]")
+        if args.dry_run:
+            summary_table.add_row("Cleanup (would fail):", f"[red]{cleanup_failed_count}[/red]")
+        else:
+            summary_table.add_row("Cleanup (failed):", f"[red]{cleanup_failed_count}[/red]")
 
     if needs_review_count > 0:
         # Build breakdown of what needs review
