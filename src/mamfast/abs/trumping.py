@@ -28,6 +28,7 @@ from mamfast.abs.asin import AUDIO_EXTENSIONS
 from mamfast.config import get_settings
 
 if TYPE_CHECKING:
+    from mamfast.config import TrumpingConfig
     from mamfast.schemas.config import TrumpingSchema
 
 logger = logging.getLogger(__name__)
@@ -168,7 +169,7 @@ class TrumpPrefs:
         )
 
     @classmethod
-    def from_config(cls, config: Any) -> TrumpPrefs:
+    def from_config(cls, config: TrumpingConfig) -> TrumpPrefs:
         """Create TrumpPrefs from runtime TrumpingConfig dataclass.
 
         Args:

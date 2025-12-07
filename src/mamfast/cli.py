@@ -417,6 +417,18 @@ Examples:
         metavar="THRESHOLD",
         help="Minimum confidence (0.0-1.0) for ABS search matches (default: from config or 0.75)",
     )
+    abs_import_parser.add_argument(
+        "--no-trump",
+        action="store_true",
+        help="Disable trumping for this run (ignore config setting)",
+    )
+    abs_import_parser.add_argument(
+        "--trump-aggressiveness",
+        choices=["conservative", "balanced", "aggressive"],
+        default=None,
+        metavar="LEVEL",
+        help="Override trumping aggressiveness (default: from config)",
+    )
     abs_import_parser.set_defaults(func=cmd_abs_import)
 
     # -------------------------------------------------------------------------
@@ -1980,7 +1992,6 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         validate_import_prerequisites,
     )
     from mamfast.abs.importer import build_clean_file_name
-    from mamfast.abs.trumping import TrumpPrefs
     from mamfast.config import reload_settings
 
     print_header("Audiobookshelf Import", dry_run=args.dry_run)
@@ -2128,12 +2139,18 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     if args.dry_run:
         print_dry_run(f"Would import {len(staging_folders)} book(s)")
 
-    # Build trumping preferences from config
-    trump_prefs: TrumpPrefs | None = None
-    trumping_config = abs_config.import_settings.trumping
-    if trumping_config.enabled:
-        trump_prefs = TrumpPrefs.from_config(trumping_config)
+    # Build trumping preferences from config with CLI overrides
+    from mamfast.config import build_trump_prefs
+
+    trump_prefs = build_trump_prefs(
+        abs_config.import_settings.trumping,
+        enabled_override=False if args.no_trump else None,
+        aggressiveness_override=args.trump_aggressiveness,
+    )
+    if trump_prefs:
         print_info(f"Trumping enabled (aggressiveness: {trump_prefs.aggressiveness.value})")
+    elif args.no_trump:
+        print_info("Trumping disabled (--no-trump)")
 
     # Build path mapper for container↔host conversion (needed for trumping)
     path_mapper: PathMapper | None = None

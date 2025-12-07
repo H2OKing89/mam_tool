@@ -262,7 +262,28 @@ class TestAbsImportParser:
         assert args.no_scan is False
         assert args.no_abs_search is False  # Uses config default
         assert args.confidence is None  # Uses config default
+        assert args.no_trump is False  # Uses config default
+        assert args.trump_aggressiveness is None  # Uses config default
         assert args.paths == []
+
+    def test_abs_import_no_trump_flag(self) -> None:
+        """Test abs-import --no-trump flag is parsed."""
+        parser = build_parser()
+        args_default = parser.parse_args(["abs-import"])
+        assert args_default.no_trump is False
+
+        args_disabled = parser.parse_args(["abs-import", "--no-trump"])
+        assert args_disabled.no_trump is True
+
+    def test_abs_import_trump_aggressiveness_flag(self) -> None:
+        """Test abs-import --trump-aggressiveness flag is parsed."""
+        parser = build_parser()
+        args_default = parser.parse_args(["abs-import"])
+        assert args_default.trump_aggressiveness is None
+
+        for level in ["conservative", "balanced", "aggressive"]:
+            args_custom = parser.parse_args(["abs-import", "--trump-aggressiveness", level])
+            assert args_custom.trump_aggressiveness == level
 
 
 class TestAbsImportCommand:
@@ -279,6 +300,8 @@ class TestAbsImportCommand:
             no_scan=False,
             no_abs_search=False,  # Uses config default (abs_search: true)
             confidence=None,  # Uses config default
+            no_trump=False,  # Uses config default
+            trump_aggressiveness=None,  # Uses config default
             paths=[],
         )
 

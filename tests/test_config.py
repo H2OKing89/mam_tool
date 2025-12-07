@@ -841,3 +841,81 @@ naming:
 
             # Empty string is converted to None for easier boolean checks
             assert settings.naming.ripper_tag is None
+
+
+class TestBuildTrumpPrefs:
+    """Tests for build_trump_prefs helper function."""
+
+    def test_returns_none_when_disabled(self) -> None:
+        """build_trump_prefs returns None when trumping is disabled."""
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(enabled=False, archive_root="/archive")
+        result = build_trump_prefs(config)
+        assert result is None
+
+    def test_returns_none_with_enabled_override_false(self) -> None:
+        """build_trump_prefs returns None when enabled_override is False."""
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(enabled=True, archive_root="/archive")
+        result = build_trump_prefs(config, enabled_override=False)
+        assert result is None
+
+    def test_creates_prefs_when_enabled(self) -> None:
+        """build_trump_prefs creates TrumpPrefs when enabled."""
+        from mamfast.abs.trumping import TrumpPrefs
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(enabled=True, archive_root="/archive")
+        result = build_trump_prefs(config)
+        assert result is not None
+        assert isinstance(result, TrumpPrefs)
+
+    def test_creates_prefs_with_enabled_override_true(self) -> None:
+        """build_trump_prefs creates TrumpPrefs when enabled_override is True."""
+        from mamfast.abs.trumping import TrumpPrefs
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(enabled=False, archive_root="/archive")
+        result = build_trump_prefs(config, enabled_override=True)
+        assert result is not None
+        assert isinstance(result, TrumpPrefs)
+
+    def test_aggressiveness_override(self) -> None:
+        """build_trump_prefs applies aggressiveness override."""
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(enabled=True, archive_root="/archive", aggressiveness="balanced")
+        result = build_trump_prefs(config, aggressiveness_override="aggressive")
+        assert result is not None
+        assert result.aggressiveness.value == "aggressive"
+
+    def test_uses_config_aggressiveness_when_no_override(self) -> None:
+        """build_trump_prefs uses config aggressiveness when no override."""
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(
+            enabled=True, archive_root="/archive", aggressiveness="conservative"
+        )
+        result = build_trump_prefs(config)
+        assert result is not None
+        assert result.aggressiveness.value == "conservative"
+
+    def test_passes_all_config_fields(self) -> None:
+        """build_trump_prefs passes all config fields to TrumpPrefs."""
+        from mamfast.config import TrumpingConfig, build_trump_prefs
+
+        config = TrumpingConfig(
+            enabled=True,
+            archive_root="/custom/archive",
+            aggressiveness="aggressive",
+            min_bitrate_increase_kbps=128,
+            prefer_chapters=False,
+        )
+        result = build_trump_prefs(config)
+        assert result is not None
+        assert result.archive_root == Path("/custom/archive")
+        assert result.aggressiveness.value == "aggressive"
+        assert result.min_bitrate_increase_kbps == 128
+        assert result.prefer_chapters is False

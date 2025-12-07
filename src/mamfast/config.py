@@ -44,11 +44,14 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from dotenv import load_dotenv
 from pydantic import ValidationError as PydanticValidationError
+
+if TYPE_CHECKING:
+    from mamfast.abs.trumping import TrumpPrefs
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +271,58 @@ class TrumpingConfig:
     max_duration_ratio: float = 1.25
     archive_root: str | None = None
     archive_by_year: bool = True
+
+
+def build_trump_prefs(
+    trumping_config: TrumpingConfig,
+    *,
+    enabled_override: bool | None = None,
+    aggressiveness_override: str | None = None,
+) -> TrumpPrefs | None:
+    """Build TrumpPrefs from config with optional CLI overrides.
+
+    Centralizes trumping preference construction so CLI and importer
+    don't need to know config structure details.
+
+    Args:
+        trumping_config: TrumpingConfig from AudiobookshelfImportConfig
+        enabled_override: If False, disable trumping regardless of config
+        aggressiveness_override: Override aggressiveness level (conservative/balanced/aggressive)
+
+    Returns:
+        TrumpPrefs instance if enabled, None if disabled
+    """
+    # Import here to avoid circular dependency
+    from mamfast.abs.trumping import TrumpPrefs
+
+    # Check if trumping is enabled (CLI override takes precedence)
+    enabled = trumping_config.enabled
+    if enabled_override is not None:
+        enabled = enabled_override
+
+    if not enabled:
+        return None
+
+    # Apply aggressiveness override if provided
+    aggressiveness = trumping_config.aggressiveness
+    if aggressiveness_override is not None:
+        aggressiveness = aggressiveness_override
+
+    # Create a modified config for TrumpPrefs.from_config
+    # We create a temporary config with overrides applied
+    modified_config = TrumpingConfig(
+        enabled=enabled,
+        aggressiveness=aggressiveness,
+        min_bitrate_increase_kbps=trumping_config.min_bitrate_increase_kbps,
+        prefer_chapters=trumping_config.prefer_chapters,
+        prefer_stereo=trumping_config.prefer_stereo,
+        min_duration_ratio=trumping_config.min_duration_ratio,
+        max_duration_ratio=trumping_config.max_duration_ratio,
+        archive_root=trumping_config.archive_root,
+        archive_by_year=trumping_config.archive_by_year,
+    )
+
+    return TrumpPrefs.from_config(modified_config)
 
 
 @dataclass
