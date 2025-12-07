@@ -34,6 +34,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Matching Constants
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Volume matching score adjustments for series books
+# These values significantly affect matching accuracy for series:
+# - Exact volume match gets bonus to prefer correct volume
+# - Close mismatch (±2) gets penalty to avoid adjacent volumes
+# - Large mismatch (>2) gets no penalty (likely different series entirely)
+_VOLUME_MATCH_BONUS = 0.15  # Bonus when volumes match exactly
+_VOLUME_CLOSE_MISMATCH_PENALTY = -0.20  # Penalty for close volume mismatch (±2)
+
 # Supported audio file extensions for ASIN extraction from filenames
 AUDIO_EXTENSIONS = (".m4b", ".mp3", ".m4a", ".opus", ".flac")
 
@@ -868,10 +880,10 @@ def match_search_results(
         if folder_volume is not None and result_volume is not None:
             if folder_volume == result_volume:
                 # Exact match - significant bonus
-                volume_match_bonus = 0.15
+                volume_match_bonus = _VOLUME_MATCH_BONUS
             elif abs(folder_volume - result_volume) <= 2:
                 # Close mismatch (e.g., Vol 7 vs Vol 8) - penalty to prefer exact
-                volume_match_bonus = -0.20
+                volume_match_bonus = _VOLUME_CLOSE_MISMATCH_PENALTY
             # If volumes differ by >2, no penalty - likely different series
 
         combined_score += volume_match_bonus

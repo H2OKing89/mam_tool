@@ -13,8 +13,13 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-import httpx
-from dotenv import load_dotenv
+try:
+    import httpx
+    from dotenv import load_dotenv
+except ImportError as e:
+    print(f"Missing required package: {e}")
+    print("Install with: pip install httpx python-dotenv")
+    sys.exit(1)
 
 load_dotenv("config/.env")
 
