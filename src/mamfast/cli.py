@@ -2581,8 +2581,10 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         if cleanup_prefs.require_seed_exists:
             print_info("Requires seed hardlinks to exist")
 
-        # Only cleanup successful imports
-        cleanup_eligible = [r for r in result.results if r.status in ("success", "trump_replaced")]
+        # Only cleanup successful imports that weren't trumped
+        # Note: trump_replaced files were already MOVED during import (not hardlinked),
+        # so their source paths no longer exist and cleanup should skip them
+        cleanup_eligible = [r for r in result.results if r.status == "success"]
 
         if not cleanup_eligible:
             print_info("No eligible folders for cleanup (no successful imports)")
@@ -2975,6 +2977,7 @@ def cmd_abs_trump_check(args: argparse.Namespace) -> int:
         max_duration_ratio=trump_prefs.max_duration_ratio,
         archive_root=trump_prefs.archive_root,
         archive_by_year=trump_prefs.archive_by_year,
+        own_ripper_tags=trump_prefs.own_ripper_tags,
     )
 
     # Discover books to check
