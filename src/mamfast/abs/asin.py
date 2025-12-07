@@ -218,11 +218,15 @@ class AsinResolution:
         asin: Resolved ASIN or None if not found
         source: Where the ASIN was found ("folder", "filename", "metadata", "unknown")
         source_detail: Additional detail (e.g., which file contained the ASIN)
+        resolved_author: Author name from search result (only for abs_search source)
+        resolved_title: Title from search result (only for abs_search source)
     """
 
     asin: str | None
     source: str
     source_detail: str | None = None
+    resolved_author: str | None = None
+    resolved_title: str | None = None
 
     @property
     def found(self) -> bool:
@@ -948,6 +952,7 @@ def resolve_asin_via_abs_search(
 
     Returns:
         AsinResolution with ASIN if found, source="abs_search"
+        Also includes resolved_author and resolved_title from the search result.
     """
     try:
         results = client.search_books(title=title, author=author, provider="audible")
@@ -967,6 +972,8 @@ def resolve_asin_via_abs_search(
             asin=match.asin,
             source="abs_search",
             source_detail=f"{match.title} (confidence={match.confidence:.0%})",
+            resolved_author=match.author,
+            resolved_title=match.title,
         )
 
     return AsinResolution(asin=None, source="unknown")

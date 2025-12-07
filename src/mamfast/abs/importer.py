@@ -185,6 +185,26 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     # Try to extract ASIN first (multiple formats supported)
     asin = extract_asin(folder_name)
 
+    # Strip format indicators BEFORE parsing to avoid "(Light Novel)" etc. being
+    # misidentified as author in Libation-style folder names
+    # Common format indicators that should never be authors
+    format_indicators = [
+        "(Light Novel)",
+        "(light novel)",
+        "Light Novel",
+        "(Manga)",
+        "(Graphic Novel)",
+        "(Unabridged)",
+        "Unabridged",
+        "(Audiobook)",
+        "Audiobook",
+    ]
+    clean_folder = folder_name
+    for indicator in format_indicators:
+        clean_folder = clean_folder.replace(indicator, "").strip()
+    # Collapse multiple spaces
+    clean_folder = re.sub(r"\s{2,}", " ", clean_folder).strip()
+
     # Extract components using patterns
     # Pattern parts:
     # - Author at start (before first " - ")
@@ -196,7 +216,7 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     # - Optional ASIN in brackets
 
     # Strip ASIN markers from end for cleaner parsing
-    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*$", "", folder_name)
+    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*$", "", clean_folder)
     clean_name = re.sub(r"\s*\[ASIN\.[A-Z0-9]+\]\s*$", "", clean_name)
     clean_name = re.sub(r"\s*\[B0[A-Z0-9]{8,9}\]\s*$", "", clean_name)
 
@@ -1206,6 +1226,11 @@ def import_single(
         if resolution.found:
             asin = resolution.asin
             parsed.asin = asin
+            # Update author from search result if we don't have one
+            # (e.g., Libation folder without author in name)
+            if resolution.resolved_author and (not parsed.author or parsed.author == "Unknown"):
+                parsed.author = resolution.resolved_author
+                logger.debug("Updated author from ABS search: %s", resolution.resolved_author)
             logger.info(
                 "Resolved ASIN %s from %s (%s)",
                 asin,
