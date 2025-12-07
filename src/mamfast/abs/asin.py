@@ -17,6 +17,7 @@ Phase 4 adds mediainfo probe to extract ASIN from embedded file metadata.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import re
@@ -677,6 +678,21 @@ class SearchMatch:
     sequence: str | None
 
 
+def _extract_volume_number(s: str) -> int | None:
+    """Extract volume/book number from a title string."""
+    if not s:
+        return None
+    # Match patterns like "Vol. 7", "Volume 7", "Book 7", "Part 7", or just "7" at end
+    match = re.search(r"\b(?:vol\.?|volume|book|part)\s*(\d+)\b", s, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    # Also try trailing number like "Title 7"
+    match = re.search(r"\s(\d+)$", s.strip())
+    if match:
+        return int(match.group(1))
+    return None
+
+
 def _normalize_for_matching(s: str) -> str:
     """Normalize a string for fuzzy matching.
 
@@ -702,6 +718,48 @@ def _normalize_for_matching(s: str) -> str:
     return result
 
 
+def _extract_core_title(s: str) -> str:
+    """Extract the core title, removing subtitles and series markers.
+
+    "Primal Imperative Provide, Defend, Breed A Monster Girl Men's Fantasy"
+    → "Primal Imperative Provide Defend Breed"
+
+    "Adachi and Shimamura (Light Novel) Vol. 7"
+    → "Adachi and Shimamura"
+    """
+    if not s:
+        return ""
+
+    result = s
+
+    # Remove parenthetical content like (Light Novel), (Manga), etc.
+    result = re.sub(r"\s*\([^)]+\)\s*", " ", result)
+
+    # Remove volume/book/part indicators
+    result = re.sub(r"\b(vol\.?|volume|book|part)\s*\d+\b", "", result, flags=re.IGNORECASE)
+
+    # Remove common subtitle patterns after colon
+    # Keep content before colon if there's significant content after
+    if ":" in result:
+        parts = result.split(":", 1)
+        if len(parts[0].strip()) >= 5:  # If title before colon is substantial
+            result = parts[0]
+
+    # Remove trailing genre descriptors (A X X Fantasy, A LitRPG, etc.)
+    result = re.sub(
+        r"\s+A\s+[\w\s]+(?:Fantasy|LitRPG|Romance|Thriller|Adventure)\s*$",
+        "",
+        result,
+        flags=re.IGNORECASE,
+    )
+
+    # Clean up
+    result = re.sub(r"[^\w\s-]", " ", result)
+    result = re.sub(r"\s+", " ", result).strip()
+
+    return result.lower()
+
+
 def match_search_results(
     results: list[dict[str, Any]],
     folder_title: str,
@@ -713,6 +771,11 @@ def match_search_results(
 
     Uses fuzzy matching to compare folder metadata against search results
     and returns the best match above the confidence threshold.
+
+    Enhanced matching:
+    - Volume number matching with bonus for exact match
+    - Core title extraction to handle subtitles/genre tags
+    - Series sequence matching
 
     Args:
         results: Search results from AbsClient.search_books()
@@ -729,8 +792,17 @@ def match_search_results(
     if not results:
         return None
 
+    # Extract volume number from folder title
+    folder_volume = _extract_volume_number(folder_title)
+
+    # Normalize folder title (removes volume numbers)
     folder_title_norm = _normalize_for_matching(folder_title)
+    folder_title_core = _extract_core_title(folder_title)
     folder_author_norm = _normalize_for_matching(folder_author or "")
+
+    # Skip "Unknown" as author for matching purposes
+    if folder_author_norm == "unknown":
+        folder_author_norm = ""
 
     best_match: SearchMatch | None = None
     best_score = 0.0
@@ -745,9 +817,36 @@ def match_search_results(
         if not result_asin or not is_valid_asin(result_asin):
             continue
 
-        # Calculate title similarity
+        # Extract volume number from result
+        result_volume = _extract_volume_number(result_title)
+
+        # Get series sequence as fallback volume
+        series_seq: int | None = None
+        series_list = result.get("series")
+        if series_list and isinstance(series_list, list) and len(series_list) > 0:
+            first_series = series_list[0]
+            if isinstance(first_series, dict):
+                seq = first_series.get("sequence")
+                if seq:
+                    with contextlib.suppress(ValueError, TypeError):
+                        series_seq = int(float(seq))
+
+        # Use series sequence if no volume in title
+        if result_volume is None and series_seq is not None:
+            result_volume = series_seq
+
+        # Calculate title similarity using multiple methods
         result_title_norm = _normalize_for_matching(result_title)
-        title_score = similarity_ratio(folder_title_norm, result_title_norm) / 100.0
+        result_title_core = _extract_core_title(result_title)
+
+        # Score 1: Standard normalized comparison
+        title_score_norm = similarity_ratio(folder_title_norm, result_title_norm) / 100.0
+
+        # Score 2: Core title comparison (handles subtitles better)
+        title_score_core = similarity_ratio(folder_title_core, result_title_core) / 100.0
+
+        # Use the better of the two title scores
+        title_score = max(title_score_norm, title_score_core)
 
         # Calculate author similarity (if we have author to compare)
         author_score = 1.0  # Default to perfect if no author to compare
@@ -758,6 +857,14 @@ def match_search_results(
         # Combined score (title weighted more heavily)
         combined_score = (title_score * 0.7) + (author_score * 0.3)
 
+        # Volume number matching - significant bonus/penalty
+        volume_match_bonus = 0.0
+        if folder_volume is not None and result_volume is not None:
+            # Exact match gets bonus, mismatch gets penalty
+            volume_match_bonus = 0.15 if folder_volume == result_volume else -0.20
+
+        combined_score += volume_match_bonus
+
         # Bonus for English (if preferred)
         if prefer_english and result_language and result_language.lower() == "english":
             combined_score *= 1.05  # 5% bonus
@@ -767,9 +874,15 @@ def match_search_results(
         if prefer_english and result_language and result_language.lower() not in ("english", ""):
             combined_score *= 0.8  # 20% penalty
 
+        # Ensure score is in valid range
+        combined_score = max(0.0, min(1.0, combined_score))
+
         logger.debug(
             f"Match candidate: {result_title!r} by {result_author!r} "
-            f"(ASIN={result_asin}, lang={result_language}, score={combined_score:.2f})"
+            f"(ASIN={result_asin}, lang={result_language}, "
+            f"vol={result_volume}, score={combined_score:.2f}, "
+            f"title_norm={title_score_norm:.2f}, title_core={title_score_core:.2f}, "
+            f"vol_bonus={volume_match_bonus:+.2f})"
         )
 
         if combined_score > best_score:
@@ -777,13 +890,12 @@ def match_search_results(
 
             # Extract series info
             series_name = None
-            series_seq = None
-            series_list = result.get("series")
+            series_seq_str = None
             if series_list and isinstance(series_list, list) and len(series_list) > 0:
                 first_series = series_list[0]
                 if isinstance(first_series, dict):
                     series_name = first_series.get("series")
-                    series_seq = first_series.get("sequence")
+                    series_seq_str = first_series.get("sequence")
 
             best_match = SearchMatch(
                 asin=result_asin,
@@ -792,7 +904,7 @@ def match_search_results(
                 confidence=combined_score,
                 language=result_language,
                 series=series_name,
-                sequence=series_seq,
+                sequence=series_seq_str,
             )
 
     # Only return if above threshold
