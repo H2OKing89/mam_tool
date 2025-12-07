@@ -275,6 +275,17 @@ class AudiobookshelfImportSchema(BaseModel):
         default_factory=TrumpingSchema,
         description="Quality-based replacement settings",
     )
+    # ABS search settings (query Audible via ABS for missing ASINs)
+    abs_search: bool = Field(
+        default=True,
+        description="Enable ABS metadata search for books without ASIN",
+    )
+    abs_search_confidence: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence threshold for ABS search matches (0.0-1.0)",
+    )
 
     @field_validator("duplicate_policy")
     @classmethod

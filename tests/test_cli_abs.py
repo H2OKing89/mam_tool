@@ -227,21 +227,21 @@ class TestAbsImportParser:
         assert args.no_scan is True
 
     def test_abs_import_abs_search_flag(self) -> None:
-        """Test abs-import --abs-search flag is parsed (opt-in)."""
+        """Test abs-import --no-abs-search flag is parsed (default is from config)."""
         parser = build_parser()
-        # Default is False (off)
+        # Default has no_abs_search=False (uses config)
         args_default = parser.parse_args(["abs-import"])
-        assert args_default.abs_search is False
-        # Explicit enable
-        args_enabled = parser.parse_args(["abs-import", "--abs-search"])
-        assert args_enabled.abs_search is True
+        assert args_default.no_abs_search is False
+        # Explicit disable
+        args_disabled = parser.parse_args(["abs-import", "--no-abs-search"])
+        assert args_disabled.no_abs_search is True
 
     def test_abs_import_confidence_flag(self) -> None:
         """Test abs-import --confidence flag is parsed."""
         parser = build_parser()
-        # Default value
+        # Default value is None (uses config)
         args_default = parser.parse_args(["abs-import"])
-        assert args_default.confidence == 0.75
+        assert args_default.confidence is None
         # Custom value
         args_custom = parser.parse_args(["abs-import", "--confidence", "0.6"])
         assert args_custom.confidence == 0.6
@@ -260,8 +260,8 @@ class TestAbsImportParser:
         args = parser.parse_args(["abs-import"])
         assert args.duplicate_policy is None
         assert args.no_scan is False
-        assert args.abs_search is False  # Default off (opt-in)
-        assert args.confidence == 0.75
+        assert args.no_abs_search is False  # Uses config default
+        assert args.confidence is None  # Uses config default
         assert args.paths == []
 
 
@@ -277,8 +277,8 @@ class TestAbsImportCommand:
             verbose=False,
             duplicate_policy=None,
             no_scan=False,
-            abs_search=False,  # Opt-in, default off
-            confidence=0.75,
+            no_abs_search=False,  # Uses config default (abs_search: true)
+            confidence=None,  # Uses config default
             paths=[],
         )
 
@@ -403,6 +403,8 @@ class TestAbsImportCommand:
         library.mkdir()
 
         mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+        mock_abs_config.import_settings.abs_search = True
+        mock_abs_config.import_settings.abs_search_confidence = 0.75
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf = mock_abs_config
@@ -433,12 +435,15 @@ class TestAbsImportCommand:
             result = cmd_abs_import(args)
             assert result == 0
 
-    def test_abs_import_abs_search_disabled_by_default(
+    def test_abs_import_abs_search_disabled_with_flag(
         self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
     ) -> None:
-        """Test that ABS search is disabled by default (opt-in)."""
+        """Test that --no-abs-search disables ABS search."""
         from mamfast.abs.importer import BatchImportResult
         from mamfast.cli import cmd_abs_import
+
+        # Explicitly disable ABS search
+        args.no_abs_search = True
 
         # Create staging directory with a book
         staging = tmp_path / "staging"
@@ -451,6 +456,8 @@ class TestAbsImportCommand:
         library.mkdir()
 
         mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+        mock_abs_config.import_settings.abs_search = True  # Config says enabled
+        mock_abs_config.import_settings.abs_search_confidence = 0.75
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf = mock_abs_config
@@ -469,18 +476,19 @@ class TestAbsImportCommand:
         ):
             result = cmd_abs_import(args)
             assert result == 0
-            # Verify abs_client is None when --abs-search not passed
+            # Verify abs_client is None when --no-abs-search is passed
             call_kwargs = mock_batch.call_args.kwargs
             assert call_kwargs["abs_client"] is None
 
-    def test_abs_import_abs_search_enabled_with_flag(
+    def test_abs_import_abs_search_enabled_from_config(
         self, args: argparse.Namespace, mock_abs_config: MagicMock, tmp_path: Path
     ) -> None:
-        """Test that --abs-search enables ABS search."""
+        """Test that ABS search is enabled by default from config."""
         from mamfast.abs.importer import BatchImportResult
         from mamfast.cli import cmd_abs_import
 
-        args.abs_search = True  # Enable ABS search
+        # Default: no_abs_search=False means use config
+        args.no_abs_search = False
 
         staging = tmp_path / "staging"
         staging.mkdir()
@@ -492,6 +500,8 @@ class TestAbsImportCommand:
         library.mkdir()
 
         mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+        mock_abs_config.import_settings.abs_search = True  # Config enables it
+        mock_abs_config.import_settings.abs_search_confidence = 0.75
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf = mock_abs_config
@@ -510,7 +520,7 @@ class TestAbsImportCommand:
         ):
             result = cmd_abs_import(args)
             assert result == 0
-            # Verify abs_client is passed when --abs-search is set
+            # Verify abs_client is passed when config enables abs_search
             call_kwargs = mock_batch.call_args.kwargs
             assert call_kwargs["abs_client"] is mock_client
 
@@ -521,7 +531,7 @@ class TestAbsImportCommand:
         from mamfast.abs.importer import BatchImportResult
         from mamfast.cli import cmd_abs_import
 
-        args.abs_search = True
+        args.no_abs_search = False  # Use config default (enabled)
         args.confidence = 0.6  # Custom confidence
 
         staging = tmp_path / "staging"
@@ -534,6 +544,8 @@ class TestAbsImportCommand:
         library.mkdir()
 
         mock_abs_config.path_map = [MockAbsPathMap(host=str(library))]
+        mock_abs_config.import_settings.abs_search = True
+        mock_abs_config.import_settings.abs_search_confidence = 0.75
 
         mock_settings = MagicMock()
         mock_settings.audiobookshelf = mock_abs_config

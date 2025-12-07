@@ -277,6 +277,9 @@ class AudiobookshelfImportConfig:
     duplicate_policy: str = "skip"  # skip | warn | overwrite
     trigger_scan: str = "batch"  # none | each | batch
     trumping: TrumpingConfig = field(default_factory=TrumpingConfig)
+    # ABS search: query Audible via ABS for missing ASINs (default: enabled)
+    abs_search: bool = True
+    abs_search_confidence: float = 0.75  # Minimum confidence threshold (0.0-1.0)
 
 
 @dataclass
@@ -1028,6 +1031,8 @@ def load_settings(
             duplicate_policy=abs_import_data.get("duplicate_policy", "skip"),
             trigger_scan=abs_import_data.get("trigger_scan", "batch"),
             trumping=_parse_trumping_config(abs_import_data.get("trumping", {})),
+            abs_search=abs_import_data.get("abs_search", True),
+            abs_search_confidence=abs_import_data.get("abs_search_confidence", 0.75),
         ),
         index_db=abs_data.get("index_db", "./data/abs_index.db"),
     )

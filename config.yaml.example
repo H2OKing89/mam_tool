@@ -170,6 +170,14 @@ audiobookshelf:
     trigger_scan: batch
 
     # ───────────────────────────────────────────────────────────────────────
+    # ABS Search: Query Audible via ABS for books without ASIN
+    # When enabled, books missing ASIN will be searched on Audible
+    # to resolve metadata (author, year, series info, etc.)
+    # ───────────────────────────────────────────────────────────────────────
+    abs_search: true                  # Enable ABS metadata search (default: true)
+    abs_search_confidence: 0.75       # Minimum match confidence (0.0-1.0)
+
+    # ───────────────────────────────────────────────────────────────────────
     # Trumping: Quality-Based Replacement (optional)
     # See docs/audiobookshelf/TRUMPING.md for full documentation
     # ───────────────────────────────────────────────────────────────────────

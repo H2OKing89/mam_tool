@@ -406,16 +406,16 @@ Examples:
         help="Don't trigger ABS library scan after import",
     )
     abs_import_parser.add_argument(
-        "--abs-search",
+        "--no-abs-search",
         action="store_true",
-        help="Enable ABS metadata search for missing ASINs (makes API calls)",
+        help="Disable ABS metadata search for missing ASINs (uses config default otherwise)",
     )
     abs_import_parser.add_argument(
         "--confidence",
         type=float,
-        default=0.75,
+        default=None,
         metavar="THRESHOLD",
-        help="Minimum confidence (0.0-1.0) for ABS search matches (default: 0.75)",
+        help="Minimum confidence (0.0-1.0) for ABS search matches (default: from config or 0.75)",
     )
     abs_import_parser.set_defaults(func=cmd_abs_import)
 
@@ -2073,8 +2073,18 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         fatal_error(f"Failed to build ASIN index: {e}")
         return 1
 
+    # Determine if we should use ABS search for missing ASINs
+    # Default from config (abs_search: true), can be disabled with --no-abs-search
+    config_abs_search = abs_config.import_settings.abs_search
+    no_abs_search_flag = getattr(args, "no_abs_search", False)
+    use_abs_search = config_abs_search and not no_abs_search_flag
+
+    # Use confidence from CLI if provided, else from config
+    confidence = getattr(args, "confidence", None)
+    if confidence is None:
+        confidence = abs_config.import_settings.abs_search_confidence
+
     # Validate confidence threshold (common mistake: passing 75 instead of 0.75)
-    confidence = getattr(args, "confidence", 0.75)
     if not 0.0 <= confidence <= 1.0:
         client.close()
         fatal_error(
@@ -2083,9 +2093,6 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Determine if we should use ABS search for missing ASINs
-    # Default OFF: ABS search makes API calls per book, use --abs-search to enable
-    use_abs_search = getattr(args, "abs_search", False)
     abs_client_for_import = client if use_abs_search else None
     if not use_abs_search:
         client.close()
@@ -2098,7 +2105,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     if use_abs_search:
         print_info(f"ABS search enabled (confidence: {confidence:.0%})")
     else:
-        print_info("ABS search disabled (use --abs-search to enable)")
+        print_info("ABS search disabled (set abs_search: true in config or remove --no-abs-search)")
 
     if args.dry_run:
         print_dry_run(f"Would import {len(staging_folders)} book(s)")
