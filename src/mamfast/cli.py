@@ -2646,6 +2646,21 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                     current_folder="Done!",
                 )
 
+        # Prune empty directories from staging area
+        # This handles empty author/series dirs left by shutil.move() during trumping
+        pruned_count = 0
+        if cleanup_prefs.prune_empty_dirs:
+            from mamfast.abs.cleanup import prune_empty_dirs
+
+            if args.dry_run:
+                pruned_count = prune_empty_dirs(import_source, dry_run=True)
+                if pruned_count > 0:
+                    print_dry_run(f"Would prune {pruned_count} empty director(y/ies)")
+            else:
+                pruned_count = prune_empty_dirs(import_source, dry_run=False)
+                if pruned_count > 0:
+                    print_info(f"Pruned {pruned_count} empty director(y/ies)")
+
         # Show remaining folders in source directory after cleanup
         # In dry-run: simulate what would remain (trumped + cleanup-skipped)
         # In real run: show actual filesystem state
