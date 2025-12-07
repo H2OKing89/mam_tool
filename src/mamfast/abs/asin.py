@@ -695,17 +695,25 @@ class SearchMatch:
 
 
 def _extract_volume_number(s: str) -> int | None:
-    """Extract volume/book number from a title string."""
+    """Extract volume/book number from a title string.
+
+    Returns volume number if found, None otherwise.
+    Avoids treating years (1900-2099) as volume numbers.
+    """
     if not s:
         return None
-    # Match patterns like "Vol. 7", "Volume 7", "Book 7", "Part 7", or just "7" at end
+    # Match patterns like "Vol. 7", "Volume 7", "Book 7", "Part 7"
     match = re.search(r"\b(?:vol\.?|volume|book|part)\s*(\d+)\b", s, re.IGNORECASE)
     if match:
         return int(match.group(1))
     # Also try trailing number like "Title 7"
+    # But avoid treating years (1900-2099) as volumes
     match = re.search(r"\s(\d+)$", s.strip())
     if match:
-        return int(match.group(1))
+        value = int(match.group(1))
+        # Treat 1-99 as volumes, ignore obvious years
+        if 1 <= value <= 99:
+            return value
     return None
 
 
@@ -811,7 +819,7 @@ def match_search_results(
     # Extract volume number from folder title
     folder_volume = _extract_volume_number(folder_title)
 
-    # Normalize folder title (removes volume numbers)
+    # Normalize folder title for fuzzy matching
     folder_title_norm = _normalize_for_matching(folder_title)
     folder_title_core = _extract_core_title(folder_title)
     folder_author_norm = _normalize_for_matching(folder_author or "")

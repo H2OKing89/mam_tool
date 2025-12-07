@@ -1236,6 +1236,22 @@ class TestExtractVolumeNumber:
         assert _extract_volume_number("") is None
         assert _extract_volume_number("Book Title Without Number") is None
 
+    def test_ignores_years(self) -> None:
+        """Should not treat years as volume numbers (trailing number heuristic only)."""
+        from mamfast.abs.asin import _extract_volume_number
+
+        # Years in trailing position should NOT be treated as volumes
+        # (the year guard only applies to the "Title 7" trailing number pattern)
+        assert _extract_volume_number("Deluxe Edition 2021") is None
+        assert _extract_volume_number("Some Title 2019") is None
+        assert _extract_volume_number("Novel 1984") is None
+        assert _extract_volume_number("Story 2000") is None
+        # But explicit "Volume/Book/Vol" markers should still work even with large numbers
+        assert _extract_volume_number("Volume 2019") == 2019
+        assert _extract_volume_number("Book 100") == 100
+        # And edge case: "Book" in title with trailing year is actually explicit
+        assert _extract_volume_number("Some Book 2019") == 2019  # "Book 2019" pattern
+
     def test_none_input(self) -> None:
         """Returns None for None input."""
         from mamfast.abs.asin import _extract_volume_number

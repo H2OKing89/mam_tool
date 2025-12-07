@@ -241,6 +241,8 @@ audiobookshelf:
 
 **Quality Hierarchy:** m4b > m4a > opus > mp3 > flac (for audiobooks)
 
+> **Note:** FLAC is intentionally ranked lowest for audiobooks because speech doesn't benefit from lossless encoding, FLAC lacks chapter support, and file sizes are significantly larger. See [TRUMPING.md](docs/audiobookshelf/TRUMPING.md#format-tier-rationale) for detailed rationale.
+
 **Trumping Decisions:**
 - **REPLACE_WITH_NEW** - New file is better quality → archive old, import new
 - **KEEP_EXISTING** - Existing is equal or better → skip import

@@ -2,10 +2,22 @@
 """Test script to investigate ABS search API behavior.
 
 Compare our search implementation with what ABS GUI does.
+
+This is a developer utility script for debugging ABS search behavior.
+
+Usage:
+    python scripts/test_abs_search.py
+    python scripts/test_abs_search.py --library-id <uuid>
+
+Environment variables (from config/.env):
+    AUDIOBOOKSHELF_HOST: ABS server URL
+    AUDIOBOOKSHELF_API_KEY: API key for authentication
+    AUDIOBOOKSHELF_LIBRARY_ID: Optional library UUID (can also use --library-id)
 """
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -25,7 +37,9 @@ load_dotenv("config/.env")
 
 HOST = os.getenv("AUDIOBOOKSHELF_HOST")
 API_KEY = os.getenv("AUDIOBOOKSHELF_API_KEY")
-LIBRARY_ID = "d00f643c-7973-42dd-9139-2708e68e0b4e"
+# Default library ID - can be overridden via env or CLI
+DEFAULT_LIBRARY_ID = "d00f643c-7973-42dd-9139-2708e68e0b4e"
+LIBRARY_ID = os.getenv("AUDIOBOOKSHELF_LIBRARY_ID", DEFAULT_LIBRARY_ID)
 
 if not HOST or not API_KEY:
     print("Missing AUDIOBOOKSHELF_HOST or AUDIOBOOKSHELF_API_KEY in .env")
@@ -155,8 +169,35 @@ def test_audible_search(query: str) -> None:
             print(f"  - {item}")
 
 
-if __name__ == "__main__":
-    # Test with the problematic titles
+def main() -> int:
+    """Run the test script."""
+    global LIBRARY_ID
+
+    parser = argparse.ArgumentParser(
+        description="Test ABS search API behavior",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--library-id",
+        default=LIBRARY_ID,
+        help=f"ABS library UUID (default: {LIBRARY_ID} or AUDIOBOOKSHELF_LIBRARY_ID env)",
+    )
+    parser.add_argument(
+        "--query",
+        "-q",
+        help="Test a single query instead of defaults",
+    )
+    args = parser.parse_args()
+
+    # Override library ID if provided
+    LIBRARY_ID = args.library_id
+
+    if args.query:
+        # Single query mode
+        test_search_endpoint(args.query)
+        return 0
+
+    # Default: test with the problematic titles
     test_queries = [
         "Primal Imperative",
         "Primal Imperative Quentin Kilgore",
@@ -173,3 +214,9 @@ if __name__ == "__main__":
 
     # Test Audible search
     test_audible_search("Primal Imperative Quentin Kilgore")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

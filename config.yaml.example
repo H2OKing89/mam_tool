@@ -205,8 +205,9 @@ audiobookshelf:
       # Keep both if incoming is significantly longer (different edition?)
       max_duration_ratio: 1.25        # Incoming > 125% triggers KEEP_BOTH
 
-      # Where to archive replaced content (REQUIRED if enabled)
+      # Where to archive replaced content (REQUIRED when enabled=true)
       # Old files moved to: {archive_root}/{year}/{ASIN}/{timestamp}/
+      # Uncomment and set this before turning on trumping:
       # archive_root: "/mnt/user/data/audio/archive"
 
       # Keep archive organized by year?

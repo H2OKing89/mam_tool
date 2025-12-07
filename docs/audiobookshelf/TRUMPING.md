@@ -1524,12 +1524,13 @@ if existing.canonical_asin != incoming.canonical_asin:
 
 ---
 
-## Appendix: Format Tier Rationale
+## Appendix: Format Tier Rationale {#format-tier-rationale}
 
 | Format | Tier | Why |
 |--------|------|-----|
-| m4b | 4 | Native audiobook format, chapter support, best app compatibility |
-| m4a | 3 | Same codec as m4b but no chapter support |
+| m4b | 5 | Native audiobook format, chapter support, best app compatibility |
+| m4a | 4 | Same codec as m4b but no chapter support |
+| opus | 3 | Modern efficient codec, excellent quality/size ratio |
 | mp3 | 2 | Universal playback but older codec, chapter support varies |
 | flac | 1 | Lossless but huge files, poor chapter support, overkill for speech |
 
