@@ -13,6 +13,7 @@ MAM JSON: Fast fillout format for MAM uploads
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import html
 import json
@@ -56,6 +57,232 @@ class Chapter:
 
     start: str  # "00:55:52" or "1:30:45"
     title: str  # "Chapter 2: Wandering Goblin Slayer"
+
+
+@dataclass
+class AudioFormat:
+    """Audio format information extracted from MediaInfo.
+
+    Used for detecting Dolby Atmos, high-bitrate editions, etc.
+    to disambiguate files with the same ASIN.
+
+    Codec names:
+        - AAC: Advanced Audio Coding (standard Audible format)
+        - USAC: Unified Speech and Audio Coding (xHE-AAC, high efficiency)
+        - E-AC-3: Enhanced AC-3 (Dolby Digital Plus, used for Atmos)
+        - MP3: MPEG Audio Layer III
+    """
+
+    codec: str  # "AAC", "USAC", "E-AC-3", "MP3"
+    codec_id: str  # "mp4a-40-2", "ec-3", "mp4a-40-42" (xHE-AAC)
+    bitrate: int  # bits per second (e.g., 128000, 768000)
+    bitrate_mode: str  # "VBR", "CBR"
+    channels: int  # 2 (stereo), 6 (5.1)
+    channel_layout: str  # "L R", "L R C LFE Ls Rs"
+    sample_rate: int  # 44100, 48000
+    is_dolby_atmos: bool  # True if Dolby Atmos detected
+    is_xhe_aac: bool  # True if xHE-AAC/USAC detected
+    format_commercial: str | None  # "Dolby Digital Plus with Dolby Atmos"
+    dynamic_objects: int | None  # Number of Atmos dynamic objects
+
+    def get_edition_tag(self) -> str | None:
+        """
+        Get an edition tag based on audio format.
+
+        Returns:
+            Edition tag like "(Dolby Atmos)", "(xHE-AAC)", "(768kbps)" or None
+        """
+        if self.is_dolby_atmos:
+            return "(Dolby Atmos)"
+
+        if self.is_xhe_aac:
+            return "(xHE-AAC)"
+
+        # High bitrate detection (> 256kbps for AAC is high quality)
+        bitrate_kbps = self.bitrate // 1000
+        if bitrate_kbps >= 256 and self.codec == "AAC":
+            return f"({bitrate_kbps}kbps)"
+
+        return None
+
+    def get_quality_tier(self) -> str:
+        """
+        Get quality tier for sorting/comparison.
+
+        Returns:
+            Quality tier: "atmos", "high", "standard", "low"
+        """
+        if self.is_dolby_atmos:
+            return "atmos"
+
+        # xHE-AAC is high efficiency - similar quality at lower bitrate
+        if self.is_xhe_aac:
+            return "high"
+
+        bitrate_kbps = self.bitrate // 1000
+        if bitrate_kbps >= 256:
+            return "high"
+        if bitrate_kbps >= 96:
+            return "standard"
+        return "low"
+
+    def get_format_description(self) -> str:
+        """
+        Get human-readable format description.
+
+        Returns:
+            Description like "Dolby Atmos 5.1 768kbps" or "xHE-AAC 124kbps"
+        """
+        parts = []
+
+        if self.is_dolby_atmos:
+            parts.append("Dolby Atmos")
+        elif self.is_xhe_aac:
+            parts.append("xHE-AAC")
+        else:
+            parts.append(self.codec)
+
+        if self.channels > 2:
+            if self.channels == 6:
+                parts.append("5.1")
+            else:
+                parts.append(f"{self.channels}ch")
+
+        parts.append(f"{self.bitrate // 1000}kbps")
+
+        return " ".join(parts)
+
+
+def detect_audio_format(mediainfo_data: dict[str, Any] | None) -> AudioFormat | None:
+    """
+    Extract audio format information from MediaInfo JSON.
+
+    Detects Dolby Atmos, codec, bitrate, channels, etc.
+
+    Args:
+        mediainfo_data: Parsed MediaInfo JSON from run_mediainfo()
+
+    Returns:
+        AudioFormat with detected properties, or None if no audio track found.
+
+    Example MediaInfo audio track for Dolby Atmos:
+        {
+            "@type": "Audio",
+            "Format": "E-AC-3",
+            "Format_Commercial_IfAny": "Dolby Digital Plus with Dolby Atmos",
+            "Format_AdditionalFeatures": "JOC",
+            "CodecID": "ec-3",
+            "BitRate": "768500",
+            "Channels": "6",
+            "ChannelLayout": "L R C LFE Ls Rs",
+            "SamplingRate": "48000",
+            "extra": {"NumberOfDynamicObjects": "15"}
+        }
+    """
+    if not mediainfo_data:
+        return None
+
+    media = mediainfo_data.get("media")
+    if not media:
+        return None
+
+    tracks = media.get("track", [])
+
+    # Find the audio track
+    audio_track: dict[str, Any] | None = None
+    for track in tracks:
+        if track.get("@type") == "Audio":
+            audio_track = track
+            break
+
+    if not audio_track:
+        logger.debug("No audio track found in MediaInfo")
+        return None
+
+    # Extract basic properties
+    codec = audio_track.get("Format", "Unknown")
+    codec_id = audio_track.get("CodecID", "")
+    bitrate_str = audio_track.get("BitRate", "0")
+    bitrate_mode = audio_track.get("BitRate_Mode", "VBR")
+    channels_str = audio_track.get("Channels", "2")
+    channel_layout = audio_track.get("ChannelLayout", "")
+    sample_rate_str = audio_track.get("SamplingRate", "44100")
+
+    # Parse numeric values
+    try:
+        bitrate = int(float(bitrate_str))
+    except (ValueError, TypeError):
+        bitrate = 0
+
+    try:
+        channels = int(channels_str)
+    except (ValueError, TypeError):
+        channels = 2
+
+    try:
+        sample_rate = int(sample_rate_str)
+    except (ValueError, TypeError):
+        sample_rate = 44100
+
+    # Detect Dolby Atmos
+    format_commercial = audio_track.get("Format_Commercial_IfAny")
+    format_additional = audio_track.get("Format_AdditionalFeatures", "")
+    extra = audio_track.get("extra", {})
+    dynamic_objects_str = extra.get("NumberOfDynamicObjects")
+
+    is_dolby_atmos = any(
+        [
+            format_commercial and "Dolby Atmos" in format_commercial,
+            "JOC" in format_additional,  # Joint Object Coding = Atmos
+            codec_id == "ec-3" and dynamic_objects_str,  # E-AC-3 with objects
+        ]
+    )
+
+    # Detect xHE-AAC (USAC - Unified Speech and Audio Coding)
+    # MediaInfo reports this as "USAC" format or codec_id "mp4a-40-42"
+    is_xhe_aac = any(
+        [
+            codec == "USAC",
+            codec_id == "mp4a-40-42",  # xHE-AAC codec ID
+            "xHE-AAC" in (format_commercial or ""),
+        ]
+    )
+
+    # Parse dynamic objects count
+    dynamic_objects: int | None = None
+    if dynamic_objects_str:
+        with contextlib.suppress(ValueError, TypeError):
+            dynamic_objects = int(dynamic_objects_str)
+
+    return AudioFormat(
+        codec=codec,
+        codec_id=codec_id,
+        bitrate=bitrate,
+        bitrate_mode=bitrate_mode,
+        channels=channels,
+        channel_layout=channel_layout,
+        sample_rate=sample_rate,
+        is_dolby_atmos=is_dolby_atmos,
+        is_xhe_aac=is_xhe_aac,
+        format_commercial=format_commercial,
+        dynamic_objects=dynamic_objects,
+    )
+
+
+def detect_audio_format_from_file(file_path: Path) -> AudioFormat | None:
+    """
+    Detect audio format directly from a file.
+
+    Convenience wrapper that runs mediainfo and extracts format.
+
+    Args:
+        file_path: Path to audio file (m4b, mp3, etc.)
+
+    Returns:
+        AudioFormat or None if detection fails.
+    """
+    mediainfo_data = run_mediainfo(file_path)
+    return detect_audio_format(mediainfo_data)
 
 
 @functools.lru_cache(maxsize=1)

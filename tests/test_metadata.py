@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mamfast.metadata import (
+    AudioFormat,
     _build_series_list,
     _clean_html,
     _extract_audio_info,
@@ -15,6 +16,7 @@ from mamfast.metadata import (
     _get_mediainfo_string,
     _parse_chapters_from_mediainfo,
     build_mam_json,
+    detect_audio_format,
     fetch_audnex_book,
     render_bbcode_description,
     run_mediainfo,
@@ -1502,3 +1504,322 @@ class TestBuildMamJsonCategory:
         assert "category" in result
         assert result["category"] == "Audiobooks - Fantasy"
         assert result["main_cat"] == 1  # Fiction
+
+
+class TestDetectAudioFormat:
+    """Tests for audio format detection from MediaInfo."""
+
+    def test_detect_dolby_atmos(self):
+        """Detect Dolby Atmos from E-AC-3 with JOC."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General"},
+                    {
+                        "@type": "Audio",
+                        "Format": "E-AC-3",
+                        "Format_Commercial_IfAny": "Dolby Digital Plus with Dolby Atmos",
+                        "Format_AdditionalFeatures": "JOC",
+                        "CodecID": "ec-3",
+                        "BitRate": "768500",
+                        "BitRate_Mode": "CBR",
+                        "Channels": "6",
+                        "ChannelLayout": "L R C LFE Ls Rs",
+                        "SamplingRate": "48000",
+                        "extra": {"NumberOfDynamicObjects": "15"},
+                    },
+                ]
+            }
+        }
+
+        result = detect_audio_format(mediainfo_data)
+
+        assert result is not None
+        assert result.is_dolby_atmos is True
+        assert result.codec == "E-AC-3"
+        assert result.codec_id == "ec-3"
+        assert result.bitrate == 768500
+        assert result.channels == 6
+        assert result.channel_layout == "L R C LFE Ls Rs"
+        assert result.dynamic_objects == 15
+        assert result.format_commercial == "Dolby Digital Plus with Dolby Atmos"
+
+    def test_detect_standard_aac(self):
+        """Detect standard AAC stereo audio."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General"},
+                    {
+                        "@type": "Audio",
+                        "Format": "AAC",
+                        "Format_AdditionalFeatures": "LC",
+                        "CodecID": "mp4a-40-2",
+                        "BitRate": "125588",
+                        "BitRate_Mode": "VBR",
+                        "Channels": "2",
+                        "ChannelLayout": "L R",
+                        "SamplingRate": "44100",
+                    },
+                ]
+            }
+        }
+
+        result = detect_audio_format(mediainfo_data)
+
+        assert result is not None
+        assert result.is_dolby_atmos is False
+        assert result.codec == "AAC"
+        assert result.codec_id == "mp4a-40-2"
+        assert result.bitrate == 125588
+        assert result.channels == 2
+        assert result.channel_layout == "L R"
+        assert result.dynamic_objects is None
+
+    def test_detect_high_bitrate_aac(self):
+        """Detect high bitrate AAC (256kbps+)."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {
+                        "@type": "Audio",
+                        "Format": "AAC",
+                        "CodecID": "mp4a-40-2",
+                        "BitRate": "320000",
+                        "Channels": "2",
+                        "SamplingRate": "44100",
+                    },
+                ]
+            }
+        }
+
+        result = detect_audio_format(mediainfo_data)
+
+        assert result is not None
+        assert result.is_dolby_atmos is False
+        assert result.bitrate == 320000
+        assert result.get_edition_tag() == "(320kbps)"
+        assert result.get_quality_tier() == "high"
+
+    def test_edition_tag_dolby_atmos(self):
+        """Edition tag returns (Dolby Atmos) for Atmos content."""
+        audio_format = AudioFormat(
+            codec="E-AC-3",
+            codec_id="ec-3",
+            bitrate=768500,
+            bitrate_mode="CBR",
+            channels=6,
+            channel_layout="L R C LFE Ls Rs",
+            sample_rate=48000,
+            is_dolby_atmos=True,
+            is_xhe_aac=False,
+            format_commercial="Dolby Digital Plus with Dolby Atmos",
+            dynamic_objects=15,
+        )
+
+        assert audio_format.get_edition_tag() == "(Dolby Atmos)"
+        assert audio_format.get_quality_tier() == "atmos"
+
+    def test_edition_tag_standard_bitrate(self):
+        """Edition tag returns None for standard bitrate."""
+        audio_format = AudioFormat(
+            codec="AAC",
+            codec_id="mp4a-40-2",
+            bitrate=128000,
+            bitrate_mode="VBR",
+            channels=2,
+            channel_layout="L R",
+            sample_rate=44100,
+            is_dolby_atmos=False,
+            is_xhe_aac=False,
+            format_commercial=None,
+            dynamic_objects=None,
+        )
+
+        assert audio_format.get_edition_tag() is None
+        assert audio_format.get_quality_tier() == "standard"
+
+    def test_quality_tier_low(self):
+        """Quality tier returns low for < 96kbps."""
+        audio_format = AudioFormat(
+            codec="AAC",
+            codec_id="mp4a-40-2",
+            bitrate=64000,
+            bitrate_mode="VBR",
+            channels=2,
+            channel_layout="L R",
+            sample_rate=44100,
+            is_dolby_atmos=False,
+            is_xhe_aac=False,
+            format_commercial=None,
+            dynamic_objects=None,
+        )
+
+        assert audio_format.get_quality_tier() == "low"
+
+    def test_detect_xhe_aac_usac_format(self):
+        """Detect xHE-AAC from USAC format name."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {
+                        "@type": "Audio",
+                        "Format": "USAC",
+                        "CodecID": "mp4a-40-42",
+                        "BitRate": "124000",
+                        "BitRate_Mode": "VBR",
+                        "Channels": "2",
+                        "ChannelLayout": "L R",
+                        "SamplingRate": "48000",
+                    },
+                ]
+            }
+        }
+
+        result = detect_audio_format(mediainfo_data)
+
+        assert result is not None
+        assert result.is_xhe_aac is True
+        assert result.codec == "USAC"
+        assert result.get_edition_tag() == "(xHE-AAC)"
+        assert result.get_quality_tier() == "high"
+
+    def test_edition_tag_xhe_aac(self):
+        """Edition tag returns (xHE-AAC) for xHE-AAC content."""
+        audio_format = AudioFormat(
+            codec="USAC",
+            codec_id="mp4a-40-42",
+            bitrate=124000,
+            bitrate_mode="VBR",
+            channels=2,
+            channel_layout="L R",
+            sample_rate=48000,
+            is_dolby_atmos=False,
+            is_xhe_aac=True,
+            format_commercial=None,
+            dynamic_objects=None,
+        )
+
+        assert audio_format.get_edition_tag() == "(xHE-AAC)"
+        assert audio_format.get_quality_tier() == "high"
+
+    def test_format_description_dolby_atmos(self):
+        """Format description for Dolby Atmos 5.1."""
+        audio_format = AudioFormat(
+            codec="E-AC-3",
+            codec_id="ec-3",
+            bitrate=768000,
+            bitrate_mode="CBR",
+            channels=6,
+            channel_layout="L R C LFE Ls Rs",
+            sample_rate=48000,
+            is_dolby_atmos=True,
+            is_xhe_aac=False,
+            format_commercial="Dolby Digital Plus with Dolby Atmos",
+            dynamic_objects=15,
+        )
+
+        assert audio_format.get_format_description() == "Dolby Atmos 5.1 768kbps"
+
+    def test_format_description_xhe_aac(self):
+        """Format description for xHE-AAC."""
+        audio_format = AudioFormat(
+            codec="USAC",
+            codec_id="mp4a-40-42",
+            bitrate=124000,
+            bitrate_mode="VBR",
+            channels=2,
+            channel_layout="L R",
+            sample_rate=48000,
+            is_dolby_atmos=False,
+            is_xhe_aac=True,
+            format_commercial=None,
+            dynamic_objects=None,
+        )
+
+        assert audio_format.get_format_description() == "xHE-AAC 124kbps"
+
+    def test_format_description_standard_aac(self):
+        """Format description for standard AAC."""
+        audio_format = AudioFormat(
+            codec="AAC",
+            codec_id="mp4a-40-2",
+            bitrate=128000,
+            bitrate_mode="VBR",
+            channels=2,
+            channel_layout="L R",
+            sample_rate=44100,
+            is_dolby_atmos=False,
+            is_xhe_aac=False,
+            format_commercial=None,
+            dynamic_objects=None,
+        )
+
+        assert audio_format.get_format_description() == "AAC 128kbps"
+
+    def test_detect_none_input(self):
+        """Returns None when mediainfo_data is None."""
+        assert detect_audio_format(None) is None
+
+    def test_detect_no_media(self):
+        """Returns None when media key is missing."""
+        assert detect_audio_format({}) is None
+        assert detect_audio_format({"media": None}) is None
+
+    def test_detect_no_audio_track(self):
+        """Returns None when no audio track found."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General"},
+                    {"@type": "Image"},
+                ]
+            }
+        }
+        assert detect_audio_format(mediainfo_data) is None
+
+    def test_detect_joc_without_commercial_name(self):
+        """Detect Atmos from JOC format feature even without commercial name."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {
+                        "@type": "Audio",
+                        "Format": "E-AC-3",
+                        "Format_AdditionalFeatures": "JOC",
+                        "CodecID": "ec-3",
+                        "BitRate": "768000",
+                        "Channels": "6",
+                        "SamplingRate": "48000",
+                    },
+                ]
+            }
+        }
+
+        result = detect_audio_format(mediainfo_data)
+
+        assert result is not None
+        assert result.is_dolby_atmos is True
+
+    def test_detect_handles_missing_fields(self):
+        """Handles missing optional fields gracefully."""
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {
+                        "@type": "Audio",
+                        "Format": "MP3",
+                    },
+                ]
+            }
+        }
+
+        result = detect_audio_format(mediainfo_data)
+
+        assert result is not None
+        assert result.codec == "MP3"
+        assert result.codec_id == ""
+        assert result.bitrate == 0
+        assert result.channels == 2  # default
+        assert result.sample_rate == 44100  # default
+        assert result.is_dolby_atmos is False
