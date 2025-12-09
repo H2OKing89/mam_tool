@@ -514,8 +514,11 @@ def search_index_for_file(
             ):
                 break
 
-    # Apply dynamic threshold based on metadata presence
-    # If we have IMDB/TMDB match, accept lower name similarity (matching hunt_missing_files.py)
+    # Dynamic threshold based on metadata presence:
+    # - With IMDB/TMDB match, scores are ~200+ (200 bonus + exact_size 20 + name score)
+    # - Using a higher effective_threshold (150) for metadata matches ensures only
+    #   truly strong matches get through; a 150 threshold is easily met with metadata.
+    # - Without metadata, we use the caller's threshold (typically 70-80 for fuzzy name)
     has_metadata_match = best_reasons and any(
         r in best_reasons for r in ("imdb_match", "tmdb_match")
     )
@@ -705,6 +708,9 @@ def generate_plan(
                     if plex_match:
                         reasons = set(plex_match.get("match_reasons", []))
 
+                        # Strong identity signals that indicate a real match
+                        strong_identity = {"imdb_match", "tmdb_match", "name_match"}
+
                         # Drop risky year-only Plex matches from the plan itself
                         # These are likely false positives (e.g., Blade II matching Goldmember)
                         if reasons == {"year_match"}:
@@ -718,7 +724,39 @@ def generate_plan(
                                 "plex_category": plex_match.get("plex_category"),
                                 "rejected": "year_only_match",
                             }
+
+                        # Drop exact_size-only matches (same size, different content)
+                        # e.g., Cadet Kelly 2002 vs 2005, GitS SSS 2006 vs 2007
+                        elif reasons == {"exact_size"}:
+                            logger.debug("  Weak Plex match (size-only) → treating as not_found")
+                            stats["not_found"] += 1
+                            file_data["recovery_phase"] = "not_found"
+                            file_data["plex_candidate"] = {
+                                "path": plex_match["path"],
+                                "score": plex_match["score"],
+                                "reasons": plex_match.get("match_reasons", []),
+                                "plex_category": plex_match.get("plex_category"),
+                                "rejected": "size_only_match",
+                            }
+
+                        # Require at least one strong identity signal for Plex matches
+                        # (imdb_match, tmdb_match, or name_match)
+                        elif not (strong_identity & reasons):
+                            logger.debug(
+                                "  Weak Plex match (no strong identity) → treating as not_found"
+                            )
+                            stats["not_found"] += 1
+                            file_data["recovery_phase"] = "not_found"
+                            file_data["plex_candidate"] = {
+                                "path": plex_match["path"],
+                                "score": plex_match["score"],
+                                "reasons": plex_match.get("match_reasons", []),
+                                "plex_category": plex_match.get("plex_category"),
+                                "rejected": "no_strong_identity",
+                            }
+
                         else:
+                            # Accept Plex match - has strong identity signal
                             stats["found_in_plex"] += 1
                             file_data["recovery_phase"] = "plex_rebuild"
                             file_data["plex_candidate"] = {
