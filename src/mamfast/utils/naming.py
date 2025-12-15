@@ -1004,7 +1004,7 @@ def filter_subtitle(
     if naming_config and naming_config.preserve_exact and subtitle in naming_config.preserve_exact:
         if verbose:
             logger.debug(
-                f"[filter_subtitle] '{subtitle}' -> '{subtitle}' " "(preserved via preserve_exact)"
+                f"[filter_subtitle] '{subtitle}' -> '{subtitle}' (preserved via preserve_exact)"
             )
         return subtitle
 

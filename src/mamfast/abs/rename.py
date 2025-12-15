@@ -655,18 +655,48 @@ def _rename_files_inside(target_path: Path, new_stem: str) -> list[str]:
 def rename_folder(
     candidate: RenameCandidate,
     dry_run: bool = False,
-    rename_files_inside: bool = False,
+    force: bool = False,
 ) -> RenameResult:
     """Execute folder rename.
+
+    Media files inside the folder are automatically renamed to match the new
+    folder name. Sidecar files (cover.jpg, metadata.json, etc.) are preserved.
 
     Args:
         candidate: Candidate to rename
         dry_run: If True, don't actually rename
-        rename_files_inside: If True, also rename media files to match folder name
+        force: If True, rename files inside even when folder is up-to-date
 
     Returns:
         RenameResult with operation status
     """
+    # Special handling for force mode with up-to-date folders
+    if force and candidate.status == "up_to_date" and candidate.target_name:
+        # Folder is already correct, but force rename files inside
+        if dry_run:
+            return RenameResult(
+                source_path=candidate.source_path,
+                target_path=candidate.source_path,
+                status="dry_run",
+            )
+
+        try:
+            # Rename files inside using current folder name
+            files_renamed = _rename_files_inside(candidate.source_path, candidate.target_name)
+            return RenameResult(
+                source_path=candidate.source_path,
+                target_path=candidate.source_path,
+                status="success",
+                files_renamed=files_renamed if files_renamed else None,
+            )
+        except OSError as e:
+            return RenameResult(
+                source_path=candidate.source_path,
+                target_path=candidate.source_path,
+                status="failed",
+                error=str(e),
+            )
+
     if candidate.status != "needs_rename":
         return RenameResult(
             source_path=candidate.source_path,
@@ -695,10 +725,8 @@ def rename_folder(
     try:
         candidate.source_path.rename(target_path)
 
-        # Optionally rename files inside the folder
-        files_renamed: list[str] = []
-        if rename_files_inside:
-            files_renamed = _rename_files_inside(target_path, candidate.target_name)
+        # Always rename media files inside the folder to match new folder name
+        files_renamed = _rename_files_inside(target_path, candidate.target_name)
 
         return RenameResult(
             source_path=candidate.source_path,
@@ -730,9 +758,12 @@ def run_rename_pipeline(
     naming_config: NamingConfig | None = None,
     dry_run: bool = False,
     interactive: bool = False,
-    rename_files_inside: bool = False,
+    force: bool = False,
 ) -> tuple[list[RenameResult], RenameSummary, list[RenameCandidate]]:
     """Run the full rename pipeline.
+
+    Media files inside renamed folders are automatically renamed to match the
+    new folder name. Sidecar files (cover.jpg, metadata.json, etc.) are preserved.
 
     Args:
         source_dir: Directory to scan for folders to rename
@@ -743,7 +774,7 @@ def run_rename_pipeline(
         naming_config: Optional naming configuration
         dry_run: If True, don't actually rename
         interactive: If True, prompt for each rename
-        rename_files_inside: If True, also rename media files to match folder
+        force: If True, rename files inside even when folder names are up-to-date
 
     Returns:
         Tuple of (list of results, summary, list of candidates)
@@ -827,9 +858,19 @@ def run_rename_pipeline(
 
     for candidate in candidates:
         # Interactive mode
-        if interactive and candidate.status == "needs_rename" and candidate.target_name:
-            print(f"\n{candidate.current_name}")
-            print(f"  → {candidate.target_name}")
+        should_prompt = interactive and (
+            (candidate.status == "needs_rename" and candidate.target_name)
+            or (force and candidate.status == "up_to_date" and candidate.target_name)
+        )
+
+        if should_prompt:
+            if candidate.status == "up_to_date":
+                print(f"\n{candidate.current_name}")
+                print("  → (rename files inside only)")
+            else:
+                print(f"\n{candidate.current_name}")
+                print(f"  → {candidate.target_name}")
+
             if not confirm("Rename this folder?"):
                 result = RenameResult(
                     source_path=candidate.source_path,
@@ -840,7 +881,7 @@ def run_rename_pipeline(
                 results.append(result)
                 continue
 
-        result = rename_folder(candidate, dry_run=dry_run, rename_files_inside=rename_files_inside)
+        result = rename_folder(candidate, dry_run=dry_run, force=force)
         results.append(result)
 
         # Update summary

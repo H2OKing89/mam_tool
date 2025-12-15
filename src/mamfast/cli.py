@@ -607,9 +607,9 @@ Examples:
         help="Prompt for confirmation on each rename",
     )
     abs_rename_parser.add_argument(
-        "--rename-files-inside",
+        "--force",
         action="store_true",
-        help="Also rename media files inside folder to match folder name",
+        help="Rename files inside folders even when folder names are already correct",
     )
     abs_rename_parser.add_argument(
         "--report",
@@ -2586,8 +2586,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                             new_name = rename_map.get(filename)
                             if new_name and new_name != filename:
                                 console.print(
-                                    f"    [dim]{filename}[/dim]\n"
-                                    f"      → [green]{new_name}[/green]"
+                                    f"    [dim]{filename}[/dim]\n      → [green]{new_name}[/green]"
                                 )
                             else:
                                 console.print(f"    [dim]{filename}[/dim]")
@@ -2783,9 +2782,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             # Remaining = trumped + cleanup-skipped (cleanup successes would be moved)
             simulated_remaining = trumped_paths | cleanup_would_skip_paths
 
-            print_info(
-                f"Would remain in source directory " f"({len(simulated_remaining)} folder(s)):"
-            )
+            print_info(f"Would remain in source directory ({len(simulated_remaining)} folder(s)):")
 
             if simulated_remaining:
                 from rich.tree import Tree as RemainingTree
@@ -3697,7 +3694,7 @@ def cmd_abs_rename(args: argparse.Namespace) -> int:
             naming_config=getattr(settings, "naming", None),
             dry_run=args.dry_run,
             interactive=args.interactive,
-            rename_files_inside=args.rename_files_inside,
+            force=args.force,
         )
     finally:
         if abs_client:
@@ -3899,7 +3896,7 @@ def cmd_abs_orphans(args: argparse.Namespace) -> int:
             return 1
     else:
         console.print(
-            "\n[dim]Use --cleanup to remove orphans with matches, " "or --cleanup-all for all.[/]"
+            "\n[dim]Use --cleanup to remove orphans with matches, or --cleanup-all for all.[/]"
         )
 
     return 0

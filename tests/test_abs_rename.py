@@ -511,10 +511,10 @@ class TestRenameFilesInside:
 
 
 class TestRenameWithFilesInside:
-    """Tests for rename_folder with rename_files_inside=True."""
+    """Tests for rename_folder file renaming (always enabled)."""
 
     def test_rename_folder_with_files(self, tmp_path: Path) -> None:
-        """Test folder rename also renames files inside."""
+        """Test folder rename automatically renames files inside."""
         from mamfast.abs.rename import RenameCandidate, rename_folder
 
         source = tmp_path / "OldName"
@@ -529,7 +529,7 @@ class TestRenameWithFilesInside:
             status="needs_rename",
         )
 
-        result = rename_folder(candidate, dry_run=False, rename_files_inside=True)
+        result = rename_folder(candidate, dry_run=False)
 
         assert result.status == "success"
         target = tmp_path / "NewName"
@@ -537,6 +537,35 @@ class TestRenameWithFilesInside:
         assert (target / "NewName.m4b").exists()
         assert (target / "cover.jpg").exists()  # Skipped
         assert result.files_renamed == ["audio.m4b"]
+
+    def test_force_rename_files_when_folder_up_to_date(self, tmp_path: Path) -> None:
+        """Test force mode renames files even when folder is already correct."""
+        from mamfast.abs.rename import RenameCandidate, rename_folder
+
+        folder = tmp_path / "CorrectName"
+        folder.mkdir()
+        (folder / "wrong_file.m4b").touch()
+        (folder / "cover.jpg").touch()
+
+        candidate = RenameCandidate(
+            source_path=folder,
+            current_name="CorrectName",
+            target_name="CorrectName",
+            status="up_to_date",
+        )
+
+        # Without force, should skip
+        result = rename_folder(candidate, dry_run=False, force=False)
+        assert result.status == "skipped"
+
+        # With force, should rename files inside
+        result = rename_folder(candidate, dry_run=False, force=True)
+        assert result.status == "success"
+        assert folder.exists()  # Folder unchanged
+        assert (folder / "CorrectName.m4b").exists()  # File renamed
+        assert not (folder / "wrong_file.m4b").exists()
+        assert (folder / "cover.jpg").exists()  # Sidecar preserved
+        assert result.files_renamed == ["wrong_file.m4b"]
 
 
 class TestGenerateReport:
