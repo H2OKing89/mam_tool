@@ -42,9 +42,10 @@ def mock_settings(temp_state_file):
 class TestLoadState:
     """Tests for load_state function."""
 
-    def test_load_empty_state(self, mock_settings):
+    def test_load_empty_state(self, mock_settings, tmp_path):
         """Test loading when no state file exists."""
-        mock_settings.paths.state_file = Path("/nonexistent/state.json")
+        # Use a valid temp directory but non-existent file
+        mock_settings.paths.state_file = tmp_path / "nonexistent_state.json"
         with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
             state = load_state()
 
