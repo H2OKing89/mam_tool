@@ -191,13 +191,19 @@ def create_torrent(
     logger.info(f"Creating torrent for: {content_path}")
     logger.debug(f"Command: {shlex.join(cmd)}")
 
+    # Default timeout: 5 minutes should be enough even for large audiobooks
+    timeout_seconds = 300
+
     try:
+        logger.debug(f"Running mkbrr with {timeout_seconds}s timeout")
+
         # Run mkbrr and let output stream to terminal (like interactive mode)
         # This allows progress bars and feedback to display
         result = subprocess.run(
             cmd,
             text=True,
             check=False,
+            timeout=timeout_seconds,
         )
 
         if result.returncode == 0:
@@ -251,6 +257,14 @@ def create_torrent(
                 error=f"mkbrr exited with code {result.returncode}",
             )
 
+    except subprocess.TimeoutExpired:
+        logger.error(f"mkbrr timed out after {timeout_seconds}s")
+        return MkbrrResult(
+            success=False,
+            return_code=-1,
+            error=f"mkbrr timed out after {timeout_seconds}s",
+        )
+
     except Exception as e:
         logger.exception(f"Exception running mkbrr: {e}")
         return MkbrrResult(
@@ -293,6 +307,7 @@ def inspect_torrent(
             capture_output=True,
             text=True,
             check=False,
+            timeout=30,  # Inspection should be fast
         )
 
         return MkbrrResult(
@@ -357,6 +372,7 @@ def check_torrent(
             capture_output=True,
             text=True,
             check=False,
+            timeout=60,  # Verification should be reasonably fast
         )
 
         return MkbrrResult(
@@ -384,7 +400,11 @@ def check_docker_available() -> bool:
             [settings.docker_bin, "--version"],
             capture_output=True,
             check=False,
+            timeout=5,  # Quick check
         )
         return result.returncode == 0
     except FileNotFoundError:
+        return False
+    except subprocess.TimeoutExpired:
+        logger.warning("Docker version check timed out")
         return False

@@ -106,7 +106,11 @@ class TestGetTorrentInfo:
 
 
 class TestUploadTorrent:
-    """Tests for upload_torrent function."""
+    """Tests for upload_torrent function.
+
+    Note: upload_torrent returns tuple[bool, str | None] for idempotency.
+    Tests mock extract_infohash and check_torrent_exists for proper isolation.
+    """
 
     def test_upload_torrent_file_not_found(self, tmp_path: Path):
         """Test upload with missing torrent file."""
@@ -116,11 +120,12 @@ class TestUploadTorrent:
         mock_settings.qbittorrent.auto_start = True
 
         with patch("mamfast.qbittorrent.get_settings", return_value=mock_settings):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=tmp_path / "nonexistent.torrent",
                 save_path=tmp_path,
             )
-        assert result is False
+        assert success is False
+        assert infohash is None
 
     def test_upload_torrent_success(self, tmp_path: Path):
         """Test successful torrent upload."""
@@ -137,13 +142,16 @@ class TestUploadTorrent:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123def456"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=torrent_file,
                 save_path=tmp_path,
             )
 
-        assert result is True
+        assert success is True
+        assert infohash == "abc123def456"
         mock_client.torrents_add.assert_called_once()
 
     def test_upload_torrent_unexpected_result(self, tmp_path: Path):
@@ -161,13 +169,16 @@ class TestUploadTorrent:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=torrent_file,
                 save_path=tmp_path,
             )
 
-        assert result is False
+        assert success is False
+        assert infohash == "abc123"
 
     def test_upload_torrent_login_failed(self, tmp_path: Path):
         """Test upload when login fails."""
@@ -180,6 +191,8 @@ class TestUploadTorrent:
         mock_settings.qbittorrent.category = "audiobooks"
         mock_settings.qbittorrent.tags = ["mam"]
         mock_settings.qbittorrent.auto_start = True
+        mock_settings.qbittorrent.username = "admin"
+        mock_settings.qbittorrent.host = "http://localhost:8080"
 
         with (
             patch(
@@ -187,13 +200,16 @@ class TestUploadTorrent:
                 side_effect=qbittorrentapi.LoginFailed("Bad credentials"),
             ),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=torrent_file,
                 save_path=tmp_path,
             )
 
-        assert result is False
+        assert success is False
+        assert infohash == "abc123"
 
     def test_upload_torrent_connection_error(self, tmp_path: Path):
         """Test upload when connection fails."""
@@ -206,6 +222,7 @@ class TestUploadTorrent:
         mock_settings.qbittorrent.category = "audiobooks"
         mock_settings.qbittorrent.tags = ["mam"]
         mock_settings.qbittorrent.auto_start = True
+        mock_settings.qbittorrent.host = "http://localhost:8080"
 
         with (
             patch(
@@ -213,13 +230,16 @@ class TestUploadTorrent:
                 side_effect=qbittorrentapi.APIConnectionError("No connection"),
             ),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=torrent_file,
                 save_path=tmp_path,
             )
 
-        assert result is False
+        assert success is False
+        assert infohash == "abc123"
 
     def test_upload_torrent_with_custom_options(self, tmp_path: Path):
         """Test upload with custom category, tags, and paused state."""
@@ -236,8 +256,10 @@ class TestUploadTorrent:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=torrent_file,
                 save_path=tmp_path,
                 category="audiobooks",
@@ -245,7 +267,8 @@ class TestUploadTorrent:
                 paused=True,
             )
 
-        assert result is True
+        assert success is True
+        assert infohash == "abc123"
         call_kwargs = mock_client.torrents_add.call_args[1]
         assert call_kwargs["category"] == "audiobooks"
         assert call_kwargs["tags"] == "mam,audiobook"
@@ -266,15 +289,66 @@ class TestUploadTorrent:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(
+            success, infohash = upload_torrent(
                 torrent_path=torrent_file,
                 save_path=tmp_path,
             )
 
-        assert result is True
+        assert success is True
         call_kwargs = mock_client.torrents_add.call_args[1]
         assert call_kwargs["tags"] is None
+
+    def test_upload_torrent_already_exists(self, tmp_path: Path):
+        """Test upload when torrent already exists (idempotent)."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_client = MagicMock()
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "audiobooks"
+        mock_settings.qbittorrent.tags = ["mam"]
+        mock_settings.qbittorrent.auto_start = True
+
+        with (
+            patch("mamfast.qbittorrent.get_client", return_value=mock_client),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="existing123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=True),
+        ):
+            success, infohash = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+            )
+
+        assert success is True
+        assert infohash == "existing123"
+        # Should NOT call torrents_add because torrent already exists
+        mock_client.torrents_add.assert_not_called()
+
+    def test_upload_torrent_infohash_extraction_fails(self, tmp_path: Path):
+        """Test upload when infohash extraction fails."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.write_bytes(b"torrent data")
+
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.category = "audiobooks"
+        mock_settings.qbittorrent.tags = ["mam"]
+        mock_settings.qbittorrent.auto_start = True
+
+        with (
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value=None),
+        ):
+            success, infohash = upload_torrent(
+                torrent_path=torrent_file,
+                save_path=tmp_path,
+            )
+
+        assert success is False
+        assert infohash is None
 
 
 class TestUploadTorrentAutoTMM:
@@ -297,10 +371,12 @@ class TestUploadTorrentAutoTMM:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(torrent_path=torrent_file)
+            success, infohash = upload_torrent(torrent_path=torrent_file)
 
-        assert result is True
+        assert success is True
         call_kwargs = mock_client.torrents_add.call_args[1]
         assert call_kwargs["use_auto_tmm"] is True
         assert "save_path" not in call_kwargs
@@ -323,10 +399,12 @@ class TestUploadTorrentAutoTMM:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(torrent_path=torrent_file, save_path=explicit_path)
+            success, infohash = upload_torrent(torrent_path=torrent_file, save_path=explicit_path)
 
-        assert result is True
+        assert success is True
         call_kwargs = mock_client.torrents_add.call_args[1]
         assert call_kwargs["use_auto_tmm"] is False
         assert call_kwargs["save_path"] == str(explicit_path)
@@ -348,10 +426,12 @@ class TestUploadTorrentAutoTMM:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(torrent_path=torrent_file)
+            success, infohash = upload_torrent(torrent_path=torrent_file)
 
-        assert result is True
+        assert success is True
         call_kwargs = mock_client.torrents_add.call_args[1]
         assert call_kwargs["use_auto_tmm"] is False
         assert call_kwargs["save_path"] == "/config/save/path"
@@ -373,10 +453,12 @@ class TestUploadTorrentAutoTMM:
         with (
             patch("mamfast.qbittorrent.get_client", return_value=mock_client),
             patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+            patch("mamfast.qbittorrent.extract_infohash", return_value="abc123"),
+            patch("mamfast.qbittorrent.check_torrent_exists", return_value=False),
         ):
-            result = upload_torrent(torrent_path=torrent_file)
+            success, infohash = upload_torrent(torrent_path=torrent_file)
 
-        assert result is True
+        assert success is True
         call_kwargs = mock_client.torrents_add.call_args[1]
         assert call_kwargs["use_auto_tmm"] is False
         # No save_path sent - qBittorrent uses its default

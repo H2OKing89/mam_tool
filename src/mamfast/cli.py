@@ -210,6 +210,11 @@ Examples:
         action="store_true",
         help="Skip metadata fetching step",
     )
+    run_parser.add_argument(
+        "--no-run-lock",
+        action="store_true",
+        help="DANGEROUS: Bypass run lock (can cause data corruption if multiple instances run)",
+    )
     run_parser.set_defaults(func=cmd_run)
 
     # -------------------------------------------------------------------------
@@ -1187,8 +1192,9 @@ def cmd_upload(args: argparse.Namespace) -> int:
             save_path=save_path,
             paused=args.paused,
         )
+        success, _ = result
 
-        if result:
+        if success:
             print_success("Uploaded")
             success += 1
         else:
@@ -1201,9 +1207,10 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Run full pipeline."""
+    """Run full pipeline with run lock protection."""
     from mamfast.config import reload_settings
     from mamfast.logging_setup import set_console_quiet
+    from mamfast.utils.state import run_lock
     from mamfast.workflow import full_run
 
     # Quiet mode for clean Rich UI (suppress INFO logs on console)
@@ -1218,11 +1225,18 @@ def cmd_run(args: argparse.Namespace) -> int:
         fatal_error(str(e), "Check that config/config.yaml exists")
         return 1
 
-    result = full_run(
-        skip_scan=args.skip_scan,
-        skip_metadata=args.skip_metadata,
-        dry_run=args.dry_run,
-    )
+    # Run lock to prevent concurrent instances
+    try:
+        with run_lock(force=args.no_run_lock):
+            result = full_run(
+                skip_scan=args.skip_scan,
+                skip_metadata=args.skip_metadata,
+                dry_run=args.dry_run,
+            )
+    except RuntimeError as e:
+        set_console_quiet(False)
+        fatal_error(str(e), "Another instance is running")
+        return 1
 
     set_console_quiet(False)
 

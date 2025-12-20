@@ -42,10 +42,12 @@ from mamfast.models import AudiobookRelease, ProcessingResult, ReleaseStatus
 from mamfast.qbittorrent import upload_torrent
 from mamfast.utils.retry import NETWORK_EXCEPTIONS, retry_with_backoff
 from mamfast.utils.state import (
+    checkpoint_stage,
     get_processed_identifiers,
     is_processed,
     mark_failed,
     mark_processed,
+    should_skip_stage,
 )
 from mamfast.validation import (
     ChapterIntegrityChecker,
@@ -133,8 +135,12 @@ def _fetch_metadata_with_retry(
 def _upload_torrent_with_retry(
     torrent_path: Path,
     save_path: Path | None = None,
-) -> bool:
-    """Upload torrent with retry logic for network failures."""
+) -> tuple[bool, str | None]:
+    """Upload torrent with retry logic for network failures.
+
+    Returns:
+        Tuple of (success: bool, infohash: str | None)
+    """
     return upload_torrent(torrent_path=torrent_path, save_path=save_path)
 
 
@@ -228,47 +234,58 @@ def process_single_release(
         # ---------------------------------------------------------------------
         # 1. Stage
         # ---------------------------------------------------------------------
-        notify(ProgressStage.STAGING, "Creating hardlinks...")
-        logger.debug("Step 1: Staging release")
-        staging_dir = stage_release(release)
-        print_success(f"Staged to {staging_dir.name}")
-        release.status = ReleaseStatus.STAGED
+        if should_skip_stage(release, "staged"):
+            logger.info("Skipping staging (already completed)")
+            # Load staging_dir from checkpoint
+            release.status = ReleaseStatus.STAGED
+        else:
+            notify(ProgressStage.STAGING, "Creating hardlinks...")
+            logger.debug("Step 1: Staging release")
+            staging_dir = stage_release(release)
+            print_success(f"Staged to {staging_dir.name}")
+            release.status = ReleaseStatus.STAGED
+            checkpoint_stage(release, "staged")
 
         # ---------------------------------------------------------------------
         # 2. Metadata (optional)
         # ---------------------------------------------------------------------
         if not skip_metadata:
-            notify(ProgressStage.METADATA, "Fetching Audnex + MediaInfo...")
-            logger.debug("Step 2: Fetching metadata")
-            audnex_data, mediainfo_data, audnex_chapters = _fetch_metadata_with_retry(
-                asin=release.asin,
-                m4b_path=release.main_m4b,
-            )
-            release.audnex_metadata = audnex_data
-            release.mediainfo_data = mediainfo_data
-            release.audnex_chapters = audnex_chapters
-            if audnex_data:
-                print_success(f"Audnex metadata for {release.asin}")
+            if should_skip_stage(release, "metadata"):
+                logger.info("Skipping metadata (already completed)")
+                release.status = ReleaseStatus.METADATA_FETCHED
+            else:
+                notify(ProgressStage.METADATA, "Fetching Audnex + MediaInfo...")
+                logger.debug("Step 2: Fetching metadata")
+                audnex_data, mediainfo_data, audnex_chapters = _fetch_metadata_with_retry(
+                    asin=release.asin,
+                    m4b_path=release.main_m4b,
+                )
+                release.audnex_metadata = audnex_data
+                release.mediainfo_data = mediainfo_data
+                release.audnex_chapters = audnex_chapters
+                if audnex_data:
+                    print_success(f"Audnex metadata for {release.asin}")
 
-                # Check if Audnex title differs significantly from Libation title
-                from mamfast.utils.fuzzy import similarity_ratio
+                    # Check if Audnex title differs significantly from Libation title
+                    from mamfast.utils.fuzzy import similarity_ratio
 
-                audnex_title = audnex_data.get("title", "")
-                libation_title = release.title or ""
-                if audnex_title and libation_title:
-                    title_similarity = similarity_ratio(audnex_title, libation_title)
-                    if title_similarity < 70:
-                        print_warning(
-                            f"Title mismatch: Libation='{libation_title}' vs "
-                            f"Audnex='{audnex_title}' ({title_similarity:.0f}% similar)"
-                        )
+                    audnex_title = audnex_data.get("title", "")
+                    libation_title = release.title or ""
+                    if audnex_title and libation_title:
+                        title_similarity = similarity_ratio(audnex_title, libation_title)
+                        if title_similarity < 70:
+                            print_warning(
+                                f"Title mismatch: Libation='{libation_title}' vs "
+                                f"Audnex='{audnex_title}' ({title_similarity:.0f}% similar)"
+                            )
 
-            if audnex_chapters:
-                chapter_count = len(audnex_chapters.get("chapters", []))
-                print_success(f"Audnex chapters: {chapter_count} chapters")
-            if mediainfo_data:
-                print_success("MediaInfo extracted")
-            release.status = ReleaseStatus.METADATA_FETCHED
+                if audnex_chapters:
+                    chapter_count = len(audnex_chapters.get("chapters", []))
+                    print_success(f"Audnex chapters: {chapter_count} chapters")
+                if mediainfo_data:
+                    print_success("MediaInfo extracted")
+                release.status = ReleaseStatus.METADATA_FETCHED
+                checkpoint_stage(release, "metadata")
 
             # -----------------------------------------------------------------
             # 2b. Metadata Validation
@@ -301,38 +318,48 @@ def process_single_release(
         # ---------------------------------------------------------------------
         # 3. Create torrent
         # ---------------------------------------------------------------------
-        notify(ProgressStage.TORRENT, "Creating torrent file...")
-        logger.debug("Step 3: Creating torrent")
-
         # Create per-release output subfolder for torrent + JSON
         release_output_dir = settings.paths.torrent_output / staging_dir.name
         release_output_dir.mkdir(parents=True, exist_ok=True)
 
-        mkbrr_result = create_torrent(
-            content_path=staging_dir,
-            output_dir=release_output_dir,
-            preset=preset or settings.mkbrr.preset,
-        )
+        if should_skip_stage(release, "torrent"):
+            logger.info("Skipping torrent creation (already completed)")
+            release.status = ReleaseStatus.TORRENT_CREATED
+        else:
+            notify(ProgressStage.TORRENT, "Creating torrent file...")
+            logger.debug("Step 3: Creating torrent")
 
-        if not mkbrr_result.success:
-            raise RuntimeError(
-                f"Torrent creation failed for '{staging_dir.name}'\n"
-                f"Error: {mkbrr_result.error}\n"
-                f"\nTroubleshooting:\n"
-                f"  1. Verify mkbrr Docker image is available: {settings.mkbrr.image}\n"
-                f"     Run: docker pull {settings.mkbrr.image}\n"
-                f"  2. Check preset '{settings.mkbrr.preset}' exists in "
-                f"{settings.mkbrr.host_config_dir}/presets.yaml\n"
-                f"  3. Verify path mappings in config.yaml:\n"
-                f"     - host_data_root: {settings.mkbrr.host_data_root}\n"
-                f"     - container_data_root: {settings.mkbrr.container_data_root}\n"
-                f"  4. Check Docker logs: docker logs $(docker ps -lq)"
+            mkbrr_result = create_torrent(
+                content_path=staging_dir,
+                output_dir=release_output_dir,
+                preset=preset or settings.mkbrr.preset,
             )
 
-        release.torrent_path = mkbrr_result.torrent_path
-        release.status = ReleaseStatus.TORRENT_CREATED
-        if mkbrr_result.torrent_path:
-            print_success(f"Torrent: {mkbrr_result.torrent_path.name}")
+            if not mkbrr_result.success:
+                raise RuntimeError(
+                    f"Torrent creation failed for '{staging_dir.name}'\n"
+                    f"Error: {mkbrr_result.error}\n"
+                    f"\nTroubleshooting:\n"
+                    f"  1. Verify mkbrr Docker image is available: {settings.mkbrr.image}\n"
+                    f"     Run: docker pull {settings.mkbrr.image}\n"
+                    f"  2. Check preset '{settings.mkbrr.preset}' exists in "
+                    f"{settings.mkbrr.host_config_dir}/presets.yaml\n"
+                    f"  3. Verify path mappings in config.yaml:\n"
+                    f"     - host_data_root: {settings.mkbrr.host_data_root}\n"
+                    f"     - container_data_root: {settings.mkbrr.container_data_root}\n"
+                    f"  4. Check Docker logs: docker logs $(docker ps -lq)"
+                )
+
+            release.torrent_path = mkbrr_result.torrent_path
+            release.status = ReleaseStatus.TORRENT_CREATED
+            if mkbrr_result.torrent_path:
+                print_success(f"Torrent: {mkbrr_result.torrent_path.name}")
+
+                # Extract and checkpoint infohash for idempotent upload checks
+                from mamfast.utils.torrent import extract_infohash
+
+                infohash = extract_infohash(mkbrr_result.torrent_path)
+                checkpoint_stage(release, "torrent", infohash=infohash)
 
         # ---------------------------------------------------------------------
         # 3b. Generate MAM fast-upload JSON (saved with torrent file)
@@ -383,7 +410,7 @@ def process_single_release(
             # No save_path configured - let qBittorrent use its default
             qb_save_path = None
 
-        success = _upload_torrent_with_retry(
+        success, infohash = _upload_torrent_with_retry(
             torrent_path=release.torrent_path,
             save_path=qb_save_path,
         )
@@ -412,7 +439,7 @@ def process_single_release(
         # 5. Mark as complete
         # ---------------------------------------------------------------------
         release.status = ReleaseStatus.COMPLETE
-        mark_processed(release)
+        mark_processed(release, infohash=infohash)
 
         duration = time.time() - start_time
         notify(ProgressStage.COMPLETE, f"Completed in {duration:.1f}s")
@@ -838,7 +865,7 @@ def upload_only(torrent_paths: list[Path] | None = None) -> int:
 
         logger.info(f"Uploading: {torrent_path.name}")
 
-        success = upload_torrent(
+        success, _ = upload_torrent(
             torrent_path=torrent_path,
             save_path=qb_save_path,
         )

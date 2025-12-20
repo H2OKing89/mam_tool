@@ -22,6 +22,10 @@ def _create_passing_validation_result() -> ValidationResult:
 class TestProcessSingleRelease:
     """Integration tests for processing a single release through the pipeline."""
 
+    @patch("mamfast.workflow.get_processed_identifiers")
+    @patch("mamfast.workflow.mark_failed")
+    @patch("mamfast.workflow.checkpoint_stage")
+    @patch("mamfast.workflow.should_skip_stage", return_value=False)
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.PreUploadValidation")
     @patch("mamfast.workflow.get_settings")
@@ -42,6 +46,10 @@ class TestProcessSingleRelease:
         mock_settings: Mock,
         mock_pre_upload_validation: Mock,
         mock_discovery_validation: Mock,
+        mock_should_skip_stage: Mock,
+        mock_checkpoint_stage: Mock,
+        mock_mark_failed: Mock,
+        mock_get_processed: Mock,
     ) -> None:
         """Test successful processing of a single release through all steps."""
         # Arrange
@@ -58,6 +66,9 @@ class TestProcessSingleRelease:
                 asin="B000TEST01",
                 source_dir=tmppath / "source",
             )
+
+            # Mock processed identifiers (empty set = nothing processed yet)
+            mock_get_processed.return_value = set()
 
             # Mock validation to pass
             mock_discovery_validation.return_value.validate.return_value = (
@@ -76,7 +87,7 @@ class TestProcessSingleRelease:
             mock_torrent_result.torrent_path = torrent_path
             mock_torrent.return_value = mock_torrent_result
 
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123def456")
 
             # Act
             result = process_single_release(release)
@@ -91,8 +102,11 @@ class TestProcessSingleRelease:
             mock_metadata.assert_called_once()
             mock_torrent.assert_called_once()
             mock_upload.assert_called_once()
-            mock_mark_processed.assert_called_once_with(release)
+            mock_mark_processed.assert_called_once_with(release, infohash="abc123def456")
 
+    @patch("mamfast.workflow.get_processed_identifiers")
+    @patch("mamfast.workflow.checkpoint_stage")
+    @patch("mamfast.workflow.should_skip_stage", return_value=False)
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.PreUploadValidation")
     @patch("mamfast.workflow.get_settings")
@@ -109,6 +123,9 @@ class TestProcessSingleRelease:
         mock_settings: Mock,
         mock_pre_upload_validation: Mock,
         mock_discovery_validation: Mock,
+        mock_should_skip_stage: Mock,
+        mock_checkpoint_stage: Mock,
+        mock_get_processed: Mock,
     ) -> None:
         """Test that pipeline handles torrent creation failure correctly."""
         # Arrange
@@ -122,6 +139,9 @@ class TestProcessSingleRelease:
                 author="Test Author",
                 asin="B000TEST02",
             )
+
+            # Mock processed identifiers
+            mock_get_processed.return_value = set()
 
             # Mock validation to pass
             mock_discovery_validation.return_value.validate.return_value = (
@@ -152,6 +172,9 @@ class TestProcessSingleRelease:
             # Upload should not be called if torrent creation fails
             mock_upload.assert_not_called()
 
+    @patch("mamfast.workflow.get_processed_identifiers")
+    @patch("mamfast.workflow.checkpoint_stage")
+    @patch("mamfast.workflow.should_skip_stage", return_value=False)
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.PreUploadValidation")
     @patch("mamfast.workflow.get_settings")
@@ -168,6 +191,9 @@ class TestProcessSingleRelease:
         mock_settings: Mock,
         mock_pre_upload_validation: Mock,
         mock_discovery_validation: Mock,
+        mock_should_skip_stage: Mock,
+        mock_checkpoint_stage: Mock,
+        mock_get_processed: Mock,
     ) -> None:
         """Test that pipeline handles upload failure correctly."""
         # Arrange
@@ -184,6 +210,9 @@ class TestProcessSingleRelease:
                 asin="B000TEST03",
             )
 
+            # Mock processed identifiers
+            mock_get_processed.return_value = set()
+
             # Mock validation to pass
             mock_discovery_validation.return_value.validate.return_value = (
                 _create_passing_validation_result()
@@ -199,7 +228,7 @@ class TestProcessSingleRelease:
             mock_torrent_result.torrent_path = torrent_path
             mock_torrent.return_value = mock_torrent_result
 
-            mock_upload.return_value = False  # Upload fails
+            mock_upload.return_value = (False, None)  # Upload fails
 
             # Act
             result = process_single_release(release, skip_metadata=True)
@@ -401,6 +430,10 @@ class TestAtomicStateWrites:
 class TestWorkflowSavePathLogic:
     """Tests for qb_save_path logic in workflow functions."""
 
+    @patch("mamfast.workflow.get_processed_identifiers")
+    @patch("mamfast.workflow.mark_failed")
+    @patch("mamfast.workflow.checkpoint_stage")
+    @patch("mamfast.workflow.should_skip_stage", return_value=False)
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.PreUploadValidation")
     @patch("mamfast.workflow.get_settings")
@@ -421,6 +454,10 @@ class TestWorkflowSavePathLogic:
         mock_settings: Mock,
         mock_pre_upload_validation: Mock,
         mock_discovery_validation: Mock,
+        mock_should_skip_stage: Mock,
+        mock_checkpoint_stage: Mock,
+        mock_mark_failed: Mock,
+        mock_get_processed: Mock,
     ) -> None:
         """Test that save_path is None when auto_tmm is enabled."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -436,6 +473,9 @@ class TestWorkflowSavePathLogic:
                 asin="B000TEST04",
                 source_dir=tmppath / "source",
             )
+
+            # Mock processed identifiers
+            mock_get_processed.return_value = set()
 
             # Mock validation to pass
             mock_discovery_validation.return_value.validate.return_value = (
@@ -453,7 +493,7 @@ class TestWorkflowSavePathLogic:
             mock_torrent_result.torrent_path = torrent_path
             mock_torrent.return_value = mock_torrent_result
 
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123")
 
             # Configure auto_tmm = True
             mock_settings.return_value.qbittorrent.auto_tmm = True
@@ -467,6 +507,10 @@ class TestWorkflowSavePathLogic:
             call_kwargs = mock_upload.call_args[1]
             assert call_kwargs["save_path"] is None
 
+    @patch("mamfast.workflow.get_processed_identifiers")
+    @patch("mamfast.workflow.mark_failed")
+    @patch("mamfast.workflow.checkpoint_stage")
+    @patch("mamfast.workflow.should_skip_stage", return_value=False)
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.PreUploadValidation")
     @patch("mamfast.workflow.get_settings")
@@ -487,6 +531,10 @@ class TestWorkflowSavePathLogic:
         mock_settings: Mock,
         mock_pre_upload_validation: Mock,
         mock_discovery_validation: Mock,
+        mock_should_skip_stage: Mock,
+        mock_checkpoint_stage: Mock,
+        mock_mark_failed: Mock,
+        mock_get_processed: Mock,
     ) -> None:
         """Test that save_path is constructed when auto_tmm is disabled."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -502,6 +550,9 @@ class TestWorkflowSavePathLogic:
                 asin="B000TEST05",
                 source_dir=tmppath / "source",
             )
+
+            # Mock processed identifiers
+            mock_get_processed.return_value = set()
 
             # Mock validation to pass
             mock_discovery_validation.return_value.validate.return_value = (
@@ -519,7 +570,7 @@ class TestWorkflowSavePathLogic:
             mock_torrent_result.torrent_path = torrent_path
             mock_torrent.return_value = mock_torrent_result
 
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123")
 
             # Configure auto_tmm = False with save_path
             mock_settings.return_value.qbittorrent.auto_tmm = False
@@ -534,6 +585,10 @@ class TestWorkflowSavePathLogic:
             expected_path = Path("/config/save/path") / staging_dir.name
             assert call_kwargs["save_path"] == expected_path
 
+    @patch("mamfast.workflow.get_processed_identifiers")
+    @patch("mamfast.workflow.mark_failed")
+    @patch("mamfast.workflow.checkpoint_stage")
+    @patch("mamfast.workflow.should_skip_stage", return_value=False)
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.PreUploadValidation")
     @patch("mamfast.workflow.get_settings")
@@ -554,6 +609,10 @@ class TestWorkflowSavePathLogic:
         mock_settings: Mock,
         mock_pre_upload_validation: Mock,
         mock_discovery_validation: Mock,
+        mock_should_skip_stage: Mock,
+        mock_checkpoint_stage: Mock,
+        mock_mark_failed: Mock,
+        mock_get_processed: Mock,
     ) -> None:
         """Test that save_path is None when auto_tmm is disabled and no path configured."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -569,6 +628,9 @@ class TestWorkflowSavePathLogic:
                 asin="B000TEST06",
                 source_dir=tmppath / "source",
             )
+
+            # Mock processed identifiers
+            mock_get_processed.return_value = set()
 
             # Mock validation to pass
             mock_discovery_validation.return_value.validate.return_value = (
@@ -586,7 +648,7 @@ class TestWorkflowSavePathLogic:
             mock_torrent_result.torrent_path = torrent_path
             mock_torrent.return_value = mock_torrent_result
 
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123")
 
             # Configure auto_tmm = False with empty save_path
             mock_settings.return_value.qbittorrent.auto_tmm = False
@@ -625,7 +687,7 @@ class TestUploadOnlyPresetStripping:
             mock_settings.return_value.qbittorrent.auto_tmm = False
             mock_settings.return_value.qbittorrent.save_path = "/data/audiobooks"
             mock_settings.return_value.mkbrr.preset = "myanonamouse"
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123")
 
             upload_only([torrent_file])
 
@@ -655,7 +717,7 @@ class TestUploadOnlyPresetStripping:
             mock_settings.return_value.qbittorrent.auto_tmm = False
             mock_settings.return_value.qbittorrent.save_path = "/data/audiobooks"
             mock_settings.return_value.mkbrr.preset = "myanonamouse"
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123")
 
             upload_only([torrent_file])
 
@@ -683,7 +745,7 @@ class TestUploadOnlyPresetStripping:
             mock_settings.return_value.paths.torrent_output = tmppath
             mock_settings.return_value.qbittorrent.auto_tmm = True
             mock_settings.return_value.qbittorrent.save_path = "/data/audiobooks"
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "abc123")
 
             upload_only([torrent_file])
 
