@@ -346,6 +346,13 @@ def process_single_release(
 
         if should_skip_stage(release, "torrent"):
             logger.info("Skipping torrent creation (already completed)")
+            # Verify torrent exists when resuming
+            if not release.torrent_path or not release.torrent_path.exists():
+                raise TorrentError(
+                    f"Cannot resume: torrent file missing for {release.display_name}",
+                    release_asin=release.asin,
+                    release_title=release.display_name,
+                )
             release.status = ReleaseStatus.TORRENT_CREATED
         else:
             notify(ProgressStage.TORRENT, "Creating torrent file...")
@@ -421,8 +428,7 @@ def process_single_release(
             raise TorrentError(
                 "Internal error: No torrent path after successful mkbrr creation\n"
                 f"This is a bug. Please report with:\n"
-                f"  - Release: {release.display_name}\n"
-                f"  - mkbrr result: {mkbrr_result}",
+                f"  - Release: {release.display_name}",
                 release_asin=release.asin,
                 release_title=release.display_name,
             )

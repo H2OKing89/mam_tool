@@ -766,7 +766,7 @@ def run_rename_pipeline(
     source_dir: Path,
     *,
     pattern: str = "*",
-    fetch_metadata: bool = False,
+    fetch_metadata: bool = False,  # Reserved for future Audnex integration
     abs_client: AbsClient | None = None,
     abs_search_confidence: float = 0.75,
     naming_config: NamingConfig | None = None,
@@ -782,7 +782,7 @@ def run_rename_pipeline(
     Args:
         source_dir: Directory to scan for folders to rename
         pattern: Glob pattern to filter folders
-        fetch_metadata: Whether to fetch metadata from Audnex
+        fetch_metadata: Reserved for future Audnex metadata integration (not yet implemented)
         abs_client: Optional ABS client for search fallback
         abs_search_confidence: Minimum confidence for ABS search
         naming_config: Optional naming configuration
@@ -793,6 +793,9 @@ def run_rename_pipeline(
     Returns:
         Tuple of (list of results, summary, list of candidates)
     """
+    # Note: fetch_metadata is reserved for future Audnex integration
+    _ = fetch_metadata  # Suppress unused parameter warning
+
     results: list[RenameResult] = []
     summary = RenameSummary()
 

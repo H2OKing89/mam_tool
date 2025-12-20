@@ -378,14 +378,21 @@ async def scan_library_async(
         info = scan_folder(folder, library_path)
         folders.append(info)
 
-        for subfolder in folder.iterdir():
-            if subfolder.is_dir():
-                scan_recursive(subfolder)
+        try:
+            for subfolder in folder.iterdir():
+                if subfolder.is_dir():
+                    scan_recursive(subfolder)
+        except PermissionError:
+            pass  # Skip folders we can't access
 
     # Start scanning (skip the root itself)
-    for item in library_path.iterdir():
-        if item.is_dir():
-            scan_recursive(item)
+    try:
+        for item in library_path.iterdir():
+            if item.is_dir():
+                scan_recursive(item)
+    except PermissionError:
+        console.print("[red]Error:[/] Cannot access library root directory")
+        return
 
     console.print(f"  Found [green]{len(folders)}[/] folders")
 
@@ -407,39 +414,35 @@ async def scan_library_async(
     if not skip_mediainfo and leaf_folders:
         console.print(f"\n[bold blue]Phase 2:[/] Extracting mediainfo ({workers} workers)...")
 
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            with (
-                ThreadPoolExecutor(max_workers=workers) as executor,
-                Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    TaskProgressColumn(),
-                    MofNCompleteColumn(),
-                    TimeElapsedColumn(),
-                    TimeRemainingColumn(),
-                    console=console,
-                ) as progress,
-            ):
-                task = progress.add_task("Processing", total=len(leaf_folders))
+        loop = asyncio.get_running_loop()
+        with (
+            ThreadPoolExecutor(max_workers=workers) as executor,
+            Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TaskProgressColumn(),
+                MofNCompleteColumn(),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                console=console,
+            ) as progress,
+        ):
+            task = progress.add_task("Processing", total=len(leaf_folders))
 
-                async def process_one(folder_info: FolderInfo) -> FolderInfo:
-                    result = await loop.run_in_executor(
-                        executor,
-                        process_mediainfo_for_folder,
-                        folder_info,
-                        library_path,
-                    )
-                    progress.advance(task)
-                    return result
+            async def process_one(folder_info: FolderInfo) -> FolderInfo:
+                result = await loop.run_in_executor(
+                    executor,
+                    process_mediainfo_for_folder,
+                    folder_info,
+                    library_path,
+                )
+                progress.advance(task)
+                return result
 
-                # Process all leaf folders
-                tasks = [process_one(f) for f in leaf_folders]
-                await asyncio.gather(*tasks)
-        finally:
-            loop.close()
+            # Process all leaf folders
+            tasks = [process_one(f) for f in leaf_folders]
+            await asyncio.gather(*tasks)
 
     # Compute statistics
     stats: dict[str, Any] = {

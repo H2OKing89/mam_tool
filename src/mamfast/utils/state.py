@@ -120,7 +120,14 @@ def _locked_state_file(state_file: Path) -> Generator[None, None, None]:
     This ensures read-modify-write operations are serialized across
     processes/threads.
     """
-    state_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+    except PermissionError as e:
+        raise StateLockError(
+            f"Cannot create state directory: {state_file.parent}\n"
+            "Check permissions or configure a valid state file path.",
+            lock_file=state_file,
+        ) from e
     lock_path = state_file.with_suffix(state_file.suffix + ".lock")
 
     with open(lock_path, "a+") as lockf:
