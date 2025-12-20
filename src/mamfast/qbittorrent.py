@@ -3,11 +3,16 @@ qBittorrent API wrapper for uploading torrents.
 
 Uses the qbittorrent-api package with idempotent upload support
 to prevent duplicate torrents.
+
+Connection pooling: Reuses a single client instance per session
+to avoid repeated authentication overhead.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -26,23 +31,16 @@ NETWORK_EXCEPTIONS = (
     OSError,
 )
 
+# Connection pool: Thread-safe cached client
+_client: qbittorrentapi.Client | None = None
+_client_lock = threading.Lock()
 
-@retry_with_backoff(
-    max_attempts=3,
-    base_delay=2.0,
-    max_delay=30.0,
-    exceptions=NETWORK_EXCEPTIONS,
-)
-def get_client() -> qbittorrentapi.Client:
+
+def _create_client() -> qbittorrentapi.Client:
     """
-    Create an authenticated qBittorrent API client with retry logic.
+    Create a new authenticated qBittorrent client.
 
-    Returns:
-        Connected and authenticated client.
-
-    Raises:
-        qbittorrentapi.LoginFailed: If authentication fails (not retried).
-        qbittorrentapi.APIConnectionError: If connection fails after retries.
+    Internal function - use get_client() for pooled access.
     """
     settings = get_settings()
 
@@ -52,13 +50,69 @@ def get_client() -> qbittorrentapi.Client:
         password=settings.qbittorrent.password,
     )
 
-    # This will raise on auth failure (LoginFailed is not in NETWORK_EXCEPTIONS)
+    # Authenticate
     client.auth_log_in()
 
     logger.debug(f"Connected to qBittorrent at {settings.qbittorrent.host}")
     logger.debug(f"qBittorrent version: {client.app.version}")
 
     return client
+
+
+@retry_with_backoff(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=30.0,
+    exceptions=NETWORK_EXCEPTIONS,
+)
+def get_client() -> qbittorrentapi.Client:
+    """
+    Get a pooled, authenticated qBittorrent API client.
+
+    Uses connection pooling to reuse the same client across calls,
+    reducing authentication overhead. Thread-safe.
+
+    If the cached client is invalid (session expired, connection lost),
+    a new client is created automatically.
+
+    Returns:
+        Connected and authenticated client.
+
+    Raises:
+        qbittorrentapi.LoginFailed: If authentication fails (not retried).
+        qbittorrentapi.APIConnectionError: If connection fails after retries.
+    """
+    global _client
+
+    with _client_lock:
+        if _client is not None:
+            # Verify existing client is still valid
+            try:
+                # Quick health check - if this fails, client is stale
+                _ = _client.app.version
+                return _client
+            except (qbittorrentapi.APIConnectionError, qbittorrentapi.HTTPError):
+                logger.debug("Cached qBittorrent client expired, reconnecting...")
+                _client = None
+
+        # Create new client
+        _client = _create_client()
+        return _client
+
+
+def reset_client() -> None:
+    """
+    Reset the cached client connection.
+
+    Call this after configuration changes or to force reconnection.
+    """
+    global _client
+    with _client_lock:
+        if _client is not None:
+            with contextlib.suppress(Exception):
+                _client.auth_log_out()
+            _client = None
+            logger.debug("qBittorrent client reset")
 
 
 def upload_torrent(

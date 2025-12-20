@@ -29,6 +29,7 @@ from jinja2 import Environment, PackageLoader
 
 from mamfast.config import get_settings
 from mamfast.models import NormalizedBook
+from mamfast.utils.circuit_breaker import CircuitOpenError, audnex_breaker
 from mamfast.utils.naming import (
     extract_translators_from_mediainfo,
     filter_authors,
@@ -618,6 +619,9 @@ def _fetch_audnex_book_region(
 
     Returns:
         Parsed JSON response or None if not found/error.
+
+    Raises:
+        CircuitOpenError: If Audnex API circuit breaker is open.
     """
     url = f"{base_url}/books/{asin}"
     params = {"region": region}
@@ -625,7 +629,9 @@ def _fetch_audnex_book_region(
     logger.debug(f"Fetching Audnex metadata: {url} (region={region})")
 
     try:
-        with httpx.Client(timeout=timeout) as client:
+        # Circuit breaker protects against cascading failures
+        # Only network-level errors trip the breaker (not 404s which are normal)
+        with audnex_breaker, httpx.Client(timeout=timeout) as client:
             response = client.get(url, params=params)
 
             if response.status_code == 404:
@@ -651,6 +657,10 @@ def _fetch_audnex_book_region(
                 )
 
             return data
+
+    except CircuitOpenError:
+        # Re-raise circuit breaker errors - caller should handle
+        raise
 
     except httpx.TimeoutException:
         # Network issue - warn since this may indicate a problem

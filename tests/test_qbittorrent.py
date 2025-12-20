@@ -5,15 +5,26 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from mamfast.qbittorrent import (
     check_torrent_exists,
     get_client,
     get_torrent_info,
+    reset_client,
     upload_torrent,
 )
 from mamfast.qbittorrent import (
     test_connection as qb_test_connection,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_qb_client():
+    """Reset the qBittorrent client pool before each test."""
+    reset_client()
+    yield
+    reset_client()
 
 
 class TestGetClient:
@@ -35,6 +46,58 @@ class TestGetClient:
 
         mock_client.auth_log_in.assert_called_once()
         assert client is mock_client
+
+    def test_get_client_reuses_connection(self):
+        """Test that get_client reuses the same connection."""
+        mock_client = MagicMock()
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.host = "http://localhost:8080"
+        mock_settings.qbittorrent.username = "admin"
+        mock_settings.qbittorrent.password = "admin"
+
+        with (
+            patch("mamfast.qbittorrent.qbittorrentapi.Client", return_value=mock_client),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            # First call creates client
+            client1 = get_client()
+            # Second call should reuse
+            client2 = get_client()
+
+        # Should only create one client (one auth_log_in call)
+        assert mock_client.auth_log_in.call_count == 1
+        assert client1 is client2
+
+
+class TestResetClient:
+    """Tests for reset_client function."""
+
+    def test_reset_forces_new_connection(self):
+        """Test that reset_client forces new connection on next call."""
+        mock_client1 = MagicMock()
+        mock_client2 = MagicMock()
+        mock_settings = MagicMock()
+        mock_settings.qbittorrent.host = "http://localhost:8080"
+        mock_settings.qbittorrent.username = "admin"
+        mock_settings.qbittorrent.password = "admin"
+
+        with (
+            patch(
+                "mamfast.qbittorrent.qbittorrentapi.Client",
+                side_effect=[mock_client1, mock_client2],
+            ),
+            patch("mamfast.qbittorrent.get_settings", return_value=mock_settings),
+        ):
+            # First call
+            client1 = get_client()
+            assert client1 is mock_client1
+
+            # Reset
+            reset_client()
+
+            # Second call should create new client
+            client2 = get_client()
+            assert client2 is mock_client2
 
 
 class TestTestConnection:

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from mamfast.mkbrr import (
     MkbrrResult,
+    _cleanup_stale_torrents,
     _docker_base_command,
+    _find_torrent_deterministic,
     check_docker_available,
     check_torrent,
     create_torrent,
@@ -114,6 +117,118 @@ presets:
         assert presets == ["default"]
 
 
+class TestCleanupStaleTorrents:
+    """Tests for _cleanup_stale_torrents function."""
+
+    def test_removes_matching_torrents(self, tmp_path: Path):
+        """Test that stale torrents matching content name are removed."""
+        content_name = "My Book"
+        # Create some torrent files
+        (tmp_path / f"{content_name}.torrent").touch()
+        (tmp_path / f"mam_{content_name}.torrent").touch()
+        (tmp_path / "other.torrent").touch()
+
+        removed = _cleanup_stale_torrents(tmp_path, content_name)
+
+        assert removed == 2
+        assert not (tmp_path / f"{content_name}.torrent").exists()
+        assert not (tmp_path / f"mam_{content_name}.torrent").exists()
+        assert (tmp_path / "other.torrent").exists()
+
+    def test_handles_empty_directory(self, tmp_path: Path):
+        """Test that empty directory causes no errors."""
+        removed = _cleanup_stale_torrents(tmp_path, "content")
+        assert removed == 0
+
+    def test_handles_permission_error(self, tmp_path: Path, caplog):
+        """Test graceful handling of permission errors."""
+        content_name = "content"
+        torrent = tmp_path / f"{content_name}.torrent"
+        torrent.touch()
+
+        with patch.object(Path, "unlink", side_effect=OSError("Permission denied")):
+            removed = _cleanup_stale_torrents(tmp_path, content_name)
+
+        assert removed == 0
+        assert "Failed to remove" in caplog.text
+
+
+class TestFindTorrentDeterministic:
+    """Tests for _find_torrent_deterministic function."""
+
+    def test_finds_exact_match(self, tmp_path: Path):
+        """Test finding torrent with exact content name match."""
+        content_name = "My Book"
+        expected = tmp_path / f"{content_name}.torrent"
+        expected.touch()
+
+        result = _find_torrent_deterministic(tmp_path, content_name)
+
+        assert result == expected
+
+    def test_finds_prefixed_match(self, tmp_path: Path):
+        """Test finding torrent with preset prefix."""
+        content_name = "My Book"
+        prefixed = tmp_path / f"mam_{content_name}.torrent"
+        prefixed.touch()
+
+        result = _find_torrent_deterministic(tmp_path, content_name)
+
+        assert result == prefixed
+
+    def test_deterministic_tiebreak_by_name(self, tmp_path: Path):
+        """Test that multiple matches with same mtime are resolved deterministically."""
+        content_name = "content"
+
+        # Create two torrents with same mtime (filesystem precision issue)
+        t1 = tmp_path / f"a_{content_name}.torrent"
+        t2 = tmp_path / f"b_{content_name}.torrent"
+        t1.touch()
+        t2.touch()
+
+        # Force same mtime
+        shared_time = time.time()
+        import os
+
+        os.utime(t1, (shared_time, shared_time))
+        os.utime(t2, (shared_time, shared_time))
+
+        # Should consistently return the same one (alphabetically last)
+        result1 = _find_torrent_deterministic(tmp_path, content_name)
+        result2 = _find_torrent_deterministic(tmp_path, content_name)
+
+        assert result1 == result2 == t2  # 'b' > 'a'
+
+    def test_newest_wins_with_different_mtime(self, tmp_path: Path):
+        """Test that newer file wins when mtimes differ."""
+        content_name = "content"
+
+        old = tmp_path / f"old_{content_name}.torrent"
+        new = tmp_path / f"new_{content_name}.torrent"
+        old.touch()
+        time.sleep(0.01)  # Ensure different mtime
+        new.touch()
+
+        result = _find_torrent_deterministic(tmp_path, content_name)
+
+        assert result == new
+
+    def test_returns_none_when_not_found(self, tmp_path: Path):
+        """Test that None is returned when no matching torrent exists."""
+        result = _find_torrent_deterministic(tmp_path, "nonexistent")
+        assert result is None
+
+    def test_fallback_to_any_torrent(self, tmp_path: Path):
+        """Test fallback when content name doesn't match any pattern."""
+        # Create a torrent with completely different name
+        other = tmp_path / "unrelated.torrent"
+        other.touch()
+
+        result = _find_torrent_deterministic(tmp_path, "content")
+
+        assert result == other
+
+
 class TestCreateTorrent:
     """Tests for torrent creation."""
 
@@ -144,12 +259,16 @@ class TestCreateTorrent:
         mock_settings.target_uid = 99
         mock_settings.target_gid = 100
 
-        # Create the expected torrent file (mkbrr would create this)
         expected_torrent = output_dir / f"{content_dir.name}.torrent"
-        expected_torrent.touch()
+
+        def mock_subprocess_run(*args, **kwargs):
+            # Simulate mkbrr creating the torrent file during execution
+            # (after _cleanup_stale_torrents removes any existing files)
+            expected_torrent.touch()
+            return mock_result
 
         with (
-            patch("subprocess.run", return_value=mock_result),
+            patch("subprocess.run", side_effect=mock_subprocess_run),
             patch("mamfast.mkbrr.get_settings", return_value=mock_settings),
             patch("mamfast.mkbrr.host_to_container_data_path", return_value="/data/content"),
             patch("mamfast.mkbrr.host_to_container_torrent_path", return_value="/torrents"),

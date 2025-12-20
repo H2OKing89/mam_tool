@@ -147,6 +147,81 @@ def fix_torrent_permissions(root_dir: Path | str | None = None) -> int:
     return fixed_count
 
 
+def _cleanup_stale_torrents(output_dir: Path, content_name: str) -> int:
+    """
+    Remove existing torrents for content to prevent discovery race conditions.
+
+    When we create a new torrent, we need to be certain we find the newly created
+    file, not a stale one. This is especially important on filesystems with low
+    mtime precision or during rapid re-runs.
+
+    Args:
+        output_dir: Directory to clean.
+        content_name: Name of the content (folder/file name).
+
+    Returns:
+        Number of torrents removed.
+    """
+    patterns = [
+        f"*{content_name}.torrent",  # With any prefix (e.g., "myanonamouse_")
+        f"{content_name}.torrent",  # Without prefix
+    ]
+
+    removed = 0
+    for pattern in patterns:
+        for torrent in output_dir.glob(pattern):
+            try:
+                torrent.unlink()
+                logger.debug(f"Removed stale torrent: {torrent}")
+                removed += 1
+            except OSError as e:
+                logger.warning(f"Failed to remove stale torrent {torrent}: {e}")
+
+    if removed:
+        logger.info(f"Cleaned up {removed} stale torrent(s) before creation")
+
+    return removed
+
+
+def _find_torrent_deterministic(output_dir: Path, content_name: str) -> Path | None:
+    """
+    Find the torrent file for content with deterministic tie-breaking.
+
+    Uses a two-level sort: mtime (newest first), then filename (alphabetically last).
+    This ensures consistent results even when multiple files have identical mtimes.
+
+    Args:
+        output_dir: Directory to search.
+        content_name: Name of the content (folder/file name).
+
+    Returns:
+        Path to the torrent file, or None if not found.
+    """
+    patterns = [
+        f"*{content_name}.torrent",  # With any prefix
+        f"{content_name}.torrent",  # Without prefix
+    ]
+
+    for pattern in patterns:
+        matches = list(output_dir.glob(pattern))
+        if matches:
+            # Sort by: mtime descending (newest first), then name descending (for tie-break)
+            # Using negative mtime for descending, reversed name for deterministic tie-break
+            matches.sort(key=lambda p: (-p.stat().st_mtime, p.name), reverse=False)
+            # After sort: first item is newest, and for same mtime, alphabetically last name
+            # Actually let's use a clearer approach
+            matches.sort(key=lambda p: (p.stat().st_mtime, p.name))
+            return matches[-1]  # Take the last (newest mtime, then highest name)
+
+    # Fallback: find any .torrent file with deterministic selection
+    all_torrents = list(output_dir.glob("*.torrent"))
+    if all_torrents:
+        all_torrents.sort(key=lambda p: (p.stat().st_mtime, p.name))
+        return all_torrents[-1]
+
+    return None
+
+
 def load_presets() -> list[str]:
     """
     Load available preset names from mkbrr's presets.yaml.
@@ -162,7 +237,7 @@ def load_presets() -> list[str]:
 
     try:
         with open(presets_path, encoding="utf-8") as f:
-            data = yaml.safe_load(f) or {}
+            data: dict[str, object] = yaml.safe_load(f) or {}
     except Exception as e:
         logger.warning(f"Failed to parse {presets_path}: {e}")
         return [settings.mkbrr.preset]
@@ -173,7 +248,7 @@ def load_presets() -> list[str]:
         logger.warning(f"No valid 'presets' mapping in {presets_path}")
         return [settings.mkbrr.preset]
 
-    presets = list(presets_node.keys())
+    presets: list[str] = [str(k) for k in presets_node]
 
     # Put configured preset first
     default_preset = settings.mkbrr.preset
@@ -209,6 +284,11 @@ def create_torrent(
     # Ensure output directory exists (may be per-release subfolder)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Clean up any existing torrents for this content to avoid discovery race conditions
+    # This ensures we always find the newly created torrent, not a stale one
+    content_name = Path(content_path).name
+    _cleanup_stale_torrents(output_dir, content_name)
+
     # Convert to container paths
     container_content = host_to_container_data_path(content_path)
     container_output = host_to_container_torrent_path(output_dir)
@@ -241,29 +321,10 @@ def create_torrent(
             # Fix permissions first
             fix_torrent_permissions(output_dir)
 
-            # Figure out the output torrent filename
-            # mkbrr may add a preset prefix (e.g., "myanonamouse_") to the filename
-            content_name = Path(content_path).name
-
-            # Look for the actual torrent file - try with and without prefix
-            torrent_path = None
-            possible_patterns = [
-                f"*{content_name}.torrent",  # With any prefix
-                f"{content_name}.torrent",  # Without prefix
-            ]
-
-            for pattern in possible_patterns:
-                matches = list(output_dir.glob(pattern))
-                if matches:
-                    # Take the most recently modified one
-                    torrent_path = max(matches, key=lambda p: p.stat().st_mtime)
-                    break
-
-            if torrent_path is None:
-                # Fallback: find any recently created .torrent file
-                all_torrents = list(output_dir.glob("*.torrent"))
-                if all_torrents:
-                    torrent_path = max(all_torrents, key=lambda p: p.stat().st_mtime)
+            # Find the torrent file using deterministic discovery
+            # Since we cleaned up stale torrents before creation, there should be
+            # exactly one match, but we use deterministic selection as a safety net
+            torrent_path = _find_torrent_deterministic(output_dir, content_name)
 
             if torrent_path is None:
                 return MkbrrResult(
