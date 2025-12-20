@@ -1,7 +1,7 @@
 {
   "_comment": "MAM category mapping based on Audnex/ABS genres and tags. Keys are lowercase, values are MAM category IDs. See mam_categories_reference.json for full MAM schema.",
-  "_version": "2025-12-20-v3",
-  "_note": "Compound genres (e.g. 'Science Fiction & Fantasy') may need splitting in metadata.py",
+  "_version": "2025-12-20-v4",
+  "_note": "Compound genres (e.g. 'Science Fiction & Fantasy') are split on ' & ' and ', ' by _map_genres_to_categories() in metadata.py. Both parts get mapped.",
 
   "action & adventure": 1,
   "action": 1,
@@ -271,10 +271,8 @@
   "astronomy": 44,
 
   "science fiction": 45,
-  "science fiction & fantasy": 13,
   "sci-fi": 45,
   "scifi": 45,
-  "sci-fi & fantasy": 13,
   "space opera": 45,
   "space exploration": 45,
   "cyberpunk": 45,
