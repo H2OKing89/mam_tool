@@ -251,11 +251,11 @@ def get_folder_mediainfo(folder: Path, audio_files: list[str]) -> MediaInfo:
     elif len(codecs) > 1:
         info.codec = "/".join(sorted(codecs))
 
-    # Use most common sample rate
+    # Use highest sample rate
     if sample_rates:
-        info.sample_rate = max(sample_rates)  # Use highest
+        info.sample_rate = max(sample_rates)
 
-    # Use most common channels
+    # Use highest channel count
     if channels_set:
         info.channels = max(channels_set)
 
@@ -283,7 +283,14 @@ def detect_edition_flags(name: str) -> list[str]:
     found = []
     name_lower = name.lower()
     for flag in EDITION_FLAGS:
-        if flag.lower() in name_lower:
+        flag_lower = flag.lower()
+        if flag_lower in name_lower:
+            # Avoid adding "Abridged" if "Unabridged" already matched
+            if flag_lower == "abridged" and "unabridged" in name_lower:
+                continue
+            # Avoid adding "Atmos" if "Dolby Atmos" already matched
+            if flag_lower == "atmos" and "dolby atmos" in name_lower:
+                continue
             found.append(flag)
     return found
 
@@ -392,7 +399,12 @@ async def scan_library_async(
                 scan_recursive(item)
     except PermissionError:
         console.print("[red]Error:[/] Cannot access library root directory")
-        return
+        return {
+            "scan_timestamp": datetime.now().isoformat(),
+            "library_path": str(library_path),
+            "stats": {"error": "Cannot access library root directory"},
+            "folders": [],
+        }
 
     console.print(f"  Found [green]{len(folders)}[/] folders")
 
@@ -565,7 +577,7 @@ if __name__ == "__main__":
     result = scan_library(library_path, args.workers, args.no_mediainfo)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2)
 
     console.print(f"\n[bold green]✓[/] Saved to: [cyan]{output_path}[/]")

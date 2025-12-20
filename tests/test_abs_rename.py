@@ -745,4 +745,5 @@ class TestFullPipeline:
 
         assert summary.total_candidates == 1
         # Should be marked as up_to_date or missing_asin (depends on metadata)
-        assert summary.skipped_up_to_date + summary.skipped_missing_asin >= 0
+        # At least one of the skip counters should be positive
+        assert summary.skipped_up_to_date + summary.skipped_missing_asin > 0
