@@ -39,6 +39,7 @@ from mamfast.utils.naming import (
     resolve_series,
     transliterate_text,
 )
+from mamfast.utils.retry import SUBPROCESS_EXCEPTIONS, retry_with_backoff
 
 if TYPE_CHECKING:
     from mamfast.models import AudiobookRelease
@@ -959,6 +960,23 @@ def save_audnex_json(data: dict[str, Any], output_path: Path) -> None:
 # =============================================================================
 
 
+@retry_with_backoff(
+    max_attempts=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exceptions=SUBPROCESS_EXCEPTIONS,
+)
+def _run_mediainfo_subprocess(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run mediainfo subprocess with retry on transient failures."""
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,  # Timeout for large files
+    )
+
+
 def run_mediainfo(file_path: Path) -> dict[str, Any] | None:
     """
     Run mediainfo on a file and return parsed JSON output.
@@ -985,12 +1003,7 @@ def run_mediainfo(file_path: Path) -> dict[str, Any] | None:
     logger.debug(f"Running mediainfo: {' '.join(cmd)}")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        result = _run_mediainfo_subprocess(cmd)
 
         data: dict[str, Any] = json.loads(result.stdout)
         logger.info(f"Got MediaInfo for: {file_path.name}")
@@ -1002,6 +1015,10 @@ def run_mediainfo(file_path: Path) -> dict[str, Any] | None:
 
     except subprocess.CalledProcessError as e:
         logger.error(f"mediainfo failed: {e.stderr}")
+        return None
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"mediainfo timed out for: {file_path}")
         return None
 
     except json.JSONDecodeError as e:

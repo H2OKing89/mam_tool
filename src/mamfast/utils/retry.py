@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import logging
 import random
+import subprocess
 import time
 from collections.abc import Callable
 from typing import Any, TypeVar
@@ -122,3 +123,11 @@ try:
     )
 except ImportError:
     pass
+
+
+# Subprocess exceptions for Docker/CLI tool retries
+SUBPROCESS_EXCEPTIONS: tuple[type[Exception], ...] = (
+    subprocess.TimeoutExpired,
+    OSError,  # Covers "No such file or directory", resource exhaustion
+    RetryableError,
+)

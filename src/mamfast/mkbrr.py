@@ -18,6 +18,7 @@ import yaml
 
 from mamfast.config import get_settings
 from mamfast.utils.paths import host_to_container_data_path, host_to_container_torrent_path
+from mamfast.utils.retry import SUBPROCESS_EXCEPTIONS, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,41 @@ def _docker_base_command() -> list[str]:
         f"{mkbrr.host_config_dir}:{mkbrr.container_config_dir}",
         mkbrr.image,
     ]
+
+
+@retry_with_backoff(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=30.0,
+    exceptions=SUBPROCESS_EXCEPTIONS,
+)
+def _run_docker_command(
+    cmd: list[str],
+    timeout: int,
+    capture_output: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run a Docker command with retry on transient failures.
+
+    Args:
+        cmd: Command and arguments to run
+        timeout: Timeout in seconds
+        capture_output: Whether to capture stdout/stderr
+
+    Returns:
+        CompletedProcess result
+
+    Raises:
+        subprocess.TimeoutExpired: If command times out (after retries)
+        OSError: If Docker daemon unreachable (after retries)
+    """
+    return subprocess.run(
+        cmd,
+        text=True,
+        check=False,
+        timeout=timeout,
+        capture_output=capture_output,
+    )
 
 
 def fix_torrent_permissions(root_dir: Path | str | None = None) -> int:
@@ -195,16 +231,11 @@ def create_torrent(
     timeout_seconds = 300
 
     try:
-        logger.debug(f"Running mkbrr with {timeout_seconds}s timeout")
+        logger.debug(f"Running mkbrr with {timeout_seconds}s timeout (with retry)")
 
-        # Run mkbrr and let output stream to terminal (like interactive mode)
-        # This allows progress bars and feedback to display
-        result = subprocess.run(
-            cmd,
-            text=True,
-            check=False,
-            timeout=timeout_seconds,
-        )
+        # Run mkbrr with retry on transient Docker failures
+        # Output streams to terminal for progress bars
+        result = _run_docker_command(cmd, timeout=timeout_seconds, capture_output=False)
 
         if result.returncode == 0:
             # Fix permissions first
@@ -302,13 +333,7 @@ def inspect_torrent(
     logger.debug(f"Inspecting torrent: {torrent_path}")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,  # Inspection should be fast
-        )
+        result = _run_docker_command(cmd, timeout=30, capture_output=True)
 
         return MkbrrResult(
             success=result.returncode == 0,
@@ -367,13 +392,7 @@ def check_torrent(
     logger.debug(f"Checking torrent: {torrent_path} against {content_path}")
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=60,  # Verification should be reasonably fast
-        )
+        result = _run_docker_command(cmd, timeout=60, capture_output=True)
 
         return MkbrrResult(
             success=result.returncode == 0,

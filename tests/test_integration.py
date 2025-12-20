@@ -246,6 +246,7 @@ class TestProcessSingleRelease:
 class TestFullPipeline:
     """Integration tests for the full pipeline."""
 
+    @patch("mamfast.workflow.PreflightValidation")
     @patch("mamfast.workflow.get_settings")
     @patch("mamfast.discovery.get_new_releases")
     @patch("mamfast.workflow.run_liberate")
@@ -256,9 +257,11 @@ class TestFullPipeline:
         mock_liberate: Mock,
         mock_get_releases: Mock,
         mock_settings: Mock,
+        mock_preflight: Mock,
     ) -> None:
         """Test full run when no new releases are found."""
-        # Arrange
+        # Arrange - mock preflight validation to pass
+        mock_preflight.return_value.validate.return_value = _create_passing_validation_result()
         mock_scan_result = MagicMock()
         mock_scan_result.success = True
         mock_scan.return_value = mock_scan_result
@@ -283,6 +286,7 @@ class TestFullPipeline:
         mock_scan.assert_called_once()
         mock_liberate.assert_called_once()
 
+    @patch("mamfast.workflow.PreflightValidation")
     @patch("mamfast.workflow.get_settings")
     @patch("mamfast.workflow.DiscoveryValidation")
     @patch("mamfast.workflow.get_processed_identifiers")
@@ -301,9 +305,12 @@ class TestFullPipeline:
         mock_get_processed_ids: Mock,
         mock_discovery_validation: Mock,
         mock_settings: Mock,
+        mock_preflight: Mock,
     ) -> None:
         """Test that full run skips already processed releases."""
-        # Arrange
+        # Arrange - mock preflight validation to pass
+        mock_preflight.return_value.validate.return_value = _create_passing_validation_result()
+
         mock_scan_result = MagicMock()
         mock_scan_result.success = True
         mock_scan.return_value = mock_scan_result

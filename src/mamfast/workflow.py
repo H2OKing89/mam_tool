@@ -59,6 +59,7 @@ from mamfast.validation import (
     ChapterIntegrityChecker,
     DiscoveryValidation,
     MetadataValidation,
+    PreflightValidation,
     PreUploadValidation,
 )
 
@@ -527,6 +528,32 @@ def full_run(
             )
 
     # -------------------------------------------------------------------------
+    # 0. Pre-flight validation (disk space, permissions)
+    # -------------------------------------------------------------------------
+    settings = get_settings()
+    preflight = PreflightValidation(settings)
+    preflight_result = preflight.validate()
+
+    # Log any preflight issues
+    for check in preflight_result.checks:
+        if not check.passed:
+            if check.severity == "error":
+                print_error(f"Preflight: {check.message}")
+            elif check.severity == "warning":
+                print_warning(f"Preflight: {check.message}")
+
+    if not preflight_result.passed:
+        print_error("Preflight validation failed. Fix issues above before continuing.")
+        return PipelineResult(
+            total=0,
+            successful=0,
+            failed=0,
+            skipped=0,
+            results=[],
+            duration_seconds=time.time() - start_time,
+        )
+
+    # -------------------------------------------------------------------------
     # 1. Libation scan + conditional liberate
     # -------------------------------------------------------------------------
     # Libation has a two-stage model:
@@ -632,7 +659,6 @@ def full_run(
     # -------------------------------------------------------------------------
     results = []
     skipped = 0
-    settings = get_settings()
 
     # Process each release
     for i, release in enumerate(releases, 1):
