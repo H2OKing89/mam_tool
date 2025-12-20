@@ -91,12 +91,72 @@ Stormlight Archive vol_01 The Way of Kings (2010) (Brandon Sanderson) {ASIN.B003
 Sword Art Online vol_09 Alicization Beginning (2020) (Reki Kawahara) {ASIN.B08XXXXX} [H2OKing]
 ```
 
-**Decimal Volume:**
+Note: Author appears in parentheses after year. Ripper tag in brackets is optional.
+
+---
+
+## Volume Notation
+
+To disambiguate ranges, parts, and novellas, we use distinct notation shapes:
+
+### Notation Types
+
+| Type | Pattern | Meaning | Example |
+|------|---------|---------|--------|
+| **Single volume** | `vol_NN` | Standard volume | `vol_01`, `vol_12` |
+| **Novella/Side story** | `vol_NN.N` | Story between volumes | `vol_01.5` |
+| **Range (Publisher Pack)** | `vol_NN-NN` | Contains books N through N | `vol_01-03` |
+| **Split parts (Graphic Audio)** | `vol_NNpN` | Volume N, Part N | `vol_01p1`, `vol_01p2` |
+
+### Why These Shapes?
+
+These shapes are **mutually exclusive** and unambiguous:
+
+- `.` (dot) = fractional/in-between volume (novellas)
+- `-` (dash between two numbers) = range of books (omnibus/publisher pack)
+- `p` (letter) = part of a split release (Graphic Audio)
+
+### Parsed Fields
+
+| Pattern | `volume` | `volume_range_end` | `volume_part` |
+|---------|----------|-------------------|---------------|
+| `vol_01` | 1 | - | - |
+| `vol_01.5` | 1.5 | - | - |
+| `vol_01-03` | 1 | 3 | - |
+| `vol_01p1` | 1 | - | 1 |
+
+### Examples
+
+**Novella/Side Story:**
 ```
 Old Mans War vol_01.5 Questions for a Soldier (2008) (John Scalzi) {ASIN.B001D2XXXX} [H2OKing]
 ```
 
-Note: Author appears in parentheses after year. Ripper tag in brackets is optional.
+**Split Graphic Audio (same book in parts):**
+```
+The Empyrean vol_01p1 Fourth Wing (2023) (Rebecca Yarros) (Graphic Audio) {ASIN.B0CKS42KQH}
+The Empyrean vol_01p2 Fourth Wing (2024) (Rebecca Yarros) (Graphic Audio) {ASIN.B0CQQ6ZV5J}
+```
+
+**Publisher Pack (multiple books combined):**
+```
+Incubus vol_01-03 (2022) (Brandon Varnell) (Publisher's Pack) {ASIN.1774246848}
+```
+
+**Standard single release:**
+```
+The Empyrean vol_01 Fourth Wing (2023) (Rebecca Yarros) {ASIN.B0BVD25SYT}
+```
+
+### Regex Pattern
+
+```regex
+vol_(?P<base>\d+(?:\.\d+)?)
+(?:
+    -(?P<range_end>\d+(?:\.\d+)?)  |  # vol_01-03 (range)
+    p(?P<part>\d+)                    # vol_01p1 (part)
+)?
+```
 
 ---
 

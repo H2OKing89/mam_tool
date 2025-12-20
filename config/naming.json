@@ -75,7 +75,11 @@
       "A Progression Fantasy",
       "An Urban Fantasy",
       ": A LitRPG Adventure",
-      ": A Fantasy Adventure"
+      ": A Fantasy Adventure",
+      "A Xianxia Cultivation Novel",
+      "A Xianxia Novel",
+      "- A Slice of Life Harem LitRPG",
+      "- A Slice-of-Life Urban Fantasy"
     ]
   },
 
@@ -91,7 +95,9 @@
       "\\s*\\([Ll]ight [Nn]ovel\\)$",
       "\\s+[Ll]ight [Nn]ovel$",
       "\\s+[Ll]ight [Nn]ovel [Ss]eries$",
-      "\\s*\\[[^\\]]*[Oo]rder\\]$"
+      "\\s*\\[[^\\]]*[Oo]rder\\]$",
+      "\\s*\\((?:Publication|Reading|Chronological|Release)\\s*Order\\)$",
+      "\\s+Book$"
     ]
   },
 
@@ -119,13 +125,18 @@
       "^Vol\\. \\d+$",
       "^[Aa] LitRPG(?: Adventure)?$",
       "^[Aa] LitRPG/Gamelit Adventure$",
-      "^[Aa] (?:Slice of Life )?(?:Harem )?LitRPG(?: Epic)?$",
+      "^[Aa] (?:Slice[- ]of[- ]Life )?(?:Harem )?LitRPG(?: Epic)?$",
       "^[Aa] (?:Summoner )?Fantasy LitRPG$",
       "^[Aa] Progression(?: Fantasy| LitRPG| LitRPG Epic)?$",
       "^[Aa] (?:Slice[- ]of[- ]Life )?(?:Fantasy|Urban Fantasy)(?: Adventure)?$",
       "^[Aa] Thriller$",
       "^[Aa] Drizzt Novel$",
-      "^[Aa] Hunger Games Novel$"
+      "^[Aa] Hunger Games Novel$",
+      "^[Aa] Xianxia(?: Cultivation)?(?: Novel)?$",
+      "^[Aa] Cultivation(?: Novel)?$",
+      "^[Aa]n? Isekai(?: LitRPG| Adventure| Novel)?$",
+      "^[Aa] GameLit(?: Adventure| Novel)?$",
+      "^From Hero-King to Extraordinary Squire[\\s-]*$"
     ],
     "keep_patterns": [
       ".*[Aa]ria.*",

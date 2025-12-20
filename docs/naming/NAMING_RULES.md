@@ -274,14 +274,33 @@ def normalize_position(position: str) -> str:
             return ""  # Omnibus - no volume
         position = mapped
 
-    # Extract number
+    # Extract number (handles decimals, ranges, and parts)
+    # Examples: "1", "1.5", "1-3" (range), "1p1" (part)
+
+    # Check for part notation: "1p1", "1 part 1", "1_01"
+    part_match = re.search(r"(\d+)(?:p|\s*part\s*|_)(\d+)", position, re.IGNORECASE)
+    if part_match:
+        main = int(part_match.group(1))
+        part = int(part_match.group(2))
+        return f"vol_{main:02d}p{part}"
+
+    # Check for range notation: "1-3", "01-03"
+    range_match = re.search(r"(\d+)-(\d+)", position)
+    if range_match:
+        start = int(range_match.group(1))
+        end = int(range_match.group(2))
+        # Only treat as range if end > start (not a part)
+        if end > start:
+            return f"vol_{start:02d}-{end:02d}"
+
+    # Standard number extraction
     match = re.search(r"(\d+(?:\.\d+)?)", position)
     if not match:
         return ""
 
     number = match.group(1)
 
-    # Zero-pad integer part
+    # Zero-pad integer part for decimals (novellas)
     if "." in number:
         integer, decimal = number.split(".")
         return f"vol_{int(integer):02d}.{decimal}"
@@ -289,15 +308,25 @@ def normalize_position(position: str) -> str:
         return f"vol_{int(number):02d}"
 ```
 
+### Volume Notation Reference
+
+See [Folder & File Schemas](./NAMING_FOLDER_FILE_SCHEMAS.md#volume-notation) for the canonical volume notation spec.
+
 ### Examples
 
-| Input | Output |
-|-------|--------|
-| `1` | `vol_01` |
-| `12` | `vol_12` |
-| `1.5` | `vol_01.5` |
-| `Prequel` | `vol_00` |
-| `Omnibus` | `` (empty) |
+| Input | Output | Use Case |
+|-------|--------|----------|
+| `1` | `vol_01` | Standard volume |
+| `12` | `vol_12` | Double-digit volume |
+| `1.5` | `vol_01.5` | Novella/side story |
+| `1p1` | `vol_01p1` | Part 1 of Graphic Audio split |
+| `1p2` | `vol_01p2` | Part 2 of Graphic Audio split |
+| `1 part 1` | `vol_01p1` | Alternate part notation |
+| `01_01` | `vol_01p1` | Legacy part notation (normalized) |
+| `1-3` | `vol_01-03` | Publisher Pack (books 1-3) |
+| `1-02` | `vol_01-02` | Publisher Pack (books 1-2) |
+| `Prequel` | `vol_00` | Special position mapping |
+| `Omnibus` | `` (empty) | No volume number |
 
 ---
 

@@ -178,9 +178,7 @@ class TestParseSeriesFromLibationPath:
         Note: Uses realistic Libation format with (Author) in book folder name,
         which prevents the author folder from being detected as series.
         """
-        path = Path(
-            "/library/Andy Weir/Standalone/" "Project Hail Mary (2021) (Andy Weir) {ASIN.XXX}"
-        )
+        path = Path("/library/Andy Weir/Standalone/Project Hail Mary (2021) (Andy Weir) {ASIN.XXX}")
         result = parse_series_from_libation_path(path)
         # "Standalone" is filtered as a common root, "Andy Weir" is detected as
         # author due to (Andy Weir) in book folder, so no series detected

@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import re
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,6 +29,9 @@ ASIN_VALID_PATTERN = re.compile(r"^(?:B[0-9A-Z]{9}|[0-9]{10})$")
 # Maximum filename length for MAM
 MAM_MAX_FILENAME_LENGTH = 225
 
+# Minimum disk space required for staging (in bytes) - 1GB default
+MIN_DISK_SPACE_BYTES = 1 * 1024 * 1024 * 1024
+
 
 class CheckCategory(Enum):
     """Categories of health checks."""
@@ -36,6 +40,7 @@ class CheckCategory(Enum):
     PATHS = "Paths"
     SERVICES = "Services"
     CATEGORIES = "Categories"
+    FILESYSTEM = "Filesystem"
 
 
 @dataclass
@@ -497,6 +502,245 @@ class ChapterComparisonResult:
     api_count: int
     duration_diff_seconds: float = 0.0
     mismatched_titles: list[tuple[str, str]] = field(default_factory=list)
+
+
+class PreflightValidation:
+    """Pre-flight checks before starting the pipeline.
+
+    Validates environment is ready for processing:
+    - Disk space available
+    - Directory permissions (read/write)
+    - Required paths exist
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        """
+        Initialize preflight validation.
+
+        Args:
+            settings: MAMFast settings object
+        """
+        self._settings = settings
+
+    def validate(self, release_size_bytes: int = 0) -> ValidationResult:
+        """
+        Run all pre-flight validation checks.
+
+        Args:
+            release_size_bytes: Size of content to stage (for disk space check)
+
+        Returns:
+            ValidationResult with all check results
+        """
+        result = ValidationResult()
+        result.add(self._check_library_root_readable())
+        result.add(self._check_seed_root_writable())
+        result.add(self._check_torrent_output_writable())
+        result.add(self._check_disk_space(release_size_bytes))
+        result.add(self._check_state_file_writable())
+        return result
+
+    def _check_library_root_readable(self) -> ValidationCheck:
+        """Check library_root exists and is readable."""
+        library_root = self._settings.paths.library_root
+
+        if not library_root.exists():
+            return ValidationCheck(
+                name="library_root_readable",
+                passed=False,
+                message=f"Library root does not exist: {library_root}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        if not os.access(library_root, os.R_OK):
+            return ValidationCheck(
+                name="library_root_readable",
+                passed=False,
+                message=f"Library root not readable: {library_root}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        return ValidationCheck(
+            name="library_root_readable",
+            passed=True,
+            message=f"Library root OK: {library_root}",
+            severity="info",
+            category=CheckCategory.FILESYSTEM,
+        )
+
+    def _check_seed_root_writable(self) -> ValidationCheck:
+        """Check seed_root exists and is writable."""
+        seed_root = self._settings.paths.seed_root
+
+        if not seed_root.exists():
+            # Try to create it
+            try:
+                seed_root.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                return ValidationCheck(
+                    name="seed_root_writable",
+                    passed=False,
+                    message=f"Cannot create seed root: {seed_root} ({e})",
+                    severity="error",
+                    category=CheckCategory.FILESYSTEM,
+                )
+
+        if not os.access(seed_root, os.W_OK):
+            return ValidationCheck(
+                name="seed_root_writable",
+                passed=False,
+                message=f"Seed root not writable: {seed_root}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        return ValidationCheck(
+            name="seed_root_writable",
+            passed=True,
+            message=f"Seed root OK: {seed_root}",
+            severity="info",
+            category=CheckCategory.FILESYSTEM,
+        )
+
+    def _check_torrent_output_writable(self) -> ValidationCheck:
+        """Check torrent_output exists and is writable."""
+        torrent_output = self._settings.paths.torrent_output
+
+        if not torrent_output.exists():
+            # Try to create it
+            try:
+                torrent_output.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                return ValidationCheck(
+                    name="torrent_output_writable",
+                    passed=False,
+                    message=f"Cannot create torrent output: {torrent_output} ({e})",
+                    severity="error",
+                    category=CheckCategory.FILESYSTEM,
+                )
+
+        if not os.access(torrent_output, os.W_OK):
+            return ValidationCheck(
+                name="torrent_output_writable",
+                passed=False,
+                message=f"Torrent output not writable: {torrent_output}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        return ValidationCheck(
+            name="torrent_output_writable",
+            passed=True,
+            message=f"Torrent output OK: {torrent_output}",
+            severity="info",
+            category=CheckCategory.FILESYSTEM,
+        )
+
+    def _check_disk_space(self, release_size_bytes: int = 0) -> ValidationCheck:
+        """Check sufficient disk space for staging.
+
+        Args:
+            release_size_bytes: Size of content to stage (0 for general check)
+        """
+        seed_root = self._settings.paths.seed_root
+
+        # Ensure directory exists for disk check
+        if not seed_root.exists():
+            return ValidationCheck(
+                name="disk_space",
+                passed=False,
+                message=f"Seed root does not exist: {seed_root}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        try:
+            disk_usage = shutil.disk_usage(seed_root)
+            free_bytes = disk_usage.free
+            free_gb = free_bytes / (1024**3)
+
+            # Check against release size (plus 10% buffer) or minimum threshold
+            required_bytes = max(
+                int(release_size_bytes * 1.1),  # 10% buffer for staging
+                MIN_DISK_SPACE_BYTES,
+            )
+            required_gb = required_bytes / (1024**3)
+
+            if free_bytes < required_bytes:
+                return ValidationCheck(
+                    name="disk_space",
+                    passed=False,
+                    message=(
+                        f"Insufficient disk space: {free_gb:.1f}GB free, "
+                        f"need {required_gb:.1f}GB"
+                    ),
+                    severity="error",
+                    category=CheckCategory.FILESYSTEM,
+                )
+
+            return ValidationCheck(
+                name="disk_space",
+                passed=True,
+                message=f"Disk space OK: {free_gb:.1f}GB free",
+                severity="info",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        except OSError as e:
+            return ValidationCheck(
+                name="disk_space",
+                passed=False,
+                message=f"Cannot check disk space: {e}",
+                severity="warning",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+    def _check_state_file_writable(self) -> ValidationCheck:
+        """Check state file directory is writable."""
+        state_file = self._settings.paths.state_file
+        state_dir = state_file.parent
+
+        if not state_dir.exists():
+            # Try to create it
+            try:
+                state_dir.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                return ValidationCheck(
+                    name="state_file_writable",
+                    passed=False,
+                    message=f"Cannot create state directory: {state_dir} ({e})",
+                    severity="error",
+                    category=CheckCategory.FILESYSTEM,
+                )
+
+        if not os.access(state_dir, os.W_OK):
+            return ValidationCheck(
+                name="state_file_writable",
+                passed=False,
+                message=f"State directory not writable: {state_dir}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        # If state file exists, check it's writable too
+        if state_file.exists() and not os.access(state_file, os.W_OK):
+            return ValidationCheck(
+                name="state_file_writable",
+                passed=False,
+                message=f"State file not writable: {state_file}",
+                severity="error",
+                category=CheckCategory.FILESYSTEM,
+            )
+
+        return ValidationCheck(
+            name="state_file_writable",
+            passed=True,
+            message="State file OK",
+            severity="info",
+            category=CheckCategory.FILESYSTEM,
+        )
 
 
 class DiscoveryValidation:

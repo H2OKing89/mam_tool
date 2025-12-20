@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -25,11 +24,11 @@ from mamfast.utils.state import (
 
 
 @pytest.fixture
-def temp_state_file():
-    """Create a temporary state file."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump({"version": 1, "processed": {}, "failed": {}}, f)
-        return Path(f.name)
+def temp_state_file(tmp_path: Path):
+    """Create a temporary state file using pytest's tmp_path fixture."""
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({"version": 1, "processed": {}, "failed": {}}))
+    return state_file
 
 
 @pytest.fixture
@@ -43,9 +42,10 @@ def mock_settings(temp_state_file):
 class TestLoadState:
     """Tests for load_state function."""
 
-    def test_load_empty_state(self, mock_settings):
+    def test_load_empty_state(self, mock_settings, tmp_path):
         """Test loading when no state file exists."""
-        mock_settings.paths.state_file = Path("/nonexistent/state.json")
+        # Use a valid temp directory but non-existent file
+        mock_settings.paths.state_file = tmp_path / "nonexistent_state.json"
         with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
             state = load_state()
 

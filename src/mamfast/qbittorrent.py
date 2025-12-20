@@ -1,32 +1,46 @@
 """
 qBittorrent API wrapper for uploading torrents.
 
-Uses the qbittorrent-api package.
+Uses the qbittorrent-api package with idempotent upload support
+to prevent duplicate torrents.
+
+Connection pooling: Reuses a single client instance per session
+to avoid repeated authentication overhead.
 """
 
 from __future__ import annotations
 
+import contextlib
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
 import qbittorrentapi
 
 from mamfast.config import get_settings
+from mamfast.utils.retry import retry_with_backoff
+from mamfast.utils.torrent import extract_infohash
 
 logger = logging.getLogger(__name__)
 
+# Network exceptions that should trigger retry
+NETWORK_EXCEPTIONS = (
+    qbittorrentapi.APIConnectionError,
+    qbittorrentapi.HTTPError,
+    OSError,
+)
 
-def get_client() -> qbittorrentapi.Client:
+# Connection pool: Thread-safe cached client
+_client: qbittorrentapi.Client | None = None
+_client_lock = threading.Lock()
+
+
+def _create_client() -> qbittorrentapi.Client:
     """
-    Create an authenticated qBittorrent API client.
+    Create a new authenticated qBittorrent client.
 
-    Returns:
-        Connected and authenticated client.
-
-    Raises:
-        qbittorrentapi.LoginFailed: If authentication fails.
-        qbittorrentapi.APIConnectionError: If connection fails.
+    Internal function - use get_client() for pooled access.
     """
     settings = get_settings()
 
@@ -36,13 +50,69 @@ def get_client() -> qbittorrentapi.Client:
         password=settings.qbittorrent.password,
     )
 
-    # This will raise on auth failure
+    # Authenticate
     client.auth_log_in()
 
     logger.debug(f"Connected to qBittorrent at {settings.qbittorrent.host}")
     logger.debug(f"qBittorrent version: {client.app.version}")
 
     return client
+
+
+@retry_with_backoff(
+    max_attempts=3,
+    base_delay=2.0,
+    max_delay=30.0,
+    exceptions=NETWORK_EXCEPTIONS,
+)
+def get_client() -> qbittorrentapi.Client:
+    """
+    Get a pooled, authenticated qBittorrent API client.
+
+    Uses connection pooling to reuse the same client across calls,
+    reducing authentication overhead. Thread-safe.
+
+    If the cached client is invalid (session expired, connection lost),
+    a new client is created automatically.
+
+    Returns:
+        Connected and authenticated client.
+
+    Raises:
+        qbittorrentapi.LoginFailed: If authentication fails (not retried).
+        qbittorrentapi.APIConnectionError: If connection fails after retries.
+    """
+    global _client
+
+    with _client_lock:
+        if _client is not None:
+            # Verify existing client is still valid
+            try:
+                # Quick health check - if this fails, client is stale
+                _ = _client.app.version
+                return _client
+            except (qbittorrentapi.APIConnectionError, qbittorrentapi.HTTPError):
+                logger.debug("Cached qBittorrent client expired, reconnecting...")
+                _client = None
+
+        # Create new client
+        _client = _create_client()
+        return _client
+
+
+def reset_client() -> None:
+    """
+    Reset the cached client connection.
+
+    Call this after configuration changes or to force reconnection.
+    """
+    global _client
+    with _client_lock:
+        if _client is not None:
+            with contextlib.suppress(Exception):
+                _client.auth_log_out()
+            _client = None
+            logger.debug("qBittorrent client reset")
 
 
 def upload_torrent(
@@ -52,9 +122,12 @@ def upload_torrent(
     tags: list[str] | None = None,
     paused: bool | None = None,
     use_auto_tmm: bool | None = None,
-) -> bool:
+) -> tuple[bool, str | None]:
     """
-    Add a torrent file to qBittorrent.
+    Add a torrent file to qBittorrent (idempotent).
+
+    **Idempotency**: Checks if torrent already exists by infohash before uploading.
+    If it exists, returns success without re-uploading (prevents duplicates).
 
     Save path logic:
     - If auto_tmm=True: qBittorrent manages paths via category settings (save_path ignored)
@@ -69,7 +142,9 @@ def upload_torrent(
         use_auto_tmm: Enable Automatic Torrent Management (default from config)
 
     Returns:
-        True if added successfully, False otherwise.
+        Tuple of (success: bool, infohash: str | None)
+        - success=True if added or already exists
+        - infohash is returned for state tracking
     """
     settings = get_settings()
 
@@ -85,9 +160,24 @@ def upload_torrent(
 
     if not torrent_path.exists():
         logger.error(f"Torrent file not found: {torrent_path}")
-        return False
+        return False, None
+
+    # IDEMPOTENCY: Extract infohash and check if torrent already exists
+    infohash = extract_infohash(torrent_path)
+    if not infohash:
+        logger.error(f"Could not extract infohash from {torrent_path}")
+        return False, None
 
     try:
+        # Check if torrent already exists
+        if check_torrent_exists(infohash):
+            logger.info(
+                f"Torrent already exists in qBittorrent (infohash: {infohash})\n"
+                f"  File: {torrent_path.name}\n"
+                f"  This is SAFE - upload is idempotent, no duplicate created."
+            )
+            return True, infohash
+
         client = get_client()
 
         # Read torrent file
@@ -125,15 +215,16 @@ def upload_torrent(
 
         if result == "Ok.":
             logger.info(f"Added torrent to qBittorrent: {torrent_path.name}")
+            logger.debug(f"  Infohash: {infohash}")
             logger.debug(f"  Category: {category}")
             logger.debug(f"  Tags: {tags}")
             logger.debug(f"  Auto TMM: {use_auto_tmm}")
             if not use_auto_tmm:
                 logger.debug(f"  Save path: {add_params.get('save_path')}")
-            return True
+            return True, infohash
         else:
             logger.warning(f"qBittorrent returned unexpected result: {result}")
-            return False
+            return False, infohash
 
     except qbittorrentapi.LoginFailed as e:
         logger.error(
@@ -145,7 +236,7 @@ def upload_torrent(
             f"  2. Check if authentication is enabled in qBittorrent WebUI settings\n"
             f"  3. Try logging in manually: {settings.qbittorrent.host}"
         )
-        return False
+        return False, infohash
 
     except qbittorrentapi.APIConnectionError as e:
         logger.error(
@@ -157,11 +248,11 @@ def upload_torrent(
             f"  4. Test connectivity: curl {settings.qbittorrent.host}/api/v2/app/version\n"
             f"  5. Check firewall/network settings"
         )
-        return False
+        return False, infohash
 
     except OSError as e:
         logger.error(f"Error reading torrent file: {e}")
-        return False
+        return False, infohash
 
 
 def check_torrent_exists(info_hash: str) -> bool:
