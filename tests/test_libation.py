@@ -17,16 +17,10 @@ from mamfast.libation import (
     run_scan,
 )
 from mamfast.utils.cmd import CmdError, CmdResult
+from tests.conftest import make_cmd_result
 
-
-def _make_cmd_result(
-    stdout: str = "",
-    stderr: str = "",
-    exit_code: int = 0,
-    argv: tuple[str, ...] = ("docker",),
-) -> CmdResult:
-    """Create a CmdResult for mocking docker calls."""
-    return CmdResult(argv=argv, stdout=stdout, stderr=stderr, exit_code=exit_code)
+# Alias for backwards compatibility with existing tests
+_make_cmd_result = make_cmd_result
 
 
 class TestScanResult:

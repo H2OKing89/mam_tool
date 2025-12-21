@@ -18,17 +18,11 @@ from mamfast.mkbrr import (
     inspect_torrent,
     load_presets,
 )
-from mamfast.utils.cmd import CmdError, CmdResult
+from mamfast.utils.cmd import CmdError
+from tests.conftest import make_cmd_result
 
-
-def _make_cmd_result(
-    stdout: str = "",
-    stderr: str = "",
-    exit_code: int = 0,
-    argv: tuple[str, ...] = ("docker",),
-) -> CmdResult:
-    """Create a CmdResult for mocking run() calls."""
-    return CmdResult(argv=argv, stdout=stdout, stderr=stderr, exit_code=exit_code)
+# Alias for backwards compatibility with existing tests
+_make_cmd_result = make_cmd_result
 
 
 class TestMkbrrResult:
