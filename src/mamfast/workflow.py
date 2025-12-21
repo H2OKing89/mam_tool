@@ -24,6 +24,7 @@ from typing import Any
 from mamfast.config import get_settings
 from mamfast.console import (
     console,
+    format_mediainfo_stats,
     print_dry_run,
     print_error,
     print_info,
@@ -33,6 +34,7 @@ from mamfast.console import (
     print_warning,
     print_workflow_summary,
     render_libation_status,
+    truncate_path,
 )
 from mamfast.exceptions import (
     DiscoveryValidationError,
@@ -264,7 +266,9 @@ def process_single_release(
             notify(ProgressStage.STAGING, "Creating hardlinks...")
             logger.debug("Step 1: Staging release")
             staging_dir = stage_release(release)
-            print_success(f"Staged to {staging_dir.name}")
+            # Show truncated path - full path available in logs via --verbose
+            display_path = truncate_path(str(staging_dir), max_length=60)
+            print_success(f"Staged → {display_path}")
             release.status = ReleaseStatus.STAGED
             checkpoint_stage(release, "staged")
 
@@ -305,7 +309,11 @@ def process_single_release(
                     chapter_count = len(audnex_chapters.get("chapters", []))
                     print_success(f"Audnex chapters: {chapter_count} chapters")
                 if mediainfo_data:
-                    print_success("MediaInfo extracted")
+                    stats = format_mediainfo_stats(mediainfo_data)
+                    if stats:
+                        print_success(f"MediaInfo: {stats}")
+                    else:
+                        print_success("MediaInfo extracted")
                 release.status = ReleaseStatus.METADATA_FETCHED
                 checkpoint_stage(release, "metadata")
 
@@ -471,7 +479,10 @@ def process_single_release(
             )
 
         release.status = ReleaseStatus.UPLOADED
-        print_success("Uploaded to qBittorrent")
+        # Format the qBittorrent success message with category and truncated hash
+        qb_category = settings.qbittorrent.category or "audiobooks"
+        hash_short = infohash[:8] + "…" + infohash[-4:] if infohash else "?"
+        print_success(f"Uploaded to qBittorrent ({qb_category}, {hash_short})")
 
         # ---------------------------------------------------------------------
         # 5. Mark as complete
@@ -670,7 +681,7 @@ def full_run(
             duration_seconds=time.time() - start_time,
         )
 
-    console.print(f"Found [highlight]{len(releases)}[/] new release(s)\n")
+    console.print(f"Found [highlight]{len(releases)}[/] new release(s)")
 
     # -------------------------------------------------------------------------
     # 3. Process each release
@@ -680,7 +691,8 @@ def full_run(
 
     # Process each release
     for i, release in enumerate(releases, 1):
-        console.print(f"\n[bold cyan][{i}/{len(releases)}][/] {release.display_name}")
+        console.print()  # Blank line before each release header
+        console.print(f"[bold cyan]── [{i}/{len(releases)}] {release.display_name} ──[/]")
 
         # Check if already processed
         identifier = release.asin or str(release.source_dir)
