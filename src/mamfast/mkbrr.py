@@ -99,7 +99,7 @@ def _run_docker_command(
 
 def fix_torrent_permissions(root_dir: Path | str | None = None) -> int:
     """
-    Recursively chown all .torrent files to the target UID:GID.
+    Recursively chown all .torrent and .json files to the target UID:GID.
 
     This fixes ownership after Docker creates files as root.
     Default ownership: Unraid's nobody:users (99:100)
@@ -121,11 +121,24 @@ def fix_torrent_permissions(root_dir: Path | str | None = None) -> int:
         return 0
 
     fixed_count = 0
-    logger.debug(f"Fixing .torrent ownership in {root_dir} to {target_uid}:{target_gid}")
+    allowed_extensions = {".torrent", ".json"}
+    logger.debug(f"Fixing ownership in {root_dir} to {target_uid}:{target_gid}")
 
-    for dirpath, _, filenames in os.walk(root_dir):
+    for dirpath, _dirnames, filenames in os.walk(root_dir):
+        # Fix directory ownership
+        dir_path = Path(dirpath)
+        try:
+            stat = dir_path.stat()
+            if stat.st_uid != target_uid or stat.st_gid != target_gid:
+                os.chown(dir_path, target_uid, target_gid)
+                logger.debug(f"Fixed ownership on directory: {dir_path}")
+                fixed_count += 1
+        except PermissionError as e:
+            logger.warning(f"Permission error on directory {dir_path}: {e}")
+
+        # Fix file ownership
         for name in filenames:
-            if not name.lower().endswith(".torrent"):
+            if not any(name.lower().endswith(ext) for ext in allowed_extensions):
                 continue
 
             full_path = Path(dirpath) / name
@@ -141,7 +154,7 @@ def fix_torrent_permissions(root_dir: Path | str | None = None) -> int:
                 logger.warning(f"Permission error on {full_path}: {e}")
 
     if fixed_count:
-        logger.info(f"Fixed ownership on {fixed_count} .torrent file(s)")
+        logger.info(f"Fixed ownership on {fixed_count} item(s)")
 
     return fixed_count
 

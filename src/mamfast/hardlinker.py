@@ -193,9 +193,59 @@ def stage_release(release: AudiobookRelease) -> Path:
     if m4b_files:
         release.main_m4b = m4b_files[0]
 
+    # Fix ownership on staged directory and files
+    fix_staging_permissions(staging_dir)
+
     logger.info(f"  Staged {len(staged_files)} files to {staging_dir}")
 
     return staging_dir
+
+
+def fix_staging_permissions(staging_dir: Path) -> int:
+    """
+    Fix ownership on staged directory and all files within.
+
+    Sets UID:GID to configured values (default 99:100 for Unraid).
+
+    Args:
+        staging_dir: Directory to fix ownership on
+
+    Returns:
+        Number of items (directory + files) with ownership changed
+    """
+    settings = get_settings()
+    target_uid = settings.target_uid
+    target_gid = settings.target_gid
+
+    fixed_count = 0
+
+    # Fix directory ownership
+    try:
+        stat = staging_dir.stat()
+        if stat.st_uid != target_uid or stat.st_gid != target_gid:
+            os.chown(staging_dir, target_uid, target_gid)
+            logger.debug(f"Fixed ownership on directory: {staging_dir}")
+            fixed_count += 1
+    except PermissionError as e:
+        logger.warning(f"Permission error on directory {staging_dir}: {e}")
+
+    # Fix file ownership
+    for item in staging_dir.iterdir():
+        if not item.is_file():
+            continue
+        try:
+            stat = item.stat()
+            if stat.st_uid != target_uid or stat.st_gid != target_gid:
+                os.chown(item, target_uid, target_gid)
+                logger.debug(f"Fixed ownership on file: {item.name}")
+                fixed_count += 1
+        except PermissionError as e:
+            logger.warning(f"Permission error on {item}: {e}")
+
+    if fixed_count:
+        logger.debug(f"Fixed ownership on {fixed_count} item(s) to {target_uid}:{target_gid}")
+
+    return fixed_count
 
 
 def find_allowed_files(source_dir: Path) -> list[Path]:
