@@ -47,6 +47,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = logging.getLogger(__name__)
 
 
+def _validate_url_field(v: str, field_name: str) -> str:
+    """Validate URL format (shared validator).
+
+    Args:
+        v: The URL value to validate.
+        field_name: Name of the field for error messages.
+
+    Returns:
+        The validated URL with trailing slash stripped.
+
+    Raises:
+        ValueError: If URL doesn't start with http:// or https://.
+    """
+    if v and not v.startswith(("http://", "https://")):
+        raise ValueError(f"{field_name} must start with http:// or https://, got: {v}")
+    return v.rstrip("/") if v else v
+
+
 class QBittorrentEnvSettings(BaseSettings):
     """qBittorrent credentials from environment variables.
 
@@ -66,9 +84,7 @@ class QBittorrentEnvSettings(BaseSettings):
     @classmethod
     def validate_host(cls, v: str) -> str:
         """Validate qBittorrent host URL format."""
-        if v and not v.startswith(("http://", "https://")):
-            raise ValueError(f"QB_HOST must start with http:// or https://, got: {v}")
-        return v.rstrip("/") if v else v
+        return _validate_url_field(v, "QB_HOST")
 
 
 class AudiobookshelfEnvSettings(BaseSettings):
@@ -89,9 +105,7 @@ class AudiobookshelfEnvSettings(BaseSettings):
     @classmethod
     def validate_host(cls, v: str) -> str:
         """Validate ABS host URL format."""
-        if v and not v.startswith(("http://", "https://")):
-            raise ValueError(f"AUDIOBOOKSHELF_HOST must start with http:// or https://, got: {v}")
-        return v.rstrip("/") if v else v
+        return _validate_url_field(v, "AUDIOBOOKSHELF_HOST")
 
 
 class DockerEnvSettings(BaseSettings):
@@ -128,7 +142,14 @@ class DockerEnvSettings(BaseSettings):
     @field_validator("docker_bin")
     @classmethod
     def validate_docker_bin(cls, v: str) -> str:
-        """Validate Docker binary path exists."""
+        """Validate Docker binary path exists.
+
+        This is intentionally a warning-only check: if the configured path does
+        not exist on the current host, we log a warning but still return the
+        value unchanged. This allows configuration to be loaded and validated
+        in environments where Docker might not be installed yet or where the
+        path only exists inside a container.
+        """
         if v and not Path(v).exists():
             logger.warning("Docker binary not found at: %s", v)
         return v
