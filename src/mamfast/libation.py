@@ -21,7 +21,6 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
-import re
 import subprocess
 import sys
 from collections import Counter
@@ -38,13 +37,6 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 logger = logging.getLogger(__name__)
-
-# Pattern to match Libation error messages in stderr
-# Example: "Error processing book. Skipping. This book will be tried again..."
-LIBATION_ERROR_PATTERN = re.compile(
-    r"Error processing book.*?(?:Skipping|failed)",
-    re.IGNORECASE,
-)
 
 
 @dataclass

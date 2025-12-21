@@ -2,19 +2,23 @@ version: 2.1
 
 jobs:
   test:
+    parameters:
+      py-version:
+        type: string
+        default: "3.11"
     docker:
-      - image: cimg/python:3.11
+      - image: cimg/python:<< parameters.py-version >>
     steps:
       - checkout
       - restore_cache:
           keys:
-            - pip-{{ checksum "pyproject.toml" }}
-            - pip-
+            - pip-<< parameters.py-version >>-{{ checksum "pyproject.toml" }}
+            - pip-<< parameters.py-version >>-
       - run:
           name: Install dependencies
           command: pip install -e ".[dev]"
       - save_cache:
-          key: pip-{{ checksum "pyproject.toml" }}
+          key: pip-<< parameters.py-version >>-{{ checksum "pyproject.toml" }}
           paths:
             - ~/.cache/pip
       - run:
@@ -37,4 +41,7 @@ jobs:
 workflows:
   main:
     jobs:
-      - test
+      - test:
+          matrix:
+            parameters:
+              py-version: ["3.11", "3.12", "3.13"]
