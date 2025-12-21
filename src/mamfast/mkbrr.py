@@ -10,15 +10,15 @@ from __future__ import annotations
 import logging
 import os
 import shlex
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
 from mamfast.config import get_settings
+from mamfast.utils.cmd import CmdError, CmdResult, run
 from mamfast.utils.paths import host_to_container_data_path, host_to_container_torrent_path
-from mamfast.utils.retry import SUBPROCESS_EXCEPTIONS, retry_with_backoff
+from mamfast.utils.retry import retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -67,33 +67,32 @@ def _docker_base_command() -> list[str]:
     max_attempts=3,
     base_delay=2.0,
     max_delay=30.0,
-    exceptions=SUBPROCESS_EXCEPTIONS,
+    retry_exceptions=(CmdError, OSError, TimeoutError),
 )
 def _run_docker_command(
     cmd: list[str],
     timeout: int,
-    capture_output: bool = False,
-) -> subprocess.CompletedProcess[str]:
+    capture_output: bool = True,
+) -> CmdResult:
     """
     Run a Docker command with retry on transient failures.
 
     Args:
         cmd: Command and arguments to run
         timeout: Timeout in seconds
-        capture_output: Whether to capture stdout/stderr
+        capture_output: Whether to capture stdout/stderr (default: True)
 
     Returns:
-        CompletedProcess result
+        CmdResult with output and exit code
 
     Raises:
-        subprocess.TimeoutExpired: If command times out (after retries)
+        CmdError: If command fails (after retries)
         OSError: If Docker daemon unreachable (after retries)
     """
-    return subprocess.run(
+    return run(
         cmd,
-        text=True,
-        check=False,
         timeout=timeout,
+        ok_codes=(0, 1),  # mkbrr can return 1 for warnings
         capture_output=capture_output,
     )
 
@@ -317,7 +316,7 @@ def create_torrent(
         # Output streams to terminal for progress bars
         result = _run_docker_command(cmd, timeout=timeout_seconds, capture_output=False)
 
-        if result.returncode == 0:
+        if result.exit_code == 0:
             # Fix permissions first
             fix_torrent_permissions(output_dir)
 
@@ -341,21 +340,29 @@ def create_torrent(
                 torrent_path=torrent_path,
             )
         else:
-            logger.error(f"mkbrr create failed with code {result.returncode}")
+            logger.error(f"mkbrr create failed with code {result.exit_code}")
 
             return MkbrrResult(
                 success=False,
-                return_code=result.returncode,
-                error=f"mkbrr exited with code {result.returncode}",
+                return_code=result.exit_code,
+                error=f"mkbrr exited with code {result.exit_code}",
             )
 
-    except subprocess.TimeoutExpired:
-        logger.error(f"mkbrr timed out after {timeout_seconds}s")
-        return MkbrrResult(
-            success=False,
-            return_code=-1,
-            error=f"mkbrr timed out after {timeout_seconds}s",
-        )
+    except CmdError as e:
+        if e.timed_out:
+            logger.error(f"mkbrr timed out after {timeout_seconds}s")
+            return MkbrrResult(
+                success=False,
+                return_code=e.exit_code,
+                error=f"mkbrr timed out after {timeout_seconds}s",
+            )
+        else:
+            logger.error(f"mkbrr failed: {e}")
+            return MkbrrResult(
+                success=False,
+                return_code=e.exit_code,
+                error=str(e),
+            )
 
     except Exception as e:
         logger.exception(f"Exception running mkbrr: {e}")
@@ -397,11 +404,11 @@ def inspect_torrent(
         result = _run_docker_command(cmd, timeout=30, capture_output=True)
 
         return MkbrrResult(
-            success=result.returncode == 0,
-            return_code=result.returncode,
+            success=result.exit_code == 0,
+            return_code=result.exit_code,
             stdout=result.stdout,
             stderr=result.stderr,
-            error=result.stderr if result.returncode != 0 else None,
+            error=result.stderr if result.exit_code != 0 else None,
         )
 
     except Exception as e:
@@ -456,11 +463,11 @@ def check_torrent(
         result = _run_docker_command(cmd, timeout=60, capture_output=True)
 
         return MkbrrResult(
-            success=result.returncode == 0,
-            return_code=result.returncode,
+            success=result.exit_code == 0,
+            return_code=result.exit_code,
             stdout=result.stdout,
             stderr=result.stderr,
-            error=result.stderr if result.returncode != 0 else None,
+            error=result.stderr if result.exit_code != 0 else None,
         )
 
     except Exception as e:
@@ -476,15 +483,14 @@ def check_docker_available() -> bool:
     """Check if Docker is available on the system."""
     settings = get_settings()
     try:
-        result = subprocess.run(
+        run(
             [settings.docker_bin, "--version"],
-            capture_output=True,
-            check=False,
             timeout=5,  # Quick check
+            ok_codes=(0,),
         )
-        return result.returncode == 0
-    except FileNotFoundError:
+        return True
+    except CmdError:
         return False
-    except subprocess.TimeoutExpired:
-        logger.warning("Docker version check timed out")
+    except Exception as e:
+        logger.warning(f"Docker version check failed: {e}")
         return False
