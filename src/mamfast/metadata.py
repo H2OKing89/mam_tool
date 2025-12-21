@@ -996,6 +996,12 @@ def run_mediainfo(file_path: Path) -> dict[str, Any] | None:
 
     Returns:
         Parsed MediaInfo JSON or None on error.
+
+    Note:
+        P2 Migration Deferred: This function uses subprocess directly instead of
+        the sh library wrapper (utils/cmd.py). Migration deferred due to single
+        call in large file (low impact). See P1_SH_LIBRARY_COMPLETE.md and
+        MIGRATION_BACKLOG.md for rationale and future migration plan.
     """
     settings = get_settings()
     binary = settings.mediainfo.binary
