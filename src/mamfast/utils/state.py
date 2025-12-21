@@ -391,18 +391,16 @@ def checkpoint_stage(
     infohash: str | None = None,
 ) -> None:
     """
-    Record completion of a pipeline stage for resume capability.
-
-    This enables the workflow to skip already-completed stages on retry.
-
-    Args:
-        release: The release being processed
-        stage: Stage name ("staged", "metadata", "torrent", "uploaded")
-        infohash: Optional infohash (for torrent stage)
-
-    Example:
-        checkpoint_stage(release, "staged")
-        checkpoint_stage(release, "torrent", infohash="abc123...")
+    Record completion of a pipeline stage for a release to support resuming the pipeline.
+    
+    Parameters:
+        release (AudiobookRelease): The release being processed; used to identify and update stored state.
+        stage (str): Stage name, e.g. "staged", "metadata", "torrent", or "uploaded".
+        infohash (str | None): Optional torrent infohash to store when provided.
+    
+    Notes:
+        If the release has no identifier (no ASIN and no source_dir), the function does nothing.
+        When creating a new processed entry, the entry's "processed_at" field is set to the current ISO timestamp.
     """
     identifier = release.asin or (str(release.source_dir) if release.source_dir else None)
     if not identifier:
@@ -411,6 +409,13 @@ def checkpoint_stage(
 
     def _checkpoint(state: dict[str, Any]) -> None:
         # Initialize processed entry if it doesn't exist
+        """
+        Ensure a processed entry exists for the current release and record a timestamped checkpoint for the given stage.
+        
+        If the processed entry for the release's identifier is missing, create it with the release metadata and set its `processed_at` to the current time. Then set the checkpoint timestamp under the key "<stage>_at" in the entry's `checkpoints` mapping. If an `infohash` is provided, update the entry's `infohash`. Always update the entry's `status`, and update `staging_dir` and `torrent_path` from the release when present. The provided `state` mapping is mutated in place.
+        Parameters:
+            state (dict[str, Any]): The persisted state mapping to update; modified in place.
+        """
         if identifier not in state["processed"]:
             state["processed"][identifier] = {
                 "asin": release.asin,

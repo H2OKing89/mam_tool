@@ -99,16 +99,13 @@ def _run_docker_command(
 
 def fix_torrent_permissions(root_dir: Path | str | None = None) -> int:
     """
-    Recursively chown all .torrent and .json files to the target UID:GID.
-
-    This fixes ownership after Docker creates files as root.
-    Default ownership: Unraid's nobody:users (99:100)
-
-    Args:
-        root_dir: Directory to scan. Defaults to configured torrent output dir.
-
+    Ensure ownership of .torrent and .json files and their parent directories under the specified root directory matches the configured target UID and GID.
+    
+    Parameters:
+        root_dir (Path | str | None): Directory to scan; when None, uses the configured mkbrr host_output_dir.
+    
     Returns:
-        Number of files fixed.
+        int: Number of files and directories whose ownership was changed.
     """
     settings = get_settings()
     target_uid = settings.target_uid

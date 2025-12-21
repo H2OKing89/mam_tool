@@ -99,22 +99,17 @@ def compute_staging_path(release: AudiobookRelease) -> MamPath:
 
 def stage_release(release: AudiobookRelease) -> Path:
     """
-    Create staging directory and hardlink files for a release.
-
-    1. Create directory under seed_root with MAM-compliant naming
-    2. Find all allowed file types in source_dir
-    3. Hardlink each file with cleaned names
-    4. Update release.staging_dir and return the path
-
-    Args:
-        release: AudiobookRelease to stage
-
+    Create a MAM-compliant staging directory for a release, hardlink allowed files into it, update the release metadata, and ensure staged ownership is fixed.
+    
+    Parameters:
+        release (AudiobookRelease): Release to stage; must have a configured source_dir and ASIN.
+    
     Returns:
-        Path to the staging directory
-
+        Path: Path to the created staging directory.
+    
     Raises:
-        ValueError: If release has no source_dir
-        OSError: If hardlink fails and copy fallback also fails
+        ValueError: If the release has no source_dir.
+        OSError: If creating hard links fails and the fallback copy also fails.
     """
     settings = get_settings()
 
@@ -203,15 +198,16 @@ def stage_release(release: AudiobookRelease) -> Path:
 
 def fix_staging_permissions(staging_dir: Path) -> int:
     """
-    Fix ownership on staged directory and all files within.
-
-    Sets UID:GID to configured values (default 99:100 for Unraid).
-
-    Args:
-        staging_dir: Directory to fix ownership on
-
+    Ensure the staging directory and its regular files are owned by the configured UID:GID.
+    
+    Parameters:
+        staging_dir (Path): Path to the staging directory whose ownership should be fixed.
+    
     Returns:
-        Number of items (directory + files) with ownership changed
+        int: Number of items (the directory plus any files) whose ownership was changed.
+    
+    Notes:
+        Permission errors when changing ownership are logged and do not stop processing.
     """
     settings = get_settings()
     target_uid = settings.target_uid
@@ -250,9 +246,15 @@ def fix_staging_permissions(staging_dir: Path) -> int:
 
 def find_allowed_files(source_dir: Path) -> list[Path]:
     """
-    Find all files with allowed extensions in source directory.
-
-    Searches recursively but returns flat list.
+    Find files under source_dir whose extensions are allowed by configuration.
+    
+    Searches recursively and returns a flat list of matching file paths. The allowed extensions are taken from settings.mam.allowed_extensions (case-insensitive).
+    
+    Parameters:
+        source_dir (Path): Directory to search.
+    
+    Returns:
+        list[Path]: Files within source_dir whose suffix (case-insensitive) is in the configured allowed extensions.
     """
     settings = get_settings()
     allowed_exts = {ext.lower() for ext in settings.mam.allowed_extensions}
