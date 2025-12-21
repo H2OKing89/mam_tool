@@ -714,3 +714,71 @@ class TestLiberateProgressResult:
         assert result.success is True  # Command succeeded
         assert result.has_book_errors is True  # But some books failed
         assert result.skipped_count == 1
+
+
+class TestRunLiberateWithProgressTimeout:
+    """Tests for timeout handling in run_liberate_with_progress."""
+
+    def test_passthrough_timeout_returns_failure(self) -> None:
+        """Test that passthrough mode returns failure on timeout."""
+        import subprocess
+
+        from rich.console import Console
+
+        from mamfast.libation import LiberateProgressResult, run_liberate_with_progress
+
+        mock_settings = MagicMock()
+        mock_settings.docker_bin = "/usr/bin/docker"
+        mock_settings.libation_container = "Libation"
+
+        mock_console = MagicMock(spec=Console)
+
+        with (
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+            patch("mamfast.libation._is_tty", return_value=True),  # Force TTY
+            patch(
+                "mamfast.libation.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="docker", timeout=3600),
+            ),
+        ):
+            result = run_liberate_with_progress(
+                pending_count=1,
+                console=mock_console,
+                verbose=True,  # verbose + TTY = passthrough mode
+            )
+            assert isinstance(result, LiberateProgressResult)
+            assert result.success is False
+            assert result.returncode == -1
+            assert "timed out" in result.error_message.lower()
+
+    def test_spinner_timeout_returns_failure(self) -> None:
+        """Test that spinner mode returns failure on timeout."""
+        import subprocess
+
+        from rich.console import Console
+
+        from mamfast.libation import LiberateProgressResult, run_liberate_with_progress
+
+        mock_settings = MagicMock()
+        mock_settings.docker_bin = "/usr/bin/docker"
+        mock_settings.libation_container = "Libation"
+
+        mock_console = MagicMock(spec=Console)
+
+        with (
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+            patch("mamfast.libation._is_tty", return_value=False),  # Force non-TTY
+            patch(
+                "mamfast.libation.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="docker", timeout=3600),
+            ),
+        ):
+            result = run_liberate_with_progress(
+                pending_count=1,
+                console=mock_console,
+                verbose=False,
+            )
+            assert isinstance(result, LiberateProgressResult)
+            assert result.success is False
+            assert result.returncode == -1
+            assert "timed out" in result.error_message.lower()

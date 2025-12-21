@@ -398,10 +398,17 @@ def run_liberate_with_progress(
         console.print(f"  → Downloading {pending_count} pending book(s)... (Libation progress)")
         try:
             # Run with inherited stdio so Libation's progress bar shows
-            proc = subprocess.run(cmd, check=False, text=True)
+            # 1 hour timeout to prevent indefinite hangs
+            proc = subprocess.run(cmd, check=False, text=True, timeout=3600)
             return LiberateProgressResult(
                 success=proc.returncode == 0,
                 returncode=proc.returncode,
+            )
+        except subprocess.TimeoutExpired:
+            return LiberateProgressResult(
+                success=False,
+                returncode=-1,
+                error_message="Libation timed out after 1 hour",
             )
         except Exception as e:
             return LiberateProgressResult(
@@ -424,11 +431,13 @@ def run_liberate_with_progress(
             f"  → Downloading {pending_count} pending book(s)...",
             spinner="dots",
         ):
+            # 1 hour timeout to prevent indefinite hangs
             proc = subprocess.run(
                 cmd,
                 text=True,
                 capture_output=True,
                 check=False,
+                timeout=3600,
             )
 
         # Write log file (always, for debugging)
@@ -476,6 +485,13 @@ def run_liberate_with_progress(
             log_path=log_path,
         )
 
+    except subprocess.TimeoutExpired:
+        logger.error("Libation timed out after 1 hour")
+        return LiberateProgressResult(
+            success=False,
+            returncode=-1,
+            error_message="Libation timed out after 1 hour",
+        )
     except Exception as e:
         logger.exception("Error running liberate with progress")
         return LiberateProgressResult(

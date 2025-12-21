@@ -17,7 +17,7 @@ jobs:
           command: mypy src/
       - run:
           name: Run tests
-          command: pytest --cov=src/mamfast --cov-report=xml
+          command: mkdir -p test-results && pytest --cov=src/mamfast --cov-report=xml --junitxml=test-results/junit.xml
       - store_test_results:
           path: test-results
       - store_artifacts:
