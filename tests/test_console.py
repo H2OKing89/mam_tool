@@ -1396,3 +1396,253 @@ class TestPrintChangeAnalysis:
             )
             call_str = str(mock_print.call_args_list)
             assert "N/A" in call_str
+
+
+# =============================================================================
+# MediaInfo Stats Formatting Tests
+# =============================================================================
+
+
+class TestFormatMediainfoStats:
+    """Tests for format_mediainfo_stats() function."""
+
+    def test_valid_complete_data(self) -> None:
+        """Should format complete MediaInfo data correctly."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {
+                        "@type": "General",
+                        "Duration": "38520.0",  # 10h 42m
+                        "Format": "MPEG-4",
+                    },
+                    {
+                        "@type": "Audio",
+                        "Format": "AAC",
+                        "BitRate": "64000",
+                        "Channels": "2",
+                    },
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "10h 42m • M4B • AAC • 64 kbps • 2ch"
+
+    def test_none_data_returns_none(self) -> None:
+        """Should return None for None input."""
+        from mamfast.console import format_mediainfo_stats
+
+        assert format_mediainfo_stats(None) is None
+
+    def test_empty_dict_returns_none(self) -> None:
+        """Should return None for empty dict."""
+        from mamfast.console import format_mediainfo_stats
+
+        assert format_mediainfo_stats({}) is None
+
+    def test_missing_media_key_returns_none(self) -> None:
+        """Should return None when media key is missing."""
+        from mamfast.console import format_mediainfo_stats
+
+        assert format_mediainfo_stats({"other": "data"}) is None
+
+    def test_empty_tracks_returns_none(self) -> None:
+        """Should return None when tracks list is empty."""
+        from mamfast.console import format_mediainfo_stats
+
+        assert format_mediainfo_stats({"media": {"track": []}}) is None
+
+    def test_short_duration_under_one_hour(self) -> None:
+        """Should format durations under 1 hour correctly."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General", "Duration": "1800.0"},  # 30 minutes
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "30m"
+
+    def test_multi_hour_duration(self) -> None:
+        """Should format multi-hour durations correctly."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General", "Duration": "72000.0"},  # 20 hours
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "20h 00m"
+
+    def test_format_mapping_mpeg4_to_m4b(self) -> None:
+        """Should map MPEG-4 format to M4B."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General", "Format": "MPEG-4"},
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "M4B"
+
+    def test_format_mapping_matroska_to_mka(self) -> None:
+        """Should map MATROSKA format to MKA."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General", "Format": "Matroska"},
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "MKA"
+
+    def test_invalid_duration_handled_gracefully(self) -> None:
+        """Should handle invalid duration values gracefully."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "General", "Duration": "not_a_number"},
+                    {"@type": "Audio", "Format": "AAC"},
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        # Should still return codec info even if duration is invalid
+        assert result == "AAC"
+
+    def test_invalid_bitrate_handled_gracefully(self) -> None:
+        """Should handle invalid bitrate values gracefully."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "Audio", "Format": "MP3", "BitRate": "invalid"},
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "MP3"
+
+    def test_audio_only_no_general_track(self) -> None:
+        """Should work with only audio track present."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {
+                        "@type": "Audio",
+                        "Format": "AAC",
+                        "BitRate": "128000",
+                        "Channels": "2",
+                    },
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "AAC • 128 kbps • 2ch"
+
+    def test_mono_audio(self) -> None:
+        """Should display mono channel correctly."""
+        from mamfast.console import format_mediainfo_stats
+
+        mediainfo_data = {
+            "media": {
+                "track": [
+                    {"@type": "Audio", "Channels": "1"},
+                ]
+            }
+        }
+        result = format_mediainfo_stats(mediainfo_data)
+        assert result == "1ch"
+
+
+# =============================================================================
+# Path Truncation Tests
+# =============================================================================
+
+
+class TestTruncatePath:
+    """Tests for truncate_path() function."""
+
+    def test_short_path_unchanged(self) -> None:
+        """Should not truncate paths shorter than max_length."""
+        from mamfast.console import truncate_path
+
+        path = "/short/path"
+        assert truncate_path(path, max_length=50) == path
+
+    def test_exact_length_unchanged(self) -> None:
+        """Should not truncate paths exactly at max_length."""
+        from mamfast.console import truncate_path
+
+        path = "a" * 50
+        assert truncate_path(path, max_length=50) == path
+
+    def test_one_over_truncates(self) -> None:
+        """Should truncate paths one character over max_length."""
+        from mamfast.console import truncate_path
+
+        path = "a" * 51
+        result = truncate_path(path, max_length=50)
+        assert len(result) == 50
+        assert result.startswith("…")
+        assert result == "…" + "a" * 49
+
+    def test_long_path_preserves_end(self) -> None:
+        """Should keep the end visible for long paths."""
+        from mamfast.console import truncate_path
+
+        path = "/very/long/path/to/Author - Title (2024)"
+        result = truncate_path(path, max_length=30)
+        assert len(result) == 30
+        assert result.endswith("(2024)")
+        assert result.startswith("…")
+
+    def test_result_never_exceeds_max_length(self) -> None:
+        """Should never return a string longer than max_length."""
+        from mamfast.console import truncate_path
+
+        for length in [10, 20, 50, 100]:
+            path = "x" * 200
+            result = truncate_path(path, max_length=length)
+            assert len(result) <= length
+
+    def test_default_max_length_is_50(self) -> None:
+        """Should use default max_length of 50."""
+        from mamfast.console import truncate_path
+
+        path = "a" * 100
+        result = truncate_path(path)  # No max_length specified
+        assert len(result) == 50
+
+    def test_empty_path(self) -> None:
+        """Should handle empty path."""
+        from mamfast.console import truncate_path
+
+        assert truncate_path("", max_length=50) == ""
+
+    def test_unicode_ellipsis(self) -> None:
+        """Should use unicode ellipsis character."""
+        from mamfast.console import truncate_path
+
+        path = "a" * 100
+        result = truncate_path(path, max_length=10)
+        assert result[0] == "…"  # Unicode ellipsis, not "..."
