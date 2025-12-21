@@ -1054,8 +1054,13 @@ def truncate_path(path: str, max_length: int = 50) -> str:
     """
     if len(path) <= max_length:
         return path
-    # Reserve 1 char for leading ellipsis, keep last (max_length - 1) chars
-    return "…" + path[-(max_length - 1) :]
+
+    # Reserve one character for the leading ellipsis and keep the last
+    # ``max_length - 1`` characters of the path so that:
+    #   len("…" + path[-(max_length - 1):]) == max_length
+    # e.g. when len(path) == max_length + 1, we drop a single character.
+    keep_chars = max_length - 1
+    return "…" + path[-keep_chars:]
 
 
 # =============================================================================

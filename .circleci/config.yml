@@ -6,9 +6,17 @@ jobs:
       - image: cimg/python:3.11
     steps:
       - checkout
+      - restore_cache:
+          keys:
+            - pip-{{ checksum "pyproject.toml" }}
+            - pip-
       - run:
           name: Install dependencies
           command: pip install -e ".[dev]"
+      - save_cache:
+          key: pip-{{ checksum "pyproject.toml" }}
+          paths:
+            - ~/.cache/pip
       - run:
           name: Run linter
           command: ruff check src/ tests/
@@ -17,11 +25,14 @@ jobs:
           command: mypy src/
       - run:
           name: Run tests
-          command: mkdir -p test-results && pytest --cov=src/mamfast --cov-report=xml --junitxml=test-results/junit.xml
+          command: |
+            mkdir -p test-results
+            pytest --cov=src/mamfast --cov-report=xml:coverage.xml --junitxml=test-results/junit.xml
       - store_test_results:
           path: test-results
       - store_artifacts:
           path: coverage.xml
+          destination: coverage
 
 workflows:
   main:
