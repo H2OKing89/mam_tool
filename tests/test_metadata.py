@@ -1126,11 +1126,19 @@ class TestSaveJson:
 
     def test_save_mam_json(self):
         """Test saving MAM JSON."""
+        from unittest.mock import MagicMock, patch
+
         with tempfile.TemporaryDirectory() as tmpdir:
             output_path = Path(tmpdir) / "mam.json"
             data = {"title": "Test", "authors": ["Author"]}
 
-            save_mam_json(data, output_path)
+            # Mock settings for permission fixing
+            mock_settings = MagicMock()
+            mock_settings.target_uid = 99
+            mock_settings.target_gid = 100
+
+            with patch("mamfast.metadata.get_settings", return_value=mock_settings):
+                save_mam_json(data, output_path)
 
             assert output_path.exists()
             import json
