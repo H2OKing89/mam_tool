@@ -332,12 +332,9 @@ def _parse_libation_output(stdout: str, stderr: str) -> dict[str, Any]:
             completed.append(line.strip())
 
     # Parse stderr for error messages
-    # Format: "Error processing book. Skipping..."
+    # Only extract individual error lines to avoid duplicates
+    # (Don't append full stderr AND individual lines)
     if stderr:
-        # Look for error patterns
-        if LIBATION_ERROR_PATTERN.search(stderr):
-            errors.append(stderr.strip())
-        # Also check for other common error indicators
         error_keywords = ["error", "failed", "skipping"]
         for line in stderr.splitlines():
             line_stripped = line.strip()
