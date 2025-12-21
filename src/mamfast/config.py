@@ -24,6 +24,10 @@ Settings are loaded from three sources:
    - QB_HOST, QB_USERNAME, QB_PASSWORD (qBittorrent credentials)
    - LIBATION_CONTAINER, DOCKER_BIN, TARGET_UID, TARGET_GID
    - MAMFAST_ENV, LOG_LEVEL
+   - AUDIOBOOKSHELF_HOST, AUDIOBOOKSHELF_API_KEY
+
+   Environment variables are loaded using pydantic-settings for type-safe
+   validation. See env_settings.py for the full list of supported variables.
 
 4. **config/categories.json** (MAM category mappings):
    - Maps genre names to MAM category IDs (e.g., "fantasy" -> 39)
@@ -49,6 +53,8 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from dotenv import load_dotenv
 from pydantic import ValidationError as PydanticValidationError
+
+from mamfast.env_settings import clear_env_settings_cache, get_env_settings
 
 if TYPE_CHECKING:
     from mamfast.abs.cleanup import CleanupPrefs
@@ -561,24 +567,18 @@ def validate_required_env_vars() -> None:
     """
     Validate that all required environment variables are set.
 
+    Uses pydantic-settings for type-safe validation.
+
     Raises:
         ConfigurationError: If required variables are missing
     """
-    required = {
-        "QB_HOST": "qBittorrent Web UI URL (e.g., http://10.1.60.10:8080)",
-        "QB_USERNAME": "qBittorrent username",
-        "QB_PASSWORD": "qBittorrent password",
-    }
+    env = get_env_settings()
+    errors = env.validate_required_for_mam()
 
-    missing = []
-    for var, description in required.items():
-        if not os.getenv(var):
-            missing.append(f"  - {var}: {description}")
-
-    if missing:
+    if errors:
         raise ConfigurationError(
             "Missing required environment variables in config/.env:\n"
-            + "\n".join(missing)
+            + "\n".join(f"  - {e}" for e in errors)
             + "\n\nFix: Copy .env.example to config/.env and fill in the values"
         )
 
@@ -1002,10 +1002,16 @@ def load_settings(
         env_path = env_next_to_config if env_next_to_config.exists() else Path(".env")
 
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
     else:
         # Try loading from environment anyway (for containerized usage)
         load_dotenv()
+
+    # Clear pydantic-settings cache to pick up newly loaded env vars
+    clear_env_settings_cache()
+
+    # Get type-safe environment settings via pydantic-settings
+    env_settings = get_env_settings()
 
     # Load config.yaml
     yaml_config = load_yaml_config(config_path)
@@ -1059,12 +1065,12 @@ def load_settings(
         container_config_dir=mkbrr_data.get("container_config_dir", "/root/.config/mkbrr"),
     )
 
-    # Parse qBittorrent config
+    # Parse qBittorrent config (credentials from pydantic-settings, rest from YAML)
     qb_data = yaml_config.get("qbittorrent", {})
     qbittorrent = QBittorrentConfig(
-        host=_get_env("QB_HOST", ""),
-        username=_get_env("QB_USERNAME", ""),
-        password=_get_env("QB_PASSWORD", ""),
+        host=env_settings.qb.host,
+        username=env_settings.qb.username,
+        password=env_settings.qb.password,
         category=qb_data.get("category", "mam-audiobooks"),
         tags=qb_data.get("tags", ["mamfast"]),
         auto_start=qb_data.get("auto_start", True),
@@ -1178,8 +1184,8 @@ def load_settings(
 
     audiobookshelf = AudiobookshelfConfig(
         enabled=abs_data.get("enabled", False),
-        host=_get_env("AUDIOBOOKSHELF_HOST", ""),
-        api_key=_get_env("AUDIOBOOKSHELF_API_KEY", ""),
+        host=env_settings.abs.host,
+        api_key=env_settings.abs.api_key,
         timeout_seconds=abs_data.get("timeout_seconds", 30),
         docker_mode=abs_data.get("docker_mode", True),
         path_map=abs_path_map,
@@ -1198,19 +1204,19 @@ def load_settings(
         index_db=abs_data.get("index_db", "./data/abs_index.db"),
     )
 
-    # Parse environment section (YAML overrides env vars)
+    # Parse environment section (YAML overrides pydantic-settings values)
     env_data = yaml_config.get("environment", {})
 
     settings = Settings(
-        # Environment: YAML config > env var > default
+        # Environment: YAML config > pydantic-settings (env vars) > defaults
         libation_container=env_data.get(
-            "libation_container", _get_env("LIBATION_CONTAINER", "libation")
+            "libation_container", env_settings.docker.libation_container
         ),
-        docker_bin=env_data.get("docker_bin", _get_env("DOCKER_BIN", "/usr/bin/docker")),
-        target_uid=env_data.get("target_uid", _get_env_int("TARGET_UID", 99)),
-        target_gid=env_data.get("target_gid", _get_env_int("TARGET_GID", 100)),
-        env=env_data.get("env", _get_env("MAMFAST_ENV", "development")),
-        log_level=env_data.get("log_level", _get_env("LOG_LEVEL", "INFO")),
+        docker_bin=env_data.get("docker_bin", env_settings.docker.docker_bin),
+        target_uid=env_data.get("target_uid", env_settings.docker.target_uid),
+        target_gid=env_data.get("target_gid", env_settings.docker.target_gid),
+        env=env_data.get("env", env_settings.app.env),
+        log_level=env_data.get("log_level", env_settings.app.log_level),
         # YAML config
         paths=paths,
         mam=mam,
