@@ -169,6 +169,36 @@ Maps audiobook genres to MAM category IDs:
 
 </details>
 
+<details>
+<summary><strong>4. Environment Variables - Path Overrides</strong></summary>
+
+MAMFast uses XDG-compliant paths by default but allows full customization via environment variables:
+
+```bash
+# Override default data directory (for state files)
+# Default: ~/.local/share/mamfast (Linux), ~/Library/Application Support/mamfast (macOS)
+export MAMFAST_DATA_DIR="/mnt/cache/appdata/mamfast/data"
+
+# Override default cache directory
+# Default: ~/.cache/mamfast (Linux), ~/Library/Caches/mamfast (macOS)
+export MAMFAST_CACHE_DIR="/mnt/cache/appdata/mamfast/cache"
+
+# Override default log directory
+# Default: ~/.local/state/mamfast (Linux), ~/Library/Logs/mamfast (macOS)
+export MAMFAST_LOG_DIR="/mnt/cache/appdata/mamfast/logs"
+```
+
+**Note**: These environment variables only affect the *default* paths used when `state_file` and `log_file` are not explicitly configured in `config.yaml`. Explicitly configured paths in YAML always take precedence.
+
+**Example for Unraid**:
+```bash
+# Add to docker-compose or systemd environment
+MAMFAST_DATA_DIR=/mnt/cache/appdata/mamfast/data
+MAMFAST_LOG_DIR=/mnt/cache/appdata/mamfast/logs
+```
+
+</details>
+
 ## 🚀 Usage
 
 ### Full Pipeline
