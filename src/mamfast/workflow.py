@@ -43,7 +43,12 @@ from mamfast.exceptions import (
     UploadError,
 )
 from mamfast.hardlinker import compute_staging_path, stage_release
-from mamfast.libation import get_libation_status, run_liberate, run_scan
+from mamfast.libation import (
+    get_libation_status,
+    run_liberate,
+    run_liberate_with_progress,
+    run_scan,
+)
 from mamfast.metadata import fetch_metadata, generate_mam_json_for_release
 from mamfast.mkbrr import create_torrent
 from mamfast.models import AudiobookRelease, ProcessingResult, ReleaseStatus
@@ -528,6 +533,7 @@ def full_run(
     skip_scan: bool = False,
     skip_metadata: bool = False,
     dry_run: bool = False,
+    verbose: bool = False,
     progress_callback: ProgressCallback | None = None,
 ) -> PipelineResult:
     """
@@ -537,6 +543,7 @@ def full_run(
         skip_scan: Skip Libation scan step
         skip_metadata: Skip metadata fetching
         dry_run: Show what would happen without making changes
+        verbose: Enable verbose mode (pass through Libation progress if on TTY)
         progress_callback: Optional callback for progress updates
 
     Returns:
@@ -610,14 +617,28 @@ def full_run(
 
                 # Step 1c: Only run liberate if there are pending books
                 if status.has_pending:
-                    print_info(f"Downloading {status.not_liberated} pending book(s)...")
-                    liberate_result = run_liberate()
+                    # Use progress-aware liberate function
+                    # - Normal mode: Rich spinner, logs to file
+                    # - Verbose + TTY: Pass through Libation's native progress bar
+                    liberate_result = run_liberate_with_progress(
+                        pending_count=status.not_liberated,
+                        console=console,
+                        verbose=verbose,
+                    )
                     if not liberate_result.success:
                         print_warning(
                             f"Libation liberate returned non-zero: {liberate_result.returncode}"
                         )
+                        if liberate_result.error_message:
+                            logger.debug(liberate_result.error_message)
                     else:
-                        print_success("Liberate complete")
+                        # Show success with log path for debugging
+                        if liberate_result.log_path:
+                            print_success(
+                                f"Liberate complete (log: {liberate_result.log_path.name})"
+                            )
+                        else:
+                            print_success("Liberate complete")
 
                         # Optional: Show updated status after liberate (only if something changed)
                         try:
@@ -640,10 +661,10 @@ def full_run(
                 # Status check failed - fall back to always running liberate
                 print_warning(f"Could not check Libation status: {e}")
                 print_info("Running liberate anyway (fallback)...")
-                liberate_result = run_liberate()
-                if not liberate_result.success:
+                fallback_result = run_liberate()
+                if not fallback_result.success:
                     print_warning(
-                        f"Libation liberate returned non-zero: {liberate_result.returncode}"
+                        f"Libation liberate returned non-zero: {fallback_result.returncode}"
                     )
         else:
             print_dry_run("Would run Libation scan")

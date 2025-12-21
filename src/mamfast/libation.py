@@ -13,6 +13,7 @@ This module provides:
 - run_scan() - Index new books from Audible
 - get_libation_status() - Check how many books need liberation
 - run_liberate() - Download NotLiberated books
+- run_liberate_with_progress() - Download with Rich spinner or TTY passthrough
 """
 
 from __future__ import annotations
@@ -20,12 +21,20 @@ from __future__ import annotations
 import contextlib
 import json
 import logging
+import subprocess
+import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from mamfast.config import get_settings
+from mamfast.paths import log_dir
 from mamfast.utils.cmd import CmdError, docker, run
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 logger = logging.getLogger(__name__)
 
@@ -270,3 +279,137 @@ def check_container_running() -> bool:
         return False
     except Exception:
         return False
+
+
+@dataclass
+class LiberateProgressResult:
+    """Result of a liberate operation with progress tracking."""
+
+    success: bool
+    returncode: int
+    downloaded_count: int = 0
+    log_path: Path | None = None
+    error_message: str = ""
+
+
+def _is_tty() -> bool:
+    """Check if we're running in a TTY (interactive terminal)."""
+    return sys.stdout.isatty() and sys.stderr.isatty()
+
+
+def run_liberate_with_progress(
+    pending_count: int,
+    console: Console,
+    *,
+    verbose: bool = False,
+    asin: str | None = None,
+) -> LiberateProgressResult:
+    """Run liberate with smart progress display.
+
+    In normal mode (default):
+        - Shows a Rich spinner with elapsed time
+        - Captures Libation output to a log file
+        - Keeps console output clean and consistent
+
+    In verbose mode (-v) with TTY:
+        - Passes through Libation's native progress bar
+        - Allocates TTY for docker exec so progress renders correctly
+
+    Args:
+        pending_count: Number of books to download (for display)
+        console: Rich console instance
+        verbose: If True and on TTY, passthrough Libation's progress bar
+        asin: Optional specific ASIN to liberate
+
+    Returns:
+        LiberateProgressResult with success status and log path
+    """
+    settings = get_settings()
+    is_tty = _is_tty()
+
+    # Build docker command
+    cmd = ["docker", "exec"]
+
+    # Verbose + TTY = passthrough mode with TTY allocation
+    passthrough_mode = verbose and is_tty
+    if passthrough_mode:
+        cmd.append("-t")  # Allocate TTY for Libation's progress bar
+
+    cmd.extend([settings.libation_container, "/libation/LibationCli", "liberate"])
+    if asin:
+        cmd.append(asin)
+
+    # -------------------------------------------
+    # Passthrough mode: Let Libation draw its own progress
+    # -------------------------------------------
+    if passthrough_mode:
+        console.print(f"  → Downloading {pending_count} pending book(s)... (Libation progress)")
+        try:
+            # Run with inherited stdio so Libation's progress bar shows
+            proc = subprocess.run(cmd, check=False, text=True)
+            return LiberateProgressResult(
+                success=proc.returncode == 0,
+                returncode=proc.returncode,
+            )
+        except Exception as e:
+            return LiberateProgressResult(
+                success=False,
+                returncode=-1,
+                error_message=str(e),
+            )
+
+    # -------------------------------------------
+    # Spinner mode: Clean output with background capture
+    # -------------------------------------------
+    # Prepare log file
+    libation_log_dir = log_dir() / "libation"
+    libation_log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = libation_log_dir / f"liberate_{timestamp}.log"
+
+    try:
+        with console.status(
+            f"  → Downloading {pending_count} pending book(s)...",
+            spinner="dots",
+        ):
+            proc = subprocess.run(
+                cmd,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+        # Write log file (always, for debugging)
+        log_content = f"Command: {' '.join(cmd)}\n"
+        log_content += f"Exit code: {proc.returncode}\n"
+        log_content += f"Timestamp: {datetime.now().isoformat()}\n"
+        log_content += "\n--- STDOUT ---\n"
+        log_content += proc.stdout or "(empty)"
+        log_content += "\n\n--- STDERR ---\n"
+        log_content += proc.stderr or "(empty)"
+        log_path.write_text(log_content)
+
+        if proc.returncode != 0:
+            # Extract tail of stderr for error message
+            stderr_lines = (proc.stderr or "").strip().splitlines()
+            tail = "\n".join(stderr_lines[-10:]) if stderr_lines else "(no output)"
+            return LiberateProgressResult(
+                success=False,
+                returncode=proc.returncode,
+                log_path=log_path,
+                error_message=f"Last output:\n{tail}",
+            )
+
+        return LiberateProgressResult(
+            success=True,
+            returncode=proc.returncode,
+            log_path=log_path,
+        )
+
+    except Exception as e:
+        logger.exception("Error running liberate with progress")
+        return LiberateProgressResult(
+            success=False,
+            returncode=-1,
+            error_message=str(e),
+        )
