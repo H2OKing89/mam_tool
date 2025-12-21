@@ -18,8 +18,6 @@ from mamfast.config import (
     NamingConfig,
     PathsConfig,
     QBittorrentConfig,
-    _get_env,
-    _get_env_int,
     _load_naming_config,
     clear_settings,
     load_settings,
@@ -137,46 +135,6 @@ mam:
         config = load_yaml_config(config_file)
 
         assert config == {} or config is None
-
-
-class TestGetEnv:
-    """Tests for _get_env function."""
-
-    def test_returns_env_value(self) -> None:
-        """Test returns environment variable value."""
-        with patch.dict(os.environ, {"TEST_VAR": "test_value"}):
-            result = _get_env("TEST_VAR")
-            assert result == "test_value"
-
-    def test_returns_default(self) -> None:
-        """Test returns default when env var not set."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = _get_env("NONEXISTENT_VAR", "default_value")
-            assert result == "default_value"
-
-    def test_raises_without_default(self) -> None:
-        """Test raises ValueError when no default and var not set."""
-        with (
-            patch.dict(os.environ, {}, clear=True),
-            pytest.raises(ValueError, match="Missing required"),
-        ):
-            _get_env("REQUIRED_VAR")
-
-
-class TestGetEnvInt:
-    """Tests for _get_env_int function."""
-
-    def test_returns_int_value(self) -> None:
-        """Test returns integer from environment."""
-        with patch.dict(os.environ, {"TEST_INT": "42"}):
-            result = _get_env_int("TEST_INT", 0)
-            assert result == 42
-
-    def test_returns_default(self) -> None:
-        """Test returns default when env var not set."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = _get_env_int("NONEXISTENT_INT", 99)
-            assert result == 99
 
 
 class TestLoadSettings:
@@ -298,7 +256,7 @@ paths:
             config_path.write_text(yaml_content)
 
             env_path = Path(tmpdir) / ".env"
-            env_path.write_text("QB_HOST=localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
+            env_path.write_text("QB_HOST=http://localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
 
             settings = reload_settings(env_file=env_path, config_file=config_path, validate=False)
 
@@ -390,7 +348,7 @@ paths:
             config_path.write_text(yaml_content)
 
             env_path = Path(tmpdir) / ".env"
-            env_path.write_text("QB_HOST=localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
+            env_path.write_text("QB_HOST=http://localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
 
             # Load settings
             reload_settings(env_file=env_path, config_file=config_path, validate=False)
@@ -415,7 +373,7 @@ paths:
             config_path.write_text(yaml_content)
 
             env_path = Path(tmpdir) / ".env"
-            env_path.write_text("QB_HOST=localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
+            env_path.write_text("QB_HOST=http://localhost\nQB_USERNAME=admin\nQB_PASSWORD=secret\n")
 
             settings1 = reload_settings(env_file=env_path, config_file=config_path, validate=False)
             assert settings1.paths.library_root == Path("/tmp/library-v1")
