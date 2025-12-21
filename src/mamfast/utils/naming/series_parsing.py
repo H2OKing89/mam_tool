@@ -12,7 +12,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from mamfast.models import SeriesInfo
@@ -250,7 +250,7 @@ def resolve_series(
     if audnex_data:
         series_primary = audnex_data.get("seriesPrimary")
         if series_primary and isinstance(series_primary, dict):
-            series_dict: dict[str, object] = series_primary
+            series_dict = cast(dict[str, Any], series_primary)
             name_value = series_dict.get("name")
             if name_value and isinstance(name_value, str):
                 # Clean the series name

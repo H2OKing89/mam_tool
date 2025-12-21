@@ -941,7 +941,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
 
     if needs_review_count > 0:
         # Build breakdown of what needs review
-        review_parts = []
+        review_parts: list[str] = []
         if no_asin_count > 0:
             review_parts.append(f"[NO-ASIN]={no_asin_count}")
         if heur_count > 0:
@@ -1035,7 +1035,7 @@ def cmd_abs_check_duplicate(args: argparse.Namespace) -> int:
             asin_index = build_asin_index(client, target_library.id)
 
             # Check index
-            exists, existing_path = asin_exists(asin_index, asin)
+            exists, _existing_path = asin_exists(asin_index, asin)
 
             if exists:
                 entry = asin_index[asin]
@@ -1495,7 +1495,7 @@ def cmd_abs_cleanup(args: argparse.Namespace) -> int:
     print_step(1, 3, "Discovering cleanup candidates")
     if args.paths:
         # Specific paths provided
-        candidates = [p for p in args.paths if p.is_dir()]
+        candidates: list[Path] = [p for p in args.paths if p.is_dir()]
         if not candidates:
             print_warning("No valid directories in provided paths")
             return 1
@@ -1562,7 +1562,7 @@ def cmd_abs_cleanup(args: argparse.Namespace) -> int:
     for folder in candidates:
         # Verify seed exists if required
         if cleanup_prefs.require_seed_exists:
-            seed_exists, seed_path = verify_seed_exists(folder, seed_root)
+            seed_exists, _seed_path = verify_seed_exists(folder, seed_root)
             if not seed_exists:
                 result = CleanupResult(
                     source_path=folder,

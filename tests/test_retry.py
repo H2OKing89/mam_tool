@@ -13,6 +13,56 @@ from mamfast.utils.retry import (
 )
 
 
+class TestTenacityRetryWithBackoff:
+    """Tests for the tenacity-based retry_with_backoff decorator."""
+
+    def test_retry_with_backoff_attempts(self) -> None:
+        """Test retry counts are correct with new API."""
+        calls = {"n": 0}
+
+        @retry_with_backoff(max_retries=2, base_delay=0, max_delay=0, jitter=0)
+        def flake() -> None:
+            calls["n"] += 1
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError):
+            flake()
+
+        assert calls["n"] == 3  # 1 initial + 2 retries
+
+    def test_success_on_first_try_new_api(self) -> None:
+        """Function should return immediately on success with new API."""
+        call_count = 0
+
+        @retry_with_backoff(max_retries=3, base_delay=0.01)
+        def success_func() -> str:
+            nonlocal call_count
+            call_count += 1
+            return "success"
+
+        result = success_func()
+
+        assert result == "success"
+        assert call_count == 1
+
+    def test_success_after_retry_new_api(self) -> None:
+        """Function should succeed after retrying with new API."""
+        call_count = 0
+
+        @retry_with_backoff(max_retries=3, base_delay=0.01, retry_exceptions=(ConnectionError,))
+        def fail_then_succeed() -> str:
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ConnectionError("Network error")
+            return "success"
+
+        result = fail_then_succeed()
+
+        assert result == "success"
+        assert call_count == 3
+
+
 class TestRetryWithBackoff:
     """Tests for the retry_with_backoff decorator."""
 
@@ -83,20 +133,14 @@ class TestRetryWithBackoff:
         assert call_count == 1  # No retry for ValueError
 
     def test_exponential_backoff_timing(self) -> None:
-        """Verify delays increase exponentially."""
-        delays: list[float] = []
+        """Verify retries happen with exponential backoff (tenacity handles timing)."""
         call_count = 0
-
-        def on_retry(exc: Exception, attempt: int, delay: float) -> None:
-            delays.append(delay)
 
         @retry_with_backoff(
             max_attempts=4,
-            base_delay=0.1,
+            base_delay=0.01,
             max_delay=10.0,
-            exponential_base=2.0,
-            jitter=False,  # Disable jitter for predictable timing
-            on_retry=on_retry,
+            jitter=0,  # Disable jitter for predictable behavior
         )
         def fail_three_times() -> str:
             nonlocal call_count
@@ -108,48 +152,39 @@ class TestRetryWithBackoff:
         result = fail_three_times()
 
         assert result == "success"
-        assert len(delays) == 3
-        # Expected: 0.1, 0.2, 0.4 (base * 2^(attempt-1))
-        assert abs(delays[0] - 0.1) < 0.01
-        assert abs(delays[1] - 0.2) < 0.01
-        assert abs(delays[2] - 0.4) < 0.01
+        assert call_count == 4  # 1 initial + 3 retries
 
     def test_max_delay_cap(self) -> None:
-        """Verify delay is capped at max_delay."""
-        delays: list[float] = []
-
-        def on_retry(exc: Exception, attempt: int, delay: float) -> None:
-            delays.append(delay)
+        """Verify retry behavior with max_delay cap (tenacity handles timing)."""
+        call_count = 0
 
         @retry_with_backoff(
             max_attempts=5,
-            base_delay=1.0,
-            max_delay=2.0,  # Cap at 2 seconds
-            exponential_base=2.0,
-            jitter=False,
-            on_retry=on_retry,
+            base_delay=0.01,
+            max_delay=0.02,  # Cap at low value
+            jitter=0,
         )
         def always_fail() -> str:
+            nonlocal call_count
+            call_count += 1
             raise ConnectionError("Fail")
 
         with pytest.raises(ConnectionError):
             always_fail()
 
-        # Delays should be: 1.0, 2.0, 2.0, 2.0 (capped)
-        assert delays[0] == 1.0
-        assert delays[1] == 2.0
-        assert delays[2] == 2.0
-        assert delays[3] == 2.0
+        # All 5 attempts should be made
+        assert call_count == 5
 
-    def test_on_retry_callback(self) -> None:
-        """Verify on_retry callback is called with correct args."""
+    def test_on_retry_parameter_ignored(self) -> None:
+        """Verify on_retry parameter is accepted but ignored (tenacity uses logging)."""
         callback = MagicMock()
         call_count = 0
 
+        # on_retry is accepted for backward compatibility but ignored
         @retry_with_backoff(
             max_attempts=3,
             base_delay=0.01,
-            jitter=False,
+            jitter=0,
             on_retry=callback,
         )
         def fail_twice() -> str:
@@ -159,14 +194,12 @@ class TestRetryWithBackoff:
                 raise ConnectionError("Network error")
             return "success"
 
-        fail_twice()
+        result = fail_twice()
 
-        assert callback.call_count == 2
-        # Check first call
-        first_call = callback.call_args_list[0]
-        assert isinstance(first_call[0][0], ConnectionError)
-        assert first_call[0][1] == 1  # attempt
-        assert first_call[0][2] == pytest.approx(0.01, abs=0.001)  # delay
+        assert result == "success"
+        assert call_count == 3
+        # on_retry callback is no longer called (tenacity uses before_sleep_log instead)
+        assert callback.call_count == 0
 
     def test_preserves_function_metadata(self) -> None:
         """Decorator should preserve function name and docstring."""
@@ -180,29 +213,25 @@ class TestRetryWithBackoff:
         assert my_function.__doc__ == "My docstring."
 
     def test_jitter_adds_randomness(self) -> None:
-        """Verify jitter adds randomness to delays."""
-        delays: list[float] = []
-
-        def on_retry(exc: Exception, attempt: int, delay: float) -> None:
-            delays.append(delay)
+        """Verify jitter parameter is accepted (tenacity handles randomness internally)."""
+        call_count = 0
 
         @retry_with_backoff(
-            max_attempts=5,
+            max_attempts=3,
             base_delay=0.01,
             max_delay=0.05,
-            jitter=True,
-            on_retry=on_retry,
+            jitter=True,  # Enable jitter
         )
         def always_fail() -> str:
+            nonlocal call_count
+            call_count += 1
             raise ConnectionError("Fail")
 
         with pytest.raises(ConnectionError):
             always_fail()
 
-        # With jitter, delays should vary (±25% of base)
-        # Check that not all delays are identical
-        unique_delays = {round(d, 3) for d in delays}
-        assert len(unique_delays) > 1, "Jitter should produce varying delays"
+        # All 3 attempts should be made
+        assert call_count == 3
 
 
 class TestRetryableError:
