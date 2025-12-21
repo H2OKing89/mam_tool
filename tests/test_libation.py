@@ -612,3 +612,173 @@ class TestGetLibationStatus:
             assert status.liberated == 0
             assert status.not_liberated == 0
             assert status.has_pending is False
+
+
+# =============================================================================
+# Parse Libation Output Tests
+# =============================================================================
+
+
+class TestParseLibationOutput:
+    """Tests for _parse_libation_output function."""
+
+    def test_parses_completed_books(self) -> None:
+        """Should extract completed book entries from stdout."""
+        from mamfast.libation import _parse_libation_output
+
+        stdout = """DownloadDecryptBook Begin: 12/21/2025 [B0FHHH1FVQ] Book Title
+DownloadDecryptBook Completed: 12/21/2025 [B0FHHH1FVQ] Book Title
+Done. All books have been processed"""
+        stderr = ""
+
+        result = _parse_libation_output(stdout, stderr)
+        assert len(result["completed"]) == 1
+        assert "B0FHHH1FVQ" in result["completed"][0]
+        assert result["has_book_errors"] is False
+        assert len(result["errors"]) == 0
+
+    def test_detects_error_in_stderr(self) -> None:
+        """Should detect error messages in stderr."""
+        from mamfast.libation import _parse_libation_output
+
+        stdout = """DownloadDecryptBook Begin: 12/21/2025 [B0FHHH1FVQ] Book Title
+DownloadDecryptBook Completed: 12/21/2025 [B0FHHH1FVQ] Book Title
+Done. All books have been processed"""
+        # Real Libation error message (truncated for line length)
+        stderr = "Error processing book. Skipping. This book will be tried again."
+
+        result = _parse_libation_output(stdout, stderr)
+        assert result["has_book_errors"] is True
+        assert len(result["errors"]) > 0
+
+    def test_handles_empty_output(self) -> None:
+        """Should handle empty stdout and stderr."""
+        from mamfast.libation import _parse_libation_output
+
+        result = _parse_libation_output("", "")
+        assert len(result["completed"]) == 0
+        assert len(result["errors"]) == 0
+        assert result["has_book_errors"] is False
+
+    def test_multiple_completed_books(self) -> None:
+        """Should track multiple completed books."""
+        from mamfast.libation import _parse_libation_output
+
+        stdout = """DownloadDecryptBook Completed: 12/21/2025 [ASIN1] Book One
+DownloadDecryptBook Completed: 12/21/2025 [ASIN2] Book Two
+DownloadDecryptBook Completed: 12/21/2025 [ASIN3] Book Three"""
+        stderr = ""
+
+        result = _parse_libation_output(stdout, stderr)
+        assert len(result["completed"]) == 3
+
+    def test_detects_failed_keyword(self) -> None:
+        """Should detect 'failed' keyword in stderr."""
+        from mamfast.libation import _parse_libation_output
+
+        stdout = ""
+        stderr = "Download failed for book ASIN123"
+
+        result = _parse_libation_output(stdout, stderr)
+        assert result["has_book_errors"] is True
+
+
+class TestLiberateProgressResult:
+    """Tests for LiberateProgressResult dataclass."""
+
+    def test_default_values(self) -> None:
+        """Test default field values."""
+        from mamfast.libation import LiberateProgressResult
+
+        result = LiberateProgressResult(success=True, returncode=0)
+        assert result.success is True
+        assert result.returncode == 0
+        assert result.downloaded_count == 0
+        assert result.skipped_count == 0
+        assert result.log_path is None
+        assert result.error_message == ""
+        assert result.has_book_errors is False
+
+    def test_with_book_errors(self) -> None:
+        """Test result with book-level errors."""
+        from mamfast.libation import LiberateProgressResult
+
+        result = LiberateProgressResult(
+            success=True,
+            returncode=0,
+            downloaded_count=5,
+            skipped_count=1,
+            error_message="Error processing book",
+            has_book_errors=True,
+        )
+        assert result.success is True  # Command succeeded
+        assert result.has_book_errors is True  # But some books failed
+        assert result.skipped_count == 1
+
+
+class TestRunLiberateWithProgressTimeout:
+    """Tests for timeout handling in run_liberate_with_progress."""
+
+    def test_passthrough_timeout_returns_failure(self) -> None:
+        """Test that passthrough mode returns failure on timeout."""
+        import subprocess
+
+        from rich.console import Console
+
+        from mamfast.libation import LiberateProgressResult, run_liberate_with_progress
+
+        mock_settings = MagicMock()
+        mock_settings.docker_bin = "/usr/bin/docker"
+        mock_settings.libation_container = "Libation"
+
+        mock_console = MagicMock(spec=Console)
+
+        with (
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+            patch("mamfast.libation._is_tty", return_value=True),  # Force TTY
+            patch(
+                "mamfast.libation.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="docker", timeout=3600),
+            ),
+        ):
+            result = run_liberate_with_progress(
+                pending_count=1,
+                console=mock_console,
+                verbose=True,  # verbose + TTY = passthrough mode
+            )
+            assert isinstance(result, LiberateProgressResult)
+            assert result.success is False
+            assert result.returncode == -1
+            assert "timed out" in result.error_message.lower()
+
+    def test_spinner_timeout_returns_failure(self) -> None:
+        """Test that spinner mode returns failure on timeout."""
+        import subprocess
+
+        from rich.console import Console
+
+        from mamfast.libation import LiberateProgressResult, run_liberate_with_progress
+
+        mock_settings = MagicMock()
+        mock_settings.docker_bin = "/usr/bin/docker"
+        mock_settings.libation_container = "Libation"
+
+        mock_console = MagicMock(spec=Console)
+
+        with (
+            patch("mamfast.libation.get_settings", return_value=mock_settings),
+            patch("mamfast.libation._is_tty", return_value=False),  # Force non-TTY
+            patch(
+                "mamfast.libation.subprocess.run",
+                side_effect=subprocess.TimeoutExpired(cmd="docker", timeout=3600),
+            ),
+        ):
+            result = run_liberate_with_progress(
+                pending_count=1,
+                console=mock_console,
+                verbose=False,
+            )
+            assert isinstance(result, LiberateProgressResult)
+            assert result.success is False
+            assert result.returncode == -1
+            assert "timed out" in result.error_message.lower()

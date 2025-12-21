@@ -24,15 +24,16 @@ from typing import Any
 from mamfast.config import get_settings
 from mamfast.console import (
     console,
+    format_mediainfo_stats,
     print_dry_run,
     print_error,
     print_info,
     print_step,
     print_success,
-    print_summary,
     print_warning,
     print_workflow_summary,
     render_libation_status,
+    truncate_path,
 )
 from mamfast.exceptions import (
     DiscoveryValidationError,
@@ -42,7 +43,12 @@ from mamfast.exceptions import (
     UploadError,
 )
 from mamfast.hardlinker import compute_staging_path, stage_release
-from mamfast.libation import get_libation_status, run_liberate, run_scan
+from mamfast.libation import (
+    get_libation_status,
+    run_liberate,
+    run_liberate_with_progress,
+    run_scan,
+)
 from mamfast.metadata import fetch_metadata, generate_mam_json_for_release
 from mamfast.mkbrr import create_torrent
 from mamfast.models import AudiobookRelease, ProcessingResult, ReleaseStatus
@@ -264,7 +270,9 @@ def process_single_release(
             notify(ProgressStage.STAGING, "Creating hardlinks...")
             logger.debug("Step 1: Staging release")
             staging_dir = stage_release(release)
-            print_success(f"Staged to {staging_dir.name}")
+            # Show truncated path - full path available in logs via --verbose
+            display_path = truncate_path(str(staging_dir), max_length=60)
+            print_success(f"Staged → {display_path}")
             release.status = ReleaseStatus.STAGED
             checkpoint_stage(release, "staged")
 
@@ -305,7 +313,11 @@ def process_single_release(
                     chapter_count = len(audnex_chapters.get("chapters", []))
                     print_success(f"Audnex chapters: {chapter_count} chapters")
                 if mediainfo_data:
-                    print_success("MediaInfo extracted")
+                    stats = format_mediainfo_stats(mediainfo_data)
+                    if stats:
+                        print_success(f"MediaInfo: {stats}")
+                    else:
+                        print_success("MediaInfo extracted")
                 release.status = ReleaseStatus.METADATA_FETCHED
                 checkpoint_stage(release, "metadata")
 
@@ -471,7 +483,10 @@ def process_single_release(
             )
 
         release.status = ReleaseStatus.UPLOADED
-        print_success("Uploaded to qBittorrent")
+        # Format the qBittorrent success message with explicit labels
+        qb_category = settings.qbittorrent.category or "audiobooks"
+        hash_short = infohash[:8] + "…" + infohash[-4:] if infohash else "?"
+        print_success(f"Uploaded to qBittorrent (category={qb_category}, hash={hash_short})")
 
         # ---------------------------------------------------------------------
         # 5. Mark as complete
@@ -518,6 +533,7 @@ def full_run(
     skip_scan: bool = False,
     skip_metadata: bool = False,
     dry_run: bool = False,
+    verbose: bool = False,
     progress_callback: ProgressCallback | None = None,
 ) -> PipelineResult:
     """
@@ -527,6 +543,7 @@ def full_run(
         skip_scan: Skip Libation scan step
         skip_metadata: Skip metadata fetching
         dry_run: Show what would happen without making changes
+        verbose: Enable verbose mode (pass through Libation progress if on TTY)
         progress_callback: Optional callback for progress updates
 
     Returns:
@@ -600,14 +617,43 @@ def full_run(
 
                 # Step 1c: Only run liberate if there are pending books
                 if status.has_pending:
-                    print_info(f"Downloading {status.not_liberated} pending book(s)...")
-                    liberate_result = run_liberate()
+                    # Use progress-aware liberate function
+                    # - Normal mode: Rich spinner, logs to file
+                    # - Verbose + TTY: Pass through Libation's native progress bar
+                    liberate_result = run_liberate_with_progress(
+                        pending_count=status.not_liberated,
+                        console=console,
+                        verbose=verbose,
+                    )
                     if not liberate_result.success:
                         print_warning(
                             f"Libation liberate returned non-zero: {liberate_result.returncode}"
                         )
+                        if liberate_result.error_message:
+                            logger.debug(liberate_result.error_message)
                     else:
-                        print_success("Liberate complete")
+                        # Show success with log path for debugging
+                        if liberate_result.log_path:
+                            print_success(
+                                f"Liberate complete (log: {liberate_result.log_path.name})"
+                            )
+                        else:
+                            print_success("Liberate complete")
+
+                        # Check if any individual books failed (even though command succeeded)
+                        if liberate_result.has_book_errors:
+                            print_warning(
+                                f"Some books failed to download "
+                                f"({liberate_result.skipped_count} skipped)"
+                            )
+                            # Show the error message to user
+                            if liberate_result.error_message:
+                                # Clean up and truncate error message for display
+                                error_lines = liberate_result.error_message.splitlines()
+                                for line in error_lines[:2]:  # Show first 2 lines
+                                    print_warning(f"  → {line.strip()}")
+                            if liberate_result.log_path:
+                                print_info(f"  Full details in: {liberate_result.log_path.name}")
 
                         # Optional: Show updated status after liberate (only if something changed)
                         try:
@@ -630,10 +676,10 @@ def full_run(
                 # Status check failed - fall back to always running liberate
                 print_warning(f"Could not check Libation status: {e}")
                 print_info("Running liberate anyway (fallback)...")
-                liberate_result = run_liberate()
-                if not liberate_result.success:
+                fallback_result = run_liberate()
+                if not fallback_result.success:
                     print_warning(
-                        f"Libation liberate returned non-zero: {liberate_result.returncode}"
+                        f"Libation liberate returned non-zero: {fallback_result.returncode}"
                     )
         else:
             print_dry_run("Would run Libation scan")
@@ -670,7 +716,7 @@ def full_run(
             duration_seconds=time.time() - start_time,
         )
 
-    console.print(f"Found [highlight]{len(releases)}[/] new release(s)\n")
+    console.print(f"Found [highlight]{len(releases)}[/] new release(s)")
 
     # -------------------------------------------------------------------------
     # 3. Process each release
@@ -680,7 +726,8 @@ def full_run(
 
     # Process each release
     for i, release in enumerate(releases, 1):
-        console.print(f"\n[bold cyan][{i}/{len(releases)}][/] {release.display_name}")
+        console.print()  # Blank line before each release header
+        console.print(f"[bold cyan]── [{i}/{len(releases)}] {release.display_name} ──[/]")
 
         # Check if already processed
         identifier = release.asin or str(release.source_dir)
@@ -771,10 +818,7 @@ def full_run(
         skipped=skipped,
     )
 
-    # Print both summary formats - simple line + detailed table
-    print_summary(successful, failed, skipped, duration)
-
-    # Also show detailed workflow stats table
+    # Print workflow summary table (includes duration)
     print_workflow_summary(
         {
             "discovered": len(releases),

@@ -558,6 +558,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 skip_scan=args.skip_scan,
                 skip_metadata=args.skip_metadata,
                 dry_run=args.dry_run,
+                verbose=args.verbose,
             )
     except StateLockError as e:
         set_console_quiet(False)
