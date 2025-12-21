@@ -33,7 +33,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-cov",
-    "ruff",
+    "ruff>=0.5.0",
     "mypy",
     "types-PyYAML",
     "pre-commit>=3.0",
@@ -47,7 +47,7 @@ packages = ["src/mamfast"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = ["py311"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
