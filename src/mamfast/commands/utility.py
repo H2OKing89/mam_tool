@@ -11,6 +11,7 @@ import json as json_module
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import yaml
 from pydantic import ValidationError as PydanticValidationError
@@ -395,7 +396,7 @@ def cmd_validate_config(args: argparse.Namespace) -> int:
             with open(categories_path, encoding="utf-8") as f:
                 categories_data = json_module.load(f)
             if isinstance(categories_data, dict):
-                categories: dict[str, object] = categories_data
+                categories = cast(dict[str, object], categories_data)
                 print_success(f"categories.json: valid ({len(categories)} genre mappings)")
             else:
                 print_error("categories.json: expected a dictionary")

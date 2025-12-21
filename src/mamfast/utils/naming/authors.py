@@ -66,9 +66,9 @@ def _build_author_role_pattern(
     roles = DEFAULT_ROLE_WORDS if role_words is None else role_words
     credits = DEFAULT_CREDIT_WORDS if credit_words is None else credit_words
 
-    # Build alternation patterns
-    role_pattern = "|".join(re.escape(r) for r in roles)
-    credit_pattern = "|".join(re.escape(c) for c in credits)
+    # Build alternation patterns (use never-matching pattern if empty)
+    role_pattern = "|".join(re.escape(r) for r in roles) if roles else "(?!)"
+    credit_pattern = "|".join(re.escape(c) for c in credits) if credits else "(?!)"
 
     return re.compile(
         rf"""

@@ -7,6 +7,8 @@ This package organizes CLI commands into logical modules:
 - abs: Audiobookshelf integration commands
 """
 
+from __future__ import annotations
+
 from mamfast.commands.abs import (
     cmd_abs_check_duplicate,
     cmd_abs_cleanup,
