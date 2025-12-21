@@ -7,14 +7,17 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from tenacity import (
     before_sleep_log,
-    retry as _retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential_jitter,
+)
+from tenacity import (
+    retry as _retry,
 )
 
 T = TypeVar("T")
@@ -79,10 +82,7 @@ def retry_with_backoff(
         effective_retries = 3
 
     # Handle backward compatibility for jitter (bool -> float)
-    if isinstance(jitter, bool):
-        jitter_value = 1.0 if jitter else 0.0
-    else:
-        jitter_value = float(jitter)
+    jitter_value = (1.0 if jitter else 0.0) if isinstance(jitter, bool) else float(jitter)
 
     # Handle backward compatibility for retry_exceptions/exceptions
     if retry_exceptions is not None and exceptions is not None:
@@ -113,7 +113,7 @@ class RetryableError(Exception):
 
 
 # Common exception groups for different operation types
-NETWORK_EXCEPTIONS: tuple[type[Exception], ...] = (
+_BASE_NETWORK_EXCEPTIONS: tuple[type[Exception], ...] = (
     ConnectionError,
     TimeoutError,
     OSError,  # Covers socket errors
@@ -121,17 +121,22 @@ NETWORK_EXCEPTIONS: tuple[type[Exception], ...] = (
 )
 
 # Import httpx exceptions if available
+_HTTPX_EXCEPTIONS: tuple[type[Exception], ...]
 try:
     import httpx
 
-    NETWORK_EXCEPTIONS = (
-        *NETWORK_EXCEPTIONS,
+    _HTTPX_EXCEPTIONS = (
         httpx.TimeoutException,
         httpx.ConnectError,
         httpx.ReadError,
     )
 except ImportError:
-    pass
+    _HTTPX_EXCEPTIONS = ()
+
+NETWORK_EXCEPTIONS: tuple[type[Exception], ...] = (
+    *_BASE_NETWORK_EXCEPTIONS,
+    *_HTTPX_EXCEPTIONS,
+)
 
 
 # Subprocess exceptions for Docker/CLI tool retries

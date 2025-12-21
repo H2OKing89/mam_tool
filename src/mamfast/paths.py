@@ -76,7 +76,7 @@ def cache_dir(*, ensure: bool = True) -> Path:
 def log_dir(*, ensure: bool = True) -> Path:
     """Get application log directory.
 
-    Linux: ~/.local/state/mamfast (or ~/.cache/mamfast if not available)
+    Linux: ~/.local/state/mamfast/log
     macOS: ~/Library/Logs/mamfast
     Windows: C:\\Users\\<user>\\AppData\\Local\\mamfast\\Logs
 
