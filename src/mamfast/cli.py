@@ -419,6 +419,7 @@ Examples:
     state_subparsers.add_parser(
         "prune",
         help="Remove stale entries with missing required paths",
+        epilog="Tip: Use 'mamfast --dry-run state prune' to preview changes.",
     )
 
     # state retry
@@ -449,7 +450,7 @@ Examples:
     state_export_parser.add_argument(
         "--output",
         "-o",
-        type=str,
+        type=Path,
         help="Output file path (default: stdout)",
     )
 

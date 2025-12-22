@@ -1,6 +1,6 @@
 # State Management Hardening Plan
 
-**Status**: In Progress
+**Status**: Implemented
 **Priority**: High (prevents data loss and silent corruption)
 **Branch**: `feat/state-hardening`
 
@@ -20,6 +20,7 @@ This plan upgrades `processed.json` state management for production reliability:
 ## Step 0: Harden File Operations (Atomic Write + Corruption Recovery)
 
 ### Current State
+
 - ✅ Uses temp file + `os.replace()` (atomic on POSIX)
 - ✅ Backs up corrupted JSON to `.bak`
 - ⚠️ **Missing `fsync()`** - data in kernel buffer not flushed to disk
@@ -29,6 +30,7 @@ This plan upgrades `processed.json` state management for production reliability:
 ### Changes Required
 
 #### `_save_state_unsafe()` improvements:
+
 ```python
 # Before write: preserve last-known-good
 if state_file.exists():

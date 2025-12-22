@@ -1302,3 +1302,218 @@ class TestInvalidStatusTransitionError:
         assert error.current == ReleaseStatus.COMPLETE
         assert error.new == ReleaseStatus.STAGED
         assert error.identifier == "B09ATTR"
+
+
+class TestSchemaMigration:
+    """Tests for schema migration functions."""
+
+    def test_migrate_v1_to_v2_adds_checkpoints_to_processed(self, mock_settings, temp_state_file):
+        """Test that v1->v2 migration adds checkpoints dict to processed entries."""
+        v1_state = {
+            "version": 1,
+            "processed": {
+                "B09MIGRATE1": {
+                    "asin": "B09MIGRATE1",
+                    "title": "Test Book",
+                    "status": "COMPLETE",
+                    # No checkpoints field
+                }
+            },
+            "failed": {},
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # Should have checkpoints added
+        assert "checkpoints" in state["processed"]["B09MIGRATE1"]
+        assert state["processed"]["B09MIGRATE1"]["checkpoints"] == {}
+        assert state["version"] == 2
+
+    def test_migrate_v1_to_v2_adds_infohash_to_processed(self, mock_settings, temp_state_file):
+        """Test that v1->v2 migration adds infohash field to processed entries."""
+        v1_state = {
+            "version": 1,
+            "processed": {
+                "B09MIGRATE2": {
+                    "asin": "B09MIGRATE2",
+                    "title": "Another Book",
+                    "status": "UPLOADED",
+                    # No infohash field
+                }
+            },
+            "failed": {},
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # Should have infohash added (as None)
+        assert "infohash" in state["processed"]["B09MIGRATE2"]
+        assert state["processed"]["B09MIGRATE2"]["infohash"] is None
+
+    def test_migrate_v1_to_v2_adds_first_failed_at_to_failed(self, mock_settings, temp_state_file):
+        """Test that v1->v2 migration adds first_failed_at to failed entries."""
+        original_time = "2025-01-01T12:00:00"
+        v1_state = {
+            "version": 1,
+            "processed": {},
+            "failed": {
+                "B09FAILMIG": {
+                    "asin": "B09FAILMIG",
+                    "title": "Failed Book",
+                    "error": "Some error",
+                    "failed_at": original_time,
+                    # No first_failed_at field
+                }
+            },
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # Should copy failed_at to first_failed_at
+        assert state["failed"]["B09FAILMIG"]["first_failed_at"] == original_time
+
+    def test_migrate_v1_to_v2_adds_error_type_to_failed(self, mock_settings, temp_state_file):
+        """Test that v1->v2 migration adds error_type field to failed entries."""
+        v1_state = {
+            "version": 1,
+            "processed": {},
+            "failed": {
+                "B09ERRMIG": {
+                    "asin": "B09ERRMIG",
+                    "title": "Error Book",
+                    "error": "Network timeout",
+                    "failed_at": "2025-01-02T10:00:00",
+                    # No error_type field
+                }
+            },
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # Should have error_type added (as None since not available)
+        assert "error_type" in state["failed"]["B09ERRMIG"]
+        assert state["failed"]["B09ERRMIG"]["error_type"] is None
+
+    def test_migrate_v1_to_v2_adds_author_to_failed(self, mock_settings, temp_state_file):
+        """Test that v1->v2 migration adds author field to failed entries."""
+        v1_state = {
+            "version": 1,
+            "processed": {},
+            "failed": {
+                "B09AUTHMIG": {
+                    "asin": "B09AUTHMIG",
+                    "title": "Author Missing",
+                    "error": "Some error",
+                    "failed_at": "2025-01-03T15:00:00",
+                    # No author field
+                }
+            },
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # Should have author added (as None)
+        assert "author" in state["failed"]["B09AUTHMIG"]
+        assert state["failed"]["B09AUTHMIG"]["author"] is None
+
+    def test_migrate_v1_to_v2_preserves_existing_fields(self, mock_settings, temp_state_file):
+        """Test that migration preserves all existing data."""
+        v1_state = {
+            "version": 1,
+            "processed": {
+                "B09PRESERVE": {
+                    "asin": "B09PRESERVE",
+                    "title": "Preserved Book",
+                    "author": "John Author",
+                    "status": "COMPLETE",
+                    "staging_dir": "/path/to/staging",
+                    "torrent_path": "/path/to/torrent.torrent",
+                    "processed_at": "2025-01-01T10:00:00",
+                }
+            },
+            "failed": {},
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        entry = state["processed"]["B09PRESERVE"]
+        assert entry["asin"] == "B09PRESERVE"
+        assert entry["title"] == "Preserved Book"
+        assert entry["author"] == "John Author"
+        assert entry["status"] == "COMPLETE"
+        assert entry["staging_dir"] == "/path/to/staging"
+        assert entry["torrent_path"] == "/path/to/torrent.torrent"
+        assert entry["processed_at"] == "2025-01-01T10:00:00"
+
+    def test_v2_state_not_migrated(self, mock_settings, temp_state_file):
+        """Test that v2 state is not re-migrated."""
+        v2_state = {
+            "version": 2,
+            "processed": {
+                "B09V2STATE": {
+                    "asin": "B09V2STATE",
+                    "title": "V2 Book",
+                    "checkpoints": {"staged": "2025-01-01T10:00:00"},
+                    "infohash": "abc123",
+                }
+            },
+            "failed": {},
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v2_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # Should be unchanged
+        assert state["version"] == 2
+        assert state["processed"]["B09V2STATE"]["checkpoints"] == {"staged": "2025-01-01T10:00:00"}
+        assert state["processed"]["B09V2STATE"]["infohash"] == "abc123"
+
+    def test_migrate_multiple_entries(self, mock_settings, temp_state_file):
+        """Test that migration handles multiple entries correctly."""
+        v1_state = {
+            "version": 1,
+            "processed": {
+                "B09MULTI1": {"asin": "B09MULTI1", "title": "Book 1", "status": "STAGED"},
+                "B09MULTI2": {"asin": "B09MULTI2", "title": "Book 2", "status": "COMPLETE"},
+            },
+            "failed": {
+                "B09FAIL1": {"asin": "B09FAIL1", "error": "Error 1", "failed_at": "2025-01-01"},
+                "B09FAIL2": {"asin": "B09FAIL2", "error": "Error 2", "failed_at": "2025-01-02"},
+            },
+        }
+        with open(temp_state_file, "w") as f:
+            json.dump(v1_state, f)
+
+        with patch("mamfast.utils.state.get_settings", return_value=mock_settings):
+            state = load_state()
+
+        # All processed entries should have new fields
+        for key in ["B09MULTI1", "B09MULTI2"]:
+            assert "checkpoints" in state["processed"][key]
+            assert "infohash" in state["processed"][key]
+
+        # All failed entries should have new fields
+        for key in ["B09FAIL1", "B09FAIL2"]:
+            assert "first_failed_at" in state["failed"][key]
+            assert "error_type" in state["failed"][key]
+            assert "author" in state["failed"][key]

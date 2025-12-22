@@ -40,7 +40,7 @@ class FailedRelease(BaseModel):
     asin: str | None = None
     title: str | None = None
     author: str | None = None  # NEW: for better display
-    path: str | None = None
+    path: str | None = None  # LEGACY: kept for backward compat, prefer source_dir
     source_dir: str | None = None  # NEW: consistent with mark_failed
     error: str | None = None
     error_type: str | None = None  # NEW: exception class name for debugging

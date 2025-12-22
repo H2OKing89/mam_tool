@@ -169,13 +169,14 @@ def _migrate_state(data: dict[str, Any]) -> dict[str, Any]:
     # Apply migrations sequentially
     if version < 2:
         data = _migrate_v1_to_v2(data)
-        data["version"] = 2
 
-    # Future migrations go here:
-    # if version < 3:
-    #     data = _migrate_v2_to_v3(data)
-    #     data["version"] = 3
+    # Future migrations:
+    # - Introduce a new migration function (e.g., _migrate_v2_to_v3).
+    # - Add another conditional here (e.g., "if version < 3:") that calls
+    #   the new migration function.
 
+    # Set final version after all migrations complete
+    data["version"] = CURRENT_SCHEMA_VERSION
     return data
 
 
@@ -565,6 +566,7 @@ REQUIRED_PATHS_BY_STATUS: dict[str, list[str]] = {
     "TORRENT_CREATED": ["staging_dir", "torrent_path"],
     "UPLOADED": ["torrent_path"],  # staging_dir may be gone after upload
     "COMPLETE": [],  # All paths may be gone after completion
+    "FAILED": [],  # Failed entries don't require path validation
 }
 
 
