@@ -563,7 +563,12 @@ class TestCheckpointStage:
         assert "checkpoints" in entry
         assert "staged_at" in entry["checkpoints"]
         # Verify timestamp is valid ISO format
-        datetime.fromisoformat(entry["checkpoints"]["staged_at"])
+        try:
+            datetime.fromisoformat(entry["checkpoints"]["staged_at"])
+        except ValueError as e:
+            pytest.fail(
+                f"Timestamp is not valid ISO format: {entry['checkpoints']['staged_at']!r} - {e}"
+            )
 
     def test_updates_existing_entry(self, mock_settings, temp_state_file):
         """Test that checkpoint_stage updates existing entry without overwriting."""
