@@ -4,7 +4,9 @@ This directory contains technical documentation, implementation plans, and refer
 
 ## Directory Structure
 
+
 ### `/archive/` - Completed Implementation Reports
+
 Historical documentation for completed migrations and refactoring work:
 - `P0_UPGRADE_COMPLETE.md` - tenacity & platformdirs package upgrade (completed 2025-12-20)
 - `P1_SH_LIBRARY_COMPLETE.md` - sh library integration for subprocess calls (completed 2025-12-20)
@@ -14,6 +16,7 @@ Historical documentation for completed migrations and refactoring work:
 - `NAMING_PLAN_ORIGINAL.md` - Original naming implementation plan
 
 ### `/audiobookshelf/` - Audiobookshelf Integration
+
 Documentation for ABS library management, import workflows, and metadata handling:
 - `AUDIOBOOKSHELF_API.md` - ABS API reference and usage
 - `AUDIOBOOKSHELF_IMPORT.md` - Import workflow implementation
@@ -24,12 +27,14 @@ Documentation for ABS library management, import workflows, and metadata handlin
 - `UNKNOWN_ASIN_HANDLING.md` - Handling books without ASINs
 
 ### `/naming/` - File Naming System
+
 Naming conventions, test cases, and validation documentation:
 - Golden test samples for various edge cases
 - Series handling and volume parsing logic
 - Truncation and path validation rules
 
 ### `/tracked_issues/` - Issue Tracking
+
 Active bug reports, feature requests, and technical investigations
 
 ### Root Documentation Files
@@ -42,22 +47,26 @@ Active bug reports, feature requests, and technical investigations
 - `STATE_HARDENING_PLAN.md` - State management improvements
 
 #### Reference
+
 - `LIBATION_CLI.md` - Libation CLI integration guide
 
 ## Documentation Guidelines
 
 ### When to Archive
+
 Move implementation docs to `/archive/` when:
 - The work is **fully complete** and tested
 - The document is primarily historical (not actively referenced)
 - It describes a **completed migration or refactoring**
 
 Keep in root `docs/` when:
+
 - The document describes **active work** or future plans
 - It's a **reference guide** actively used during development
 - It tracks **ongoing issues** or backlog items
 
 ### Linking Between Docs
+
 When referencing other documentation:
 - Use **relative paths** for portability
 - Archive links from root: `archive/P0_UPGRADE_COMPLETE.md`
@@ -65,6 +74,7 @@ When referencing other documentation:
 - Root links from archive: `../MIGRATION_BACKLOG.md`
 
 ### File Naming
+
 - Use `SCREAMING_SNAKE_CASE.md` for consistency
 - Include status indicators: `_COMPLETE`, `_PLAN`, `_BACKLOG`
 - Be descriptive: prefer `AUDIOBOOKSHELF_IMPORT.md` over `ABS.md`
