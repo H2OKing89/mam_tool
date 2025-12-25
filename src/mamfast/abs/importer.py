@@ -454,8 +454,13 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
         first_author = authors[0].get("name", "")
         if first_author and first_author != parsed.author:
             logger.info(
-                f"Enriched author from Audnex: {first_author}"
-                + (f" (was: {parsed.author})" if parsed.author and parsed.author != "Unknown" else "")
+                "Enriched author from Audnex: %s%s",
+                first_author,
+                (
+                    f" (was: {parsed.author})"
+                    if parsed.author and parsed.author != "Unknown"
+                    else ""
+                ),
             )
             parsed.author = first_author
 
@@ -466,8 +471,9 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     if normalized.series_name:
         if parsed.series != normalized.series_name:
             logger.info(
-                f"Enriched series from Audnex: {normalized.series_name}"
-                + (f" (was: {parsed.series})" if parsed.series else "")
+                "Enriched series from Audnex: %s%s",
+                normalized.series_name,
+                f" (was: {parsed.series})" if parsed.series else "",
             )
         parsed.series = normalized.series_name
         parsed.is_standalone = False
@@ -475,8 +481,9 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     if normalized.series_position:
         if parsed.series_position != normalized.series_position:
             logger.info(
-                f"Enriched series position from Audnex: {normalized.series_position}"
-                + (f" (was: {parsed.series_position})" if parsed.series_position else "")
+                "Enriched series position from Audnex: %s%s",
+                normalized.series_position,
+                f" (was: {parsed.series_position})" if parsed.series_position else "",
             )
         parsed.series_position = normalized.series_position
 
@@ -484,8 +491,13 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     # This handles Libation format where title/author are swapped
     if normalized.display_title and normalized.display_title != parsed.title:
         logger.info(
-            f"Enriched title from Audnex: {normalized.display_title}"
-            + (f" (was: {parsed.title})" if parsed.title and parsed.title not in ("Unknown", "") else "")
+            "Enriched title from Audnex: %s%s",
+            normalized.display_title,
+            (
+                f" (was: {parsed.title})"
+                if parsed.title and parsed.title not in ("Unknown", "")
+                else ""
+            ),
         )
         parsed.title = normalized.display_title
 
