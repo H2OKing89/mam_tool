@@ -279,10 +279,14 @@ def parse_mam_folder_name(folder_name: str) -> ParsedFolderName:
     # - Optional ripper tag in braces
     # - Optional ASIN in brackets
 
-    # Strip ASIN markers from end for cleaner parsing
-    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*$", "", clean_folder)
-    clean_name = re.sub(r"\s*\[ASIN\.[A-Z0-9]+\]\s*$", "", clean_name)
-    clean_name = re.sub(r"\s*\[B0[A-Z0-9]{8,9}\]\s*$", "", clean_name)
+    # Strip ASIN markers from ANYWHERE in the string (not just end)
+    # This handles cases like "Title {ASIN.B0xxx} [RipperTag]" where
+    # ripper tag comes after ASIN
+    clean_name = re.sub(r"\s*\{ASIN\.[A-Z0-9]+\}\s*", " ", clean_folder)
+    clean_name = re.sub(r"\s*\[ASIN\.[A-Z0-9]+\]\s*", " ", clean_name)
+    clean_name = re.sub(r"\s*\[B0[A-Z0-9]{8,9}\]\s*", " ", clean_name)
+    # Collapse multiple spaces after ASIN removal
+    clean_name = re.sub(r"\s{2,}", " ", clean_name).strip()
 
     # Extract ripper tag if present - can be [Tag] or {Tag} format
     ripper_match = re.search(r"\[([^\]]+)\]\s*$", clean_name)
@@ -442,13 +446,18 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
     # Use the naming module's normalizer for consistent series extraction
     normalized = normalize_audnex_book(audnex_data)
 
-    # Extract author from Audnex (prefer first author)
+    # Extract author from Audnex - ALWAYS prefer Audnex author over parsed author
+    # This handles Libation format where title/author are swapped ("Title - Author")
+    # versus MAM format ("Author - Title")
     authors = audnex_data.get("authors", [])
-    if authors and (parsed.author == "Unknown" or not parsed.author):
+    if authors:
         first_author = authors[0].get("name", "")
-        if first_author:
+        if first_author and first_author != parsed.author:
+            logger.info(
+                f"Enriched author from Audnex: {first_author}"
+                + (f" (was: {parsed.author})" if parsed.author and parsed.author != "Unknown" else "")
+            )
             parsed.author = first_author
-            logger.info(f"Enriched author from Audnex: {first_author}")
 
     # Apply series info from normalized data
     # ALWAYS prefer Audnex series over parsed series - Audnex is authoritative
@@ -471,10 +480,14 @@ def enrich_from_audnex(parsed: ParsedFolderName, asin: str) -> ParsedFolderName:
             )
         parsed.series_position = normalized.series_position
 
-    # Apply title from normalized data (uses display_title which handles swaps)
-    if normalized.display_title and (parsed.title in ("Unknown", "") or not parsed.title):
+    # Apply title from normalized data - ALWAYS prefer Audnex title
+    # This handles Libation format where title/author are swapped
+    if normalized.display_title and normalized.display_title != parsed.title:
+        logger.info(
+            f"Enriched title from Audnex: {normalized.display_title}"
+            + (f" (was: {parsed.title})" if parsed.title and parsed.title not in ("Unknown", "") else "")
+        )
         parsed.title = normalized.display_title
-        logger.info(f"Enriched title from Audnex: {normalized.display_title}")
 
     # Extract year from release date if missing
     release_date = audnex_data.get("releaseDate")
