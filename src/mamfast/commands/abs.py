@@ -594,17 +594,41 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                     )
 
                     # In dry-run, compute what files would be renamed to
+                    # Multi-file books preserve track numbers (e.g., " - 01")
                     rename_map: dict[str, str] = {}
+                    audio_exts = {".m4b", ".m4a", ".mp3", ".ogg", ".flac", ".opus"}
+                    audio_count = sum(
+                        1
+                        for f in source_folder.iterdir()
+                        if f.is_file() and f.suffix.lower() in audio_exts
+                    )
+                    is_multi_file = audio_count > 1
+
                     if args.dry_run and r.parsed:
                         try:
                             parsed = r.parsed
+                            base_clean = build_clean_file_name(parsed, extension="")
                             for f in source_folder.iterdir():
                                 if not f.is_file() or should_ignore(f.name, ignore_patterns):
                                     continue
                                 ext = f.suffix.lower()
                                 if f.name.lower().endswith(".metadata.json"):
                                     ext = ".metadata.json"
-                                clean_name = build_clean_file_name(parsed, extension=ext)
+
+                                # For multi-file audio, extract and preserve track suffix
+                                track_suffix = ""
+                                if is_multi_file and ext in audio_exts:
+                                    import re as re_cli
+
+                                    track_match = re_cli.search(r"[\s_-]+(\d{1,3})$", f.stem)
+                                    if track_match:
+                                        track_num = track_match.group(1)
+                                        track_suffix = f" - {int(track_num):02d}"
+                                    else:
+                                        # No track number - skip rename preview
+                                        continue
+
+                                clean_name = f"{base_clean}{track_suffix}{ext}"
                                 if f.name != clean_name:
                                     rename_map[f.name] = clean_name
                         except (ValueError, KeyError):
