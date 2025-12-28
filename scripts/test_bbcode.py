@@ -24,6 +24,7 @@ from mamfast.metadata import (
     fetch_audnex_book,
     render_bbcode_description,
 )
+from mamfast.utils.validation import validate_asin
 
 
 def test_html_to_bbcode(html: str) -> None:
@@ -89,6 +90,7 @@ Examples:
     parser.add_argument(
         "asin",
         nargs="?",
+        type=validate_asin,
         help="ASIN to fetch and test",
     )
     parser.add_argument(
@@ -112,7 +114,7 @@ Examples:
         if not args.json.exists():
             console.print(f"[red]File not found: {args.json}[/red]")
             return 1
-        with open(args.json) as f:
+        with open(args.json, encoding="utf-8") as f:
             audnex_data = json.load(f)
         asin = audnex_data.get("asin", "UNKNOWN")
         test_full_render(asin, audnex_data)
