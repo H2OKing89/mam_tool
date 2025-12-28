@@ -388,7 +388,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             metadata_json_fallback=False,
         )
         print_info("Metadata.json generation disabled (--no-metadata)")
-    elif abs_config.import_settings.generate_metadata_json:
+    elif import_settings.generate_metadata_json:
         print_info("Metadata.json generation enabled")
 
     if args.dry_run:
