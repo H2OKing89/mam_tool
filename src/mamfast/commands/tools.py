@@ -154,7 +154,8 @@ def cmd_tools_mamff(args: argparse.Namespace) -> int:
         audnex_chapters=audnex_chapters,
     )
 
-    mam_data = build_mam_json(release, audnex_chapters=audnex_chapters)
+    # audnex_chapters already on release; use it from there
+    mam_data = build_mam_json(release)
 
     if not mam_data.get("title"):
         print_error("Failed to generate MAM JSON (no title)")
