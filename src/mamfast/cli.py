@@ -172,15 +172,14 @@ def validate_asin_callback(value: str | None) -> str | None:
     if value is None:
         return None
 
-    from mamfast.utils.validation import ASIN_PATTERN
+    import argparse
 
-    value = value.upper().strip()
-    if not ASIN_PATTERN.match(value):
-        raise typer.BadParameter(
-            f"Invalid ASIN format: '{value}'. "
-            "ASINs are 10 characters starting with 'B' (e.g., B0DK9T5P28)"
-        )
-    return value
+    from mamfast.utils.validation import validate_asin
+
+    try:
+        return validate_asin(value)
+    except argparse.ArgumentTypeError as e:
+        raise typer.BadParameter(str(e)) from e
 
 
 # Type alias for ASIN arguments
@@ -1437,7 +1436,15 @@ def libation_books(
     """
     from mamfast.commands.libation import cmd_libation_books
 
-    args = get_args(ctx, status=status.value, format=format_.value, limit=limit, command="libation")
+    # Map enum to handler's expected filter values
+    status_mapping = {
+        BookStatus.all: None,
+        BookStatus.downloaded: "downloaded",
+        BookStatus.not_downloaded: "pending",
+        BookStatus.error: "error",
+    }
+    status_value = status_mapping.get(status)
+    args = get_args(ctx, status=status_value, format=format_.value, limit=limit, command="libation")
     result = cmd_libation_books(args)
     raise typer.Exit(result)
 
@@ -1499,7 +1506,17 @@ def libation_set_status(
     """
     from mamfast.commands.libation import cmd_libation_set_status
 
-    args = get_args(ctx, asin=asin, status=status.value, yes=yes, command="libation")
+    # Map status enum to handler's expected flags
+    downloaded = status == SetStatusValue.downloaded
+    not_downloaded = status == SetStatusValue.not_downloaded
+    args = get_args(
+        ctx,
+        asins=[asin],
+        downloaded=downloaded,
+        not_downloaded=not_downloaded,
+        yes=yes,
+        command="libation",
+    )
     result = cmd_libation_set_status(args)
     raise typer.Exit(result)
 
@@ -1530,7 +1547,9 @@ def libation_convert(
     """
     from mamfast.commands.libation import cmd_libation_convert
 
-    args = get_args(ctx, asin=asin, quality=quality, yes=yes, command="libation")
+    # Handler expects asins as a list
+    asins = [asin] if asin else []
+    args = get_args(ctx, asins=asins, quality=quality, yes=yes, command="libation")
     result = cmd_libation_convert(args)
     raise typer.Exit(result)
 

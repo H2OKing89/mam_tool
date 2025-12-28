@@ -104,13 +104,15 @@ The MAMFast CLI has been **migrated from argparse to Typer** with full Rich inte
 **Solution**: Improved help text descriptions for clarity.
 
 **Before**:
-```
+
+```text
 prepare:
   --asin ASIN  Process specific release by ASIN only
 ```
 
 **After**:
-```
+
+```text
 prepare:
   -a, --asin ASIN  Process only the release with this ASIN (format: B0XXXXXXXXX)
 ```
@@ -131,7 +133,7 @@ prepare:
 
 **Solution**: All ASIN arguments now use uppercase `ASIN` metavar.
 
-```
+```text
 abs-check-duplicate ASIN        # uppercase ✓
 state retry ASIN                # uppercase ✓
 prepare --asin ASIN             # uppercase ✓
@@ -235,7 +237,7 @@ Commands consistently return:
 
 ## Appendix: Full Command Tree
 
-```
+```text
 mamfast
 ├── Global Options:
 │   ├── -h, --help
@@ -320,7 +322,7 @@ mamfast
 
 ## Architecture After Migration
 
-```
+```text
 mamfast (entrypoint)
     │
     ├── cli.py (Typer)          ← Main CLI, beautiful Rich output

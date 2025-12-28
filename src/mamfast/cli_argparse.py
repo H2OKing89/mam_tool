@@ -329,6 +329,12 @@ Libation Management:
         metavar="ASIN",
         help="Preview specific release by ASIN only (format: B0XXXXXXXXX)",
     )
+    dry_run_parser.add_argument(
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output as JSON",
+    )
     dry_run_parser.set_defaults(func=cmd_dry_run)
 
     # -------------------------------------------------------------------------
@@ -357,6 +363,12 @@ Libation Management:
         "--include-processed",
         action="store_true",
         help="Include already processed releases in scan",
+    )
+    duplicates_parser.add_argument(
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output as JSON",
     )
     duplicates_parser.set_defaults(func=cmd_check_duplicates)
 

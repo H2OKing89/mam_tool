@@ -464,6 +464,7 @@ def cmd_libation_liberate(args: argparse.Namespace) -> int:
     from mamfast.config import reload_settings
 
     asin = getattr(args, "asin", None)
+    skip_confirm = getattr(args, "yes", False)
 
     title = "Download Audiobooks"
     if asin:
@@ -483,6 +484,7 @@ def cmd_libation_liberate(args: argparse.Namespace) -> int:
                 "Use --asin XXXXXX to download a specific book",
                 "Use --force to re-download already liberated books",
                 "Downloads are saved to Libation's configured Books folder",
+                "Use --yes / -y to skip confirmation prompt",
             ]
         )
 
@@ -536,6 +538,15 @@ def cmd_libation_liberate(args: argparse.Namespace) -> int:
         console.print(f"  [yellow]![/] Could not check status: {e}")
         console.print("  [dim]Proceeding with liberate anyway...[/]")
         pending = 0  # Unknown
+
+    # Confirmation prompt (unless --yes or dry-run)
+    if not skip_confirm and not asin and pending > 0:
+        from rich.prompt import Confirm
+
+        console.print()
+        if not Confirm.ask(f"[yellow]Download {pending} pending book(s)?[/] This may take a while"):
+            console.print("[dim]Cancelled.[/]")
+            return 0
 
     # Run liberate with progress
     console.print(f"\n[bold]Downloading {'book' if asin else 'audiobooks'}...[/]")
