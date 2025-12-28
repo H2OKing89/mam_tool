@@ -381,6 +381,7 @@ def run_liberate_with_progress(
     *,
     verbose: bool = False,
     asin: str | None = None,
+    extra_args: list[str] | None = None,
 ) -> LiberateProgressResult:
     """Run liberate with smart progress display.
 
@@ -398,6 +399,7 @@ def run_liberate_with_progress(
         console: Rich console instance
         verbose: If True and on TTY, passthrough Libation's progress bar
         asin: Optional specific ASIN to liberate
+        extra_args: Optional additional args to pass to liberate (e.g., ["-p", "-f"])
 
     Returns:
         LiberateProgressResult with success status and log path
@@ -414,6 +416,11 @@ def run_liberate_with_progress(
         cmd.append("-t")  # Allocate TTY for Libation's progress bar
 
     cmd.extend([settings.libation_container, "/libation/LibationCli", "liberate"])
+
+    # Add extra args before ASIN (flags like -p, -f, -o)
+    if extra_args:
+        cmd.extend(extra_args)
+
     if asin:
         cmd.append(asin)
 
