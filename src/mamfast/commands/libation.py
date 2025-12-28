@@ -316,13 +316,13 @@ def _export_library(container: str) -> list[dict[str, Any]]:
 
     # Read the exported JSON
     try:
-        read_result = docker("exec", container, "cat", export_path)
+        read_result = docker("exec", container, "cat", export_path, timeout=30)
         books = json.loads(read_result.stdout)
         return list(books) if isinstance(books, list) else []
     finally:
         # Cleanup
         with contextlib.suppress(CmdError):
-            docker("exec", container, "rm", "-f", export_path)
+            docker("exec", container, "rm", "-f", export_path, timeout=10)
 
 
 def _get_library_status(books: list[dict[str, Any]]) -> dict[str, int]:
@@ -542,13 +542,14 @@ def cmd_libation_liberate(args: argparse.Namespace) -> int:
         cmd_args.append("-f")
 
     # Use longer timeout for downloads (4 hours)
+    # Note: ok_codes=(0, 1) allows exit code 1 for partial success/warnings
     with console.status(
         f"  Downloading {pending if pending else 'audiobooks'}...",
         spinner="dots",
     ):
         result = _run_libation_cmd(container, *cmd_args, timeout=14400, ok_codes=(0, 1))
 
-    if result.returncode == 0:
+    if result.success:
         console.print("  [green]✓[/] Download complete")
 
         # Parse output for completed books
@@ -761,7 +762,7 @@ def cmd_libation_export(args: argparse.Namespace) -> int:
 
     # Copy from container to host
     try:
-        docker("cp", f"{container}:{container_path}", str(output_path))
+        docker("cp", f"{container}:{container_path}", str(output_path), timeout=30)
         console.print(f"  [green]✓[/] Exported to: {output_path}")
 
         # Show file size
@@ -776,7 +777,7 @@ def cmd_libation_export(args: argparse.Namespace) -> int:
     finally:
         # Cleanup
         with contextlib.suppress(CmdError):
-            docker("exec", container, "rm", "-f", container_path)
+            docker("exec", container, "rm", "-f", container_path, timeout=10)
 
     return 0
 
@@ -1104,7 +1105,7 @@ def cmd_libation_books(args: argparse.Namespace) -> int:
 
     if len(filtered_books) > limit:
         console.print(
-            f"\n[dim]Showing {limit} of {len(filtered_books)} books. " "Use --limit to see more.[/]"
+            f"\n[dim]Showing {limit} of {len(filtered_books)} books. Use --limit to see more.[/]"
         )
 
     # Show summary stats
@@ -1420,8 +1421,7 @@ Tip: Use 'mamfast --dry-run libation <cmd>' to preview without changes.
         "scan",
         help="Scan Audible library for new purchases",
         description=(
-            "Check your Audible account for new book purchases "
-            "and add them to Libation's database."
+            "Check your Audible account for new book purchases and add them to Libation's database."
         ),
         epilog="""
 What this does:
