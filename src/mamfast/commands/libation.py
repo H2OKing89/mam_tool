@@ -1047,8 +1047,9 @@ def cmd_libation_books(args: argparse.Namespace) -> int:
         return 0
 
     # Build and display table
+    shown = min(limit, len(filtered_books))
     table = Table(
-        title=f"[bold]Audiobooks[/] ({len(filtered_books)} total, showing {min(limit, len(filtered_books))})",
+        title=f"[bold]Audiobooks[/] ({len(filtered_books)} total, showing {shown})",
         show_header=True,
         header_style="bold cyan",
         row_styles=["", "dim"],
@@ -1107,7 +1108,10 @@ def cmd_libation_books(args: argparse.Namespace) -> int:
     console.print(table)
 
     if len(filtered_books) > limit:
-        console.print(f"\n[dim]Showing {limit} of {len(filtered_books)} books. Use --limit to see more.[/]")
+        console.print(
+            f"\n[dim]Showing {limit} of {len(filtered_books)} books. "
+            "Use --limit to see more.[/]"
+        )
 
     # Show summary stats
     status_counts = _get_library_status(filtered_books)
