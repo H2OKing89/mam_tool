@@ -748,10 +748,14 @@ class TestImportSingle:
         self, temp_staging: Path, temp_library: Path, mock_asin_index: dict[str, AsinEntry]
     ) -> None:
         """Skip when ASIN already in index."""
-        # Add existing book to index
+        # Add existing book to index with a real folder to avoid stale-path skip
+        existing = temp_library / "Author" / "Existing Book [B08G9PRS1K]"
+        existing.mkdir(parents=True)
+        (existing / "existing.m4b").write_text("old")
+
         mock_asin_index["B08G9PRS1K"] = AsinEntry(
             asin="B08G9PRS1K",
-            path="/existing/path",
+            path=str(existing),
             library_item_id="li_existing",
             title="Existing Book",
             author="Author",
@@ -857,10 +861,14 @@ class TestImportBatch:
         self, temp_staging: Path, temp_library: Path, mock_asin_index: dict[str, AsinEntry]
     ) -> None:
         """Batch handles duplicates correctly."""
-        # Add one existing book to index
+        # Add one existing book to index with a real folder
+        existing = temp_library / "Author" / "Book 2 [B000000002]"
+        existing.mkdir(parents=True)
+        (existing / "existing.m4b").write_text("old")
+
         mock_asin_index["B000000002"] = AsinEntry(
             asin="B000000002",
-            path="/path",
+            path=str(existing),
             library_item_id="li_dup",
             title="Existing",
             author="Author",
@@ -1737,6 +1745,18 @@ class TestImportSingleWithTrumping:
     ) -> None:
         """Trumping does not run when trump_prefs is None."""
         # Create incoming book with same ASIN as existing
+        existing = temp_library / "Andy Weir" / "Project Hail Mary"
+        existing.mkdir(parents=True)
+        (existing / "existing.m4b").write_text("old")
+
+        mock_asin_index["B08G9PRS1K"] = AsinEntry(
+            asin="B08G9PRS1K",
+            path=str(existing),
+            library_item_id="li_existing1",
+            title="Project Hail Mary",
+            author="Andy Weir",
+        )
+
         folder = create_audiobook_folder(
             temp_staging,
             "Andy Weir - Project Hail Mary (2021) {ASIN.B08G9PRS1K}",
@@ -1759,6 +1779,18 @@ class TestImportSingleWithTrumping:
     ) -> None:
         """Trumping does not run when TrumpPrefs.enabled is False."""
         from mamfast.abs.trumping import TrumpPrefs
+
+        existing = temp_library / "Andy Weir" / "Project Hail Mary"
+        existing.mkdir(parents=True)
+        (existing / "existing.m4b").write_text("old")
+
+        mock_asin_index["B08G9PRS1K"] = AsinEntry(
+            asin="B08G9PRS1K",
+            path=str(existing),
+            library_item_id="li_existing1",
+            title="Project Hail Mary",
+            author="Andy Weir",
+        )
 
         folder = create_audiobook_folder(
             temp_staging,
@@ -2175,11 +2207,15 @@ class TestImportSingleWithCleanup:
         book_folder.mkdir()
         (book_folder / "book.m4b").write_text("audio")
 
-        # ASIN already exists in index
+        # ASIN already exists in index with an on-disk folder
+        existing = library / "Author Name" / "Book Title {ASIN.B012345678}"
+        existing.mkdir(parents=True)
+        (existing / "existing.m4b").touch()
+
         asin_index = {
             "B012345678": AsinEntry(
                 asin="B012345678",
-                path="/audiobooks/existing",
+                path=str(existing),
                 library_item_id="li_123",
                 title="Book Title",
                 author="Author Name",
