@@ -1664,15 +1664,18 @@ def build_mam_json(
             }
         ]
         # Also add secondary series if present (normalized only handles primary)
+        # but skip if it's a duplicate after cleaning (e.g., chronological vs publication order)
         secondary = audnex.get("seriesSecondary")
         if secondary and secondary.get("name"):
             secondary_name = filter_series(secondary.get("name", ""), naming_config=naming_config)
-            series_entries.append(
-                {
-                    "name": secondary_name,
-                    "number": secondary.get("position", ""),
-                }
-            )
+            # Only add if distinct from primary (case-insensitive)
+            if secondary_name and secondary_name.lower() != cleaned_series.lower():
+                series_entries.append(
+                    {
+                        "name": secondary_name,
+                        "number": secondary.get("position", ""),
+                    }
+                )
         logger.debug(
             "Series from normalized book: %s",
             [s.get("name") for s in series_entries],
