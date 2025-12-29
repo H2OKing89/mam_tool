@@ -163,10 +163,27 @@ class RuntimeContext:
 
     @property
     def abs_client(self) -> AbsClient:
-        """Get or create ABS client."""
+        """Get or create ABS client.
+
+        Returns:
+            Initialized ABS client (lazy-loaded on first access).
+
+        Raises:
+            ValueError: If ABS configuration is missing.
+            ConnectionError: If ABS server is unreachable.
+        """
         if self._abs_client is None:
-            from mamfast.abs.client import AbsClient
-            self._abs_client = AbsClient.from_config(self.settings.audiobookshelf)
+            if not self.settings or not self.settings.audiobookshelf:
+                raise ValueError("ABS configuration not found in settings")
+            try:
+                from mamfast.abs.client import AbsClient
+                self._abs_client = AbsClient.from_config(self.settings.audiobookshelf)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Failed to initialize ABS client: {e}"
+                )
+                raise
         return self._abs_client
 
     def close(self) -> None:
@@ -290,6 +307,19 @@ mamfast abs resolve-asins
 | `abs-check-duplicate` | `abs check-asin` | It's ASIN existence lookup, not duplicate detection |
 | `abs-trump-check` | `abs trump-preview` | Clearer that it's a preview |
 
+**Global Flag Ordering**: Global flags (`--dry-run`, `--verbose`, `--config`) must continue to go **BEFORE** the subcommand:
+
+```bash
+# Old syntax (still works via aliases):
+mamfast --dry-run abs-import
+
+# New syntax (after migration):
+mamfast --dry-run abs import  # Flag BEFORE subcommand
+
+# ❌ WRONG - Flag goes before subcommand, not after:
+mamfast abs import --dry-run  # This won't work
+```
+
 **Migration**:
 
 1. Create `abs_app = typer.Typer()` sub-app
@@ -314,7 +344,9 @@ def abs_import_deprecated(ctx: typer.Context, ...) -> None:
 - [ ] All ABS commands work under `abs <verb>` syntax
 - [ ] Old `abs-*` commands still work (hidden, with warning)
 - [ ] `mamfast abs --help` shows all ABS subcommands
-- [ ] Tests updated to use new syntax
+- [ ] Global flags remain BEFORE subcommand (e.g., `mamfast --dry-run abs import`)
+- [ ] Tests updated to use new syntax and verify flag ordering
+- [ ] Documentation and examples updated with correct flag placement
 
 ---
 
@@ -660,21 +692,32 @@ Total estimated effort: ~2-3 sprints for Phase 1A-2, minimal disruption to users
 
 ### Import Performance Rule
 
+Distinguish between **type-only imports** and **runtime imports**:
+
 ```python
-# ❌ BAD - Heavy import at module level
-from mamfast.abs.client import AbsClient
-from httpx import Client
+# ✅ GOOD - Type-only imports at module level (guarded by TYPE_CHECKING)
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mamfast.abs.client import AbsClient  # Type annotation only
 
 @app.command()
-def my_command():
-    client = AbsClient(...)
-
-# ✅ GOOD - Heavy import inside function
-@app.command()
-def my_command():
+def my_command(ctx: typer.Context) -> None:
+    # Heavy runtime import happens inside function
     from mamfast.abs.client import AbsClient
     client = AbsClient(...)
+
+# ❌ BAD - Heavy runtime import at module level
+from mamfast.abs.client import AbsClient  # Imported even if command never runs
+from httpx import Client  # Slow startup
+
+@app.command()
+def my_command():
+    client = AbsClient(...)  # Already imported, but could have failed earlier
 ```
+
+**Rule**: Type-only imports may use `TYPE_CHECKING` guard at module level; all heavy runtime imports must defer to inside command functions or lazy-loaded properties.
 
 ### RuntimeContext Usage
 

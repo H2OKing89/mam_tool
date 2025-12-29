@@ -172,7 +172,7 @@ class TestCliIntegration:
         args = parser.parse_args(["validate", "--asin", "B0DK9T5P28"])
         assert args.asin == "B0DK9T5P28"
 
-    def test_dry_run_asin_validation(self) -> None:
+    def test_preview_naming_asin_validation(self) -> None:
         """Test preview-naming command validates ASIN."""
         from mamfast.cli_argparse import build_parser
 
