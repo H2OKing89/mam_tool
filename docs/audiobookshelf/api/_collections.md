@@ -131,7 +131,7 @@ ID | The ID of the collection.
 
 Parameter | Type | Description
 --------- | ---- | -----------
-`include` | String | A comma separated list of what to include with the library item. The only current option is `rssfeed`.
+`include` | String | A comma-separated list of what to include with the library item. The only current option is `rssfeed`.
 
 ### Response
 
