@@ -269,7 +269,7 @@ async def main() -> int:
         return 1
 
     # Output directory (gitignored)
-    output_dir = Path(__file__).parent.parent / "samples" / "test_data"
+    output_dir = Path(__file__).parent.parent.parent / "samples" / "test_data"
 
     fetcher = TestDataFetcher(abs_url, abs_token, output_dir)
 

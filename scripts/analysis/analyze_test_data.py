@@ -16,12 +16,35 @@ import sys
 from pathlib import Path
 
 
+def _clean_series_name(name: str) -> str:
+    """Strip order suffixes from series names for comparison.
+
+    Removes patterns like "[chronological order]", "[publication order]",
+    "(Release Order)", etc.
+
+    Args:
+        name: Series name to clean
+
+    Returns:
+        Cleaned series name
+    """
+    result = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", name)
+    result = re.sub(
+        r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
+        "",
+        result,
+        flags=re.IGNORECASE,
+    )
+    return result
+
+
 def load_data() -> list[dict]:
     """Load combined metadata."""
-    data_file = Path(__file__).parent.parent / "samples" / "test_data" / "combined_metadata.json"
+    repo_root = Path(__file__).parent.parent.parent
+    data_file = repo_root / "samples" / "test_data" / "combined_metadata.json"
     if not data_file.exists():
         print(f"❌ Test data not found: {data_file}")
-        print("Run: python scripts/fetch_test_data.py")
+        print("Run: python scripts/data_gathering/fetch_test_data.py")
         sys.exit(1)
 
     data = json.loads(data_file.read_text())
@@ -58,20 +81,8 @@ def find_duplicates() -> None:
             s_name = secondary.get("name", "")
 
             # Check if they'd be duplicates after stripping [*order]
-            p_clean = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", p_name)
-            s_clean = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", s_name)
-            p_clean = re.sub(
-                r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
-                "",
-                p_clean,
-                flags=re.IGNORECASE,
-            )
-            s_clean = re.sub(
-                r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
-                "",
-                s_clean,
-                flags=re.IGNORECASE,
-            )
+            p_clean = _clean_series_name(p_name)
+            s_clean = _clean_series_name(s_name)
 
             if p_clean.lower() == s_clean.lower():
                 duplicates.append(
@@ -111,22 +122,8 @@ def find_series_variants() -> None:
             p_name = primary.get("name", "")
             s_name = secondary.get("name", "")
 
-            import re
-
-            p_clean = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", p_name)
-            s_clean = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", s_name)
-            p_clean = re.sub(
-                r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
-                "",
-                p_clean,
-                flags=re.IGNORECASE,
-            )
-            s_clean = re.sub(
-                r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
-                "",
-                s_clean,
-                flags=re.IGNORECASE,
-            )
+            p_clean = _clean_series_name(p_name)
+            s_clean = _clean_series_name(s_name)
 
             if p_clean.lower() != s_clean.lower():
                 variants.append(
@@ -192,22 +189,8 @@ def show_stats() -> None:
             p_name = primary.get("name", "")
             s_name = secondary.get("name", "")
 
-            import re
-
-            p_clean = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", p_name)
-            s_clean = re.sub(r"\s*\[[^\]]*[Oo]rder\]$", "", s_name)
-            p_clean = re.sub(
-                r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
-                "",
-                p_clean,
-                flags=re.IGNORECASE,
-            )
-            s_clean = re.sub(
-                r"\s*\((?:Publication|Reading|Chronological|Release)\s*Order\)$",
-                "",
-                s_clean,
-                flags=re.IGNORECASE,
-            )
+            p_clean = _clean_series_name(p_name)
+            s_clean = _clean_series_name(s_name)
 
             if p_clean.lower() == s_clean.lower():
                 duplicates += 1
