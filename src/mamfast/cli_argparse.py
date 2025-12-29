@@ -23,9 +23,9 @@ from mamfast.commands import (  # Import all command handlers from the commands 
     cmd_check_suspicious,
     cmd_config,
     cmd_discover,
-    cmd_dry_run,
     cmd_metadata,
     cmd_prepare,
+    cmd_preview_naming,
     cmd_run,
     cmd_scan,
     cmd_state,
@@ -308,34 +308,34 @@ Libation Management:
     validate_config_parser.set_defaults(func=cmd_validate_config)
 
     # -------------------------------------------------------------------------
-    # dry-run: Preview naming transformations
+    # preview-naming: Preview naming transformations
     # -------------------------------------------------------------------------
-    dry_run_parser = subparsers.add_parser(
-        "dry-run",
+    preview_naming_parser = subparsers.add_parser(
+        "preview-naming",
         help="Preview naming transformations without making changes",
         epilog="Shows before/after for title filtering and folder renaming.",
     )
-    dry_run_parser.add_argument(
+    preview_naming_parser.add_argument(
         "-n",
         "--limit",
         type=int,
         default=20,
         help="Maximum number of releases to process (default: 20)",
     )
-    dry_run_parser.add_argument(
+    preview_naming_parser.add_argument(
         "-a",
         "--asin",
         type=validate_asin,
         metavar="ASIN",
         help="Preview specific release by ASIN only (format: B0XXXXXXXXX)",
     )
-    dry_run_parser.add_argument(
+    preview_naming_parser.add_argument(
         "-j",
         "--json",
         action="store_true",
         help="Output as JSON",
     )
-    dry_run_parser.set_defaults(func=cmd_dry_run)
+    preview_naming_parser.set_defaults(func=cmd_preview_naming)
 
     # -------------------------------------------------------------------------
     # check-duplicates: Find potential duplicate releases

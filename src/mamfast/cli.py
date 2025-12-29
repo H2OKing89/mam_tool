@@ -589,8 +589,8 @@ def validate_config(ctx: typer.Context) -> None:
     raise typer.Exit(result)
 
 
-@app.command("dry-run", rich_help_panel=DIAG_COMMANDS)
-def dry_run_cmd(
+@app.command("preview-naming", rich_help_panel=DIAG_COMMANDS)
+def preview_naming_cmd(
     ctx: typer.Context,
     limit: Annotated[
         int,
@@ -608,15 +608,15 @@ def dry_run_cmd(
     without making any changes.
 
     [bold]Examples:[/]
-      mamfast dry-run              # Preview first 20 releases
-      mamfast dry-run -n 50        # Preview 50 releases
-      mamfast dry-run -a B0DK9T5P28 # Preview specific ASIN
-      mamfast dry-run --json       # JSON output
+      mamfast preview-naming              # Preview first 20 releases
+      mamfast preview-naming -n 50        # Preview 50 releases
+      mamfast preview-naming -a B0DK9T5P28 # Preview specific ASIN
+      mamfast preview-naming --json       # JSON output
     """
-    from mamfast.commands import cmd_dry_run
+    from mamfast.commands import cmd_preview_naming
 
-    args = get_args(ctx, limit=limit, asin=asin, json=json_output, command="dry-run")
-    result = cmd_dry_run(args)
+    args = get_args(ctx, limit=limit, asin=asin, json=json_output, command="preview-naming")
+    result = cmd_preview_naming(args)
     raise typer.Exit(result)
 
 
