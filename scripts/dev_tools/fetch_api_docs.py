@@ -67,7 +67,7 @@ AUDNEX_ENDPOINTS = [
     ),
     (
         "AUDNEXUS_SPEC.yaml",
-        "https://raw.githubusercontent.com/laxamentumtech/audnexus/main/docs/spec/audnexus.yaml",
+        "https://raw.githubusercontent.com/laxamentumtech/audnexus/refs/heads/main/docs/spec/audnexus.yaml",
     ),
     (
         "AUDNEX_ARCHITECTURE.md",
