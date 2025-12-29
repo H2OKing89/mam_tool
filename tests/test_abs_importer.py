@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -1874,6 +1875,47 @@ class TestImportSingleWithTrumping:
 
         # Multi-file existing → trumping skipped → duplicate_policy=skip
         assert result.status == "duplicate"
+
+    def test_trumping_stale_index_missing_folder_skips_trump(
+        self,
+        temp_staging: Path,
+        temp_library: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Stale ABS index entry should warn and proceed instead of crashing."""
+        from mamfast.abs.trumping import TrumpPrefs
+
+        missing_path = temp_library / "Ghost Author" / "Missing Book"
+
+        asin_index = {
+            "B0MISSING1": AsinEntry(
+                asin="B0MISSING1",
+                path=str(missing_path),
+                library_item_id="li_missing",
+                title="Missing Book",
+                author="Ghost Author",
+            ),
+        }
+
+        folder = create_audiobook_folder(
+            temp_staging,
+            "Ghost Author - The Return (2024) {ASIN.B0MISSING1}",
+        )
+
+        prefs = TrumpPrefs(enabled=True, archive_root=Path("/archive"))
+
+        with caplog.at_level(logging.WARNING):
+            result = import_single(
+                staging_folder=folder,
+                library_root=temp_library,
+                asin_index=asin_index,
+                duplicate_policy="skip",
+                trump_prefs=prefs,
+                dry_run=True,
+            )
+
+        assert result.status == "success"
+        assert "folder is missing" in caplog.text
 
 
 class TestBatchImportResultTrumpCounts:
