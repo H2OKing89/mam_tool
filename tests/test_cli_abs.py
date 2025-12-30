@@ -1,8 +1,14 @@
-"""Tests for Audiobookshelf CLI commands."""
+"""Tests for Audiobookshelf CLI commands.
+
+⚠️ NOTE: Some tests in this file use the deprecated argparse CLI (cli_argparse)
+for backward compatibility testing. The main CLI has been migrated to Typer.
+Parser tests using argparse will be removed in v2.0.
+"""
 
 from __future__ import annotations
 
 import argparse
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,12 +16,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import from argparse CLI for parser tests (Typer CLI uses different testing approach)
-from mamfast.cli_argparse import build_parser
+# This import triggers a deprecation warning which is expected
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    from mamfast.cli_argparse import build_parser
 from mamfast.commands.abs import cmd_abs_init, should_ignore
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestAbsCliParser:
-    """Tests for ABS command parser setup."""
+    """Tests for ABS command parser setup.
+
+    ⚠️ DEPRECATED: These tests use the deprecated argparse CLI.
+    They will be removed in v2.0 when cli_argparse is removed.
+    """
 
     def test_abs_init_parser_exists(self) -> None:
         """Test abs-init subcommand is registered."""
@@ -173,6 +187,9 @@ class TestAbsInitCommand:
         mock_client = MagicMock()
         mock_client.authorize.return_value = mock_user
         mock_client.get_libraries.return_value = [mock_lib]
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -183,7 +200,8 @@ class TestAbsInitCommand:
         assert result == 0
         mock_client.authorize.assert_called_once()
         mock_client.get_libraries.assert_called_once()
-        mock_client.close.assert_called_once()
+        # With context manager, close is called via __exit__
+        mock_client.__exit__.assert_called_once()
 
     def test_abs_init_auth_failure(
         self,
@@ -198,6 +216,9 @@ class TestAbsInitCommand:
 
         mock_client = MagicMock()
         mock_client.authorize.side_effect = AbsAuthError("Invalid API key")
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -220,6 +241,9 @@ class TestAbsInitCommand:
 
         mock_client = MagicMock()
         mock_client.authorize.side_effect = AbsConnectionError("Connection refused")
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -250,6 +274,9 @@ class TestAbsInitCommand:
         mock_client = MagicMock()
         mock_client.authorize.return_value = mock_user
         mock_client.get_libraries.return_value = [mock_lib]
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -265,8 +292,13 @@ class TestAbsInitCommand:
 # =============================================================================
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestAbsImportParser:
-    """Tests for abs-import command parser setup."""
+    """Tests for abs-import command parser setup.
+
+    ⚠️ DEPRECATED: These tests use the deprecated argparse CLI.
+    They will be removed in v2.0 when cli_argparse is removed.
+    """
 
     def test_abs_import_parser_exists(self) -> None:
         """Test abs-import subcommand is registered."""
@@ -790,7 +822,7 @@ class TestAbsCheckDuplicateCommand:
         """Test abs-check-duplicate handles missing config file."""
         from mamfast.commands.abs import cmd_abs_check_duplicate
 
-        with patch("mamfast.config.reload_settings") as mock_reload:
+        with patch("mamfast.commands.abs.check.reload_settings") as mock_reload:
             mock_reload.side_effect = FileNotFoundError("config not found")
             result = cmd_abs_check_duplicate(args)
             assert result == 1
@@ -802,7 +834,7 @@ class TestAbsCheckDuplicateCommand:
         mock_settings = MagicMock()
         mock_settings.audiobookshelf.enabled = False
 
-        with patch("mamfast.config.reload_settings", return_value=mock_settings):
+        with patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings):
             result = cmd_abs_check_duplicate(args)
             assert result == 1
 
@@ -824,9 +856,12 @@ class TestAbsCheckDuplicateCommand:
         mock_settings.audiobookshelf.libraries = [mock_lib_config]
 
         with (
-            patch("mamfast.config.reload_settings", return_value=mock_settings),
-            patch("mamfast.abs.AbsClient"),
-            patch("mamfast.abs.build_asin_index", side_effect=Exception("Connection refused")),
+            patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings),
+            patch("mamfast.commands.abs.check.AbsClient"),
+            patch(
+                "mamfast.commands.abs.check.build_asin_index",
+                side_effect=Exception("Connection refused"),
+            ),
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 1  # Error = non-zero
@@ -852,9 +887,9 @@ class TestAbsCheckDuplicateCommand:
         empty_index: dict[str, MagicMock] = {}
 
         with (
-            patch("mamfast.config.reload_settings", return_value=mock_settings),
-            patch("mamfast.abs.AbsClient", return_value=mock_client),
-            patch("mamfast.abs.build_asin_index", return_value=empty_index),
+            patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings),
+            patch("mamfast.commands.abs.check.AbsClient", return_value=mock_client),
+            patch("mamfast.commands.abs.check.build_asin_index", return_value=empty_index),
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 0  # Not found = safe to import
@@ -888,9 +923,9 @@ class TestAbsCheckDuplicateCommand:
         asin_index = {"B0ABCDEFGH": mock_entry}
 
         with (
-            patch("mamfast.config.reload_settings", return_value=mock_settings),
-            patch("mamfast.abs.AbsClient", return_value=mock_client),
-            patch("mamfast.abs.build_asin_index", return_value=asin_index),
+            patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings),
+            patch("mamfast.commands.abs.check.AbsClient", return_value=mock_client),
+            patch("mamfast.commands.abs.check.build_asin_index", return_value=asin_index),
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 1  # Found = duplicate

@@ -127,11 +127,13 @@ class TestIsValidAsin:
         assert is_valid_asin("") is False
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestCliIntegration:
     """Test ASIN validation integrates correctly with CLI parsers.
 
-    Note: These tests use the argparse-based CLI (cli_argparse) for backwards
-    compatibility testing. The main CLI has been migrated to Typer.
+    ⚠️ DEPRECATED: These tests use the deprecated argparse-based CLI (cli_argparse).
+    They will be removed in v2.0 when cli_argparse is removed.
+    The main CLI has been migrated to Typer.
     """
 
     def test_prepare_asin_validation(self) -> None:
