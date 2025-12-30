@@ -14,9 +14,7 @@ from typing import Annotated
 
 import typer
 import yaml
-from rich.panel import Panel
 
-from shelfr import __version__
 from shelfr.console import console as shelfr_console
 from shelfr.utils.validation import validate_asin
 
@@ -108,15 +106,11 @@ class SetStatusValue(str, Enum):
 
 
 def version_callback(value: bool) -> None:
-    """Print version and exit."""
+    """Print version with banner and exit."""
     if value:
-        shelfr_console.print(
-            Panel(
-                f"[bold cyan]shelfr[/] [dim]v{__version__}[/]\n"
-                "[dim]Audiobook library automation[/]",
-                border_style="cyan",
-            )
-        )
+        from shelfr.ui.banner import print_banner
+
+        print_banner(shelfr_console)
         raise typer.Exit()
 
 
@@ -316,7 +310,7 @@ def setup_logging(verbose: bool, config_path: Path) -> None:
 def create_main_callback(app: typer.Typer) -> None:
     """Register the main callback on the app."""
 
-    @app.callback()
+    @app.callback(invoke_without_command=True)
     def main_callback(
         ctx: typer.Context,
         version: Annotated[
@@ -364,6 +358,12 @@ def create_main_callback(app: typer.Typer) -> None:
           mamfast run               Run full pipeline
           mamfast libation guide    Learn about Libation integration
         """
+        # Show banner when no command is invoked (help will be shown after)
+        if ctx.invoked_subcommand is None:
+            from shelfr.ui.banner import print_banner
+
+            print_banner(shelfr_console)
+
         # Store global options in context for commands to access
         # Using dict for backward compatibility during migration
         ctx.ensure_object(dict)

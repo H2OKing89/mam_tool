@@ -95,6 +95,13 @@ register_tools_commands(tools_app)
 
 def main() -> int:
     """Main entry point for the CLI."""
+    # Show banner when help is being shown (no args or --help/-h)
+    if len(sys.argv) == 1 or (len(sys.argv) == 2 and sys.argv[1] in ("--help", "-h")):
+        from shelfr.console import console
+        from shelfr.ui.banner import print_banner
+
+        print_banner(console)
+
     try:
         app()
         return 0
