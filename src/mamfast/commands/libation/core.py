@@ -324,14 +324,16 @@ def cmd_libation_liberate(args: argparse.Namespace) -> int:
         console.print()
         if pending is not None and pending > 0:
             # Known count - show specific prompt
-            if not Confirm.ask(f"[yellow]Download {pending} pending book(s)?[/] This may take a while"):
+            prompt = f"[yellow]Download {pending} pending book(s)?[/] This may take a while"
+            if not Confirm.ask(prompt):
                 console.print("[dim]Cancelled.[/]")
                 return 0
-        elif pending is None:
+        elif pending is None and not Confirm.ask(
+            "[yellow]Download pending books?[/] (count unknown \u2014 may take a while)"
+        ):
             # Unknown count - show generic prompt
-            if not Confirm.ask("[yellow]Download pending books?[/] (count unknown — may take a while)"):
-                console.print("[dim]Cancelled.[/]")
-                return 0
+            console.print("[dim]Cancelled.[/]")
+            return 0
         # If pending == 0, no confirmation needed (already handled earlier)
 
     # Run liberate with progress
