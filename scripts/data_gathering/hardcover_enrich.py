@@ -18,9 +18,10 @@ import platform
 import random
 import re
 import ssl
-import subprocess
 import sys
 import uuid
+
+import sh
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -1794,14 +1795,9 @@ class HardcoverEnricher:
     def _git_commit() -> str | None:
         """Return short git commit if available."""
         try:
-            result = subprocess.run(
-                ["git", "rev-parse", "--short", "HEAD"],
-                capture_output=True,
-                check=True,
-                text=True,
-            )
-            return result.stdout.strip() or None
-        except Exception:
+            result = sh.git("rev-parse", "--short", "HEAD", _ok_code=[0])
+            return result.stdout.decode().strip() or None
+        except (sh.ErrorReturnCode, sh.CommandNotFound, Exception):
             return None
 
     def save_enriched_data(self) -> None:
