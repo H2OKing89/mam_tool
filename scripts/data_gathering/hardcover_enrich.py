@@ -1330,11 +1330,21 @@ class HardcoverEnricher:
             "books": [book.to_dict() for book in self.search_cache.values()],
         }
 
-        with (
-            console.status(f"[bold {COLORS['secondary']}]💾 Saving cache...[/]", spinner="dots"),
-            open(Settings.SEARCH_CACHE_FILE, "w") as f,
-        ):
-            json.dump(cache_data, f, indent=2)
+        # Atomic write to prevent corruption
+        import tempfile
+        Settings.SEARCH_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with console.status(f"[bold {COLORS['secondary']}]💾 Saving cache...[/]", spinner="dots"):
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=Settings.SEARCH_CACHE_FILE.parent,
+                delete=False,
+                encoding="utf-8",
+                suffix=".tmp",
+            ) as tmp:
+                json.dump(cache_data, tmp, indent=2)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp.name, Settings.SEARCH_CACHE_FILE)
 
         save_text = Text()
         save_text.append("💾 ", style="bold")
@@ -1888,16 +1898,39 @@ class HardcoverEnricher:
 
         output_data = self.enriched_schema.to_dict(include_books=False)
 
+        # Atomic writes to prevent corruption
+        import tempfile
         with console.status(
             f"[bold {COLORS['gold']}]💾 Writing enriched data...[/]", spinner="dots12"
         ):
-            with open(Settings.ENRICHED_DATA_FILE, "w") as f:
-                json.dump(output_data, f, indent=2)
+            # Write main enriched data atomically
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=Settings.ENRICHED_DATA_FILE.parent,
+                delete=False,
+                encoding="utf-8",
+                suffix=".tmp",
+            ) as tmp:
+                json.dump(output_data, tmp, indent=2)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp.name, Settings.ENRICHED_DATA_FILE)
 
-            with open(Settings.ENRICHED_BOOKS_FILE, "w") as f_books:
+            # Write JSONL books atomically
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=Settings.ENRICHED_BOOKS_FILE.parent,
+                delete=False,
+                encoding="utf-8",
+                suffix=".tmp",
+            ) as tmp:
                 for book in self.enriched_schema.books:
-                    f_books.write(json.dumps(book.to_dict()) + "\n")
+                    tmp.write(json.dumps(book.to_dict()) + "\n")
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp.name, Settings.ENRICHED_BOOKS_FILE)
 
+            # Write vocab data atomically
             vocab_counters = getattr(self, "_keyword_counters", {}) or {}
             vocab_payload = {
                 "run_id": self.run_id,
@@ -1909,8 +1942,17 @@ class HardcoverEnricher:
                 },
                 "warnings_distribution": dict(vocab_counters.get("content_warnings", Counter())),
             }
-            with open(Settings.ENRICHED_VOCAB_FILE, "w") as f_vocab:
-                json.dump(vocab_payload, f_vocab, indent=2)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=Settings.ENRICHED_VOCAB_FILE.parent,
+                delete=False,
+                encoding="utf-8",
+                suffix=".tmp",
+            ) as tmp:
+                json.dump(vocab_payload, tmp, indent=2)
+                tmp.flush()
+                os.fsync(tmp.fileno())
+            os.replace(tmp.name, Settings.ENRICHED_VOCAB_FILE)
 
         run_file_size = Settings.ENRICHED_DATA_FILE.stat().st_size / 1024
         books_file_size = Settings.ENRICHED_BOOKS_FILE.stat().st_size / 1024
