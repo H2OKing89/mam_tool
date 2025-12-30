@@ -15,6 +15,7 @@ from mamfast.commands.abs._common import (
     console,
     fatal_error,
     print_dry_run,
+    print_error,
     print_header,
     print_info,
     print_step,
@@ -104,8 +105,6 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     errors = validate_import_prerequisites(import_source, abs_library_root)
     if errors:
         for err in errors:
-            from mamfast.commands.abs._common import print_error
-
             print_error(err)
         return 1
     print_success("Prerequisites validated")
@@ -142,9 +141,11 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         user = client.authorize()
         print_success(f"Connected as {user.username}")
     except AbsAuthError as e:
+        client.close()
         fatal_error(f"Authentication failed: {e}")
         return 1
     except (AbsConnectionError, ConnectionError, TimeoutError, OSError) as e:
+        client.close()
         fatal_error(f"Failed to connect to ABS: {e}")
         return 1
 
@@ -205,7 +206,15 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     # Get unknown ASIN policy from config
     unknown_asin_policy_str = abs_config.import_settings.unknown_asin_policy
     # UnknownAsinPolicy enum uses lowercase values (import, quarantine, skip)
-    unknown_asin_policy = UnknownAsinPolicy(unknown_asin_policy_str.lower())
+    try:
+        unknown_asin_policy = UnknownAsinPolicy(unknown_asin_policy_str.lower())
+    except ValueError:
+        allowed = ", ".join([p.value for p in UnknownAsinPolicy])
+        fatal_error(
+            f"Invalid unknown_asin_policy: '{unknown_asin_policy_str}'",
+            f"Allowed values: {allowed}. Update import_settings.unknown_asin_policy in config.yaml",
+        )
+        return 1
     quarantine_path_str = abs_config.import_settings.quarantine_path
     quarantine_path = Path(quarantine_path_str) if quarantine_path_str else None
 
@@ -697,9 +706,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
             print_info(f"Would remain in source directory ({len(simulated_remaining)} folder(s)):")
 
             if simulated_remaining:
-                from rich.tree import Tree as RemainingTree
-
-                remaining_tree = RemainingTree(f"[dim]{import_source}[/dim]")
+                remaining_tree = Tree(f"[dim]{import_source}[/dim]")
                 sorted_remaining = sorted(simulated_remaining, key=lambda p: p.name)
                 for folder in sorted_remaining[:20]:
                     # Color-code by reason
@@ -725,9 +732,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                 pass
 
             if remaining_folder_names:
-                from rich.tree import Tree as RemainingTree
-
-                remaining_tree = RemainingTree(f"[dim]{import_source}[/dim]")
+                remaining_tree = Tree(f"[dim]{import_source}[/dim]")
                 for folder_name in remaining_folder_names[:20]:
                     remaining_tree.add(f"[yellow]{folder_name}[/yellow]")
                 if len(remaining_folder_names) > 20:
