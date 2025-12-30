@@ -10,8 +10,6 @@ import pytest
 
 from mamfast.commands.libation import (
     LibationCommandResult,
-    _get_library_status,
-    _run_libation_cmd,
     add_libation_parser,
     cmd_libation,
     cmd_libation_guide,
@@ -19,9 +17,11 @@ from mamfast.commands.libation import (
     cmd_libation_scan,
     cmd_libation_search,
     cmd_libation_settings,
+    get_library_status,
     print_hint_box,
     print_libation_header,
     print_status_dashboard,
+    run_libation_cmd,
 )
 
 
@@ -46,7 +46,7 @@ class TestLibationCommandResult:
 
 
 class TestGetLibraryStatus:
-    """Tests for _get_library_status helper."""
+    """Tests for get_library_status helper."""
 
     def test_counts_statuses(self) -> None:
         """Test status counting from books list."""
@@ -56,20 +56,20 @@ class TestGetLibraryStatus:
             {"BookStatus": "NotLiberated"},
             {"BookStatus": "Error"},
         ]
-        status = _get_library_status(books)
+        status = get_library_status(books)
         assert status["Liberated"] == 2
         assert status["NotLiberated"] == 1
         assert status["Error"] == 1
 
     def test_empty_list(self) -> None:
         """Test with empty books list."""
-        status = _get_library_status([])
+        status = get_library_status([])
         assert status == {}
 
     def test_unknown_status(self) -> None:
         """Test with unknown status values."""
         books = [{"BookStatus": "CustomStatus"}, {"BookStatus": "CustomStatus"}]
-        status = _get_library_status(books)
+        status = get_library_status(books)
         assert status["CustomStatus"] == 2
 
 
@@ -131,9 +131,9 @@ class TestAddLibationParser:
 
 
 class TestRunLibationCmd:
-    """Tests for _run_libation_cmd helper."""
+    """Tests for run_libation_cmd helper."""
 
-    @patch("mamfast.commands.libation.docker")
+    @patch("mamfast.commands.libation._common.docker")
     def test_successful_command(self, mock_docker: MagicMock) -> None:
         """Test successful command execution."""
         from mamfast.utils.cmd import CmdResult
@@ -145,13 +145,13 @@ class TestRunLibationCmd:
             exit_code=0,
         )
 
-        result = _run_libation_cmd("TestContainer", "scan")
+        result = run_libation_cmd("TestContainer", "scan")
 
         assert result.success is True
         assert result.returncode == 0
         assert result.stdout == "output"
 
-    @patch("mamfast.commands.libation.docker")
+    @patch("mamfast.commands.libation._common.docker")
     def test_failed_command(self, mock_docker: MagicMock) -> None:
         """Test failed command execution."""
         from mamfast.utils.cmd import CmdError
@@ -163,12 +163,12 @@ class TestRunLibationCmd:
             stderr="error",
         )
 
-        result = _run_libation_cmd("TestContainer", "scan")
+        result = run_libation_cmd("TestContainer", "scan")
 
         assert result.success is False
         assert result.returncode == 1
 
-    @patch("mamfast.commands.libation.docker")
+    @patch("mamfast.commands.libation._common.docker")
     def test_timeout(self, mock_docker: MagicMock) -> None:
         """Test command timeout."""
         from mamfast.utils.cmd import CmdError
@@ -181,7 +181,7 @@ class TestRunLibationCmd:
             timed_out=True,
         )
 
-        result = _run_libation_cmd("TestContainer", "scan", timeout=10)
+        result = run_libation_cmd("TestContainer", "scan", timeout=10)
 
         assert result.success is False
         assert result.returncode == -1
@@ -261,7 +261,7 @@ class TestCmdLibationLiberate:
 class TestCmdLibationSearch:
     """Tests for search command."""
 
-    @patch("mamfast.commands.libation._run_libation_cmd")
+    @patch("mamfast.commands.libation.search._run_libation_cmd")
     @patch("mamfast.config.reload_settings")
     def test_search_success(self, mock_settings: MagicMock, mock_run_cmd: MagicMock) -> None:
         """Test successful search."""
@@ -280,7 +280,7 @@ class TestCmdLibationSearch:
 class TestCmdLibationSettings:
     """Tests for settings command."""
 
-    @patch("mamfast.commands.libation._run_libation_cmd")
+    @patch("mamfast.commands.libation.settings._run_libation_cmd")
     @patch("mamfast.config.reload_settings")
     def test_settings_success(self, mock_settings: MagicMock, mock_run_cmd: MagicMock) -> None:
         """Test successful settings retrieval."""
@@ -320,7 +320,7 @@ class TestPrintFunctions:
 class TestCmdLibation:
     """Tests for main libation command entry point."""
 
-    @patch("mamfast.commands.libation.cmd_libation_status")
+    @patch("mamfast.commands.libation._parser.cmd_libation_status")
     def test_no_subcommand_calls_status(self, mock_status: MagicMock) -> None:
         """Test that no subcommand defaults to status."""
         mock_status.return_value = 0
@@ -348,7 +348,7 @@ class TestAsinValidation:
 
     def test_valid_asin(self) -> None:
         """Test valid ASIN formats are accepted."""
-        from mamfast.commands.libation import validate_asin
+        from mamfast.utils.validation import validate_asin
 
         # Standard format
         assert validate_asin("B0DK9T5P28") == "B0DK9T5P28"
@@ -359,7 +359,7 @@ class TestAsinValidation:
 
     def test_invalid_asin_format(self) -> None:
         """Test invalid ASIN formats are rejected."""
-        from mamfast.commands.libation import validate_asin
+        from mamfast.utils.validation import validate_asin
 
         # Too short
         with pytest.raises(argparse.ArgumentTypeError, match="Invalid ASIN format"):
