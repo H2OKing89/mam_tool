@@ -29,6 +29,7 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
     that were imported without ASIN and placed in Unknown/.
     """
     from mamfast.abs import AbsClient, resolve_asin_via_abs_search
+    from mamfast.abs.client import AbsApiError, AbsAuthError, AbsConnectionError
     from mamfast.config import reload_settings
 
     print_header("ABS ASIN Resolver", dry_run=args.dry_run)
@@ -45,10 +46,6 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
         return 1
 
     abs_config = settings.audiobookshelf
-    if not abs_config.host or not abs_config.api_key:
-        fatal_error("Audiobookshelf integration is not enabled in config")
-        return 1
-
     if not abs_config.host or not abs_config.api_key:
         fatal_error(
             "Missing ABS credentials",
@@ -115,8 +112,14 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
             try:
                 user = client.authorize()
                 print_success(f"Connected as {user.username}")
+            except AbsAuthError as e:
+                fatal_error(f"Authentication failed: {e}")
+                return 1
+            except AbsConnectionError as e:
+                fatal_error(f"Connection failed: {e}")
+                return 1
             except Exception as e:
-                fatal_error(f"Failed to authorize with ABS: {e}")
+                fatal_error(f"Unexpected error during ABS authorization: {e}")
                 return 1
 
             for folder in folders_to_scan:
@@ -175,8 +178,14 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
                 else:
                     failed_count += 1
                     print_warning("No confident match found")
-    except Exception as e:
-        fatal_error(f"Failed to connect to ABS: {e}")
+    except AbsConnectionError as e:
+        fatal_error(f"ABS connection error: {e}")
+        return 1
+    except AbsAuthError as e:
+        fatal_error(f"ABS authentication error: {e}")
+        return 1
+    except AbsApiError as e:
+        fatal_error(f"ABS API error: {e}")
         return 1
 
     # Summary
