@@ -1331,6 +1331,7 @@ class HardcoverEnricher:
 
         # Atomic write to prevent corruption
         import tempfile
+
         Settings.SEARCH_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with console.status(f"[bold {COLORS['secondary']}]💾 Saving cache...[/]", spinner="dots"):
             with tempfile.NamedTemporaryFile(
