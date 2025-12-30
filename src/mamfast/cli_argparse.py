@@ -1,8 +1,16 @@
-"""MAMFast CLI - Command-line interface for audiobook upload automation."""
+"""MAMFast CLI - Legacy argparse command-line interface.
+
+⚠️ DEPRECATED: This module is deprecated and will be removed in v2.0.
+Use the Typer-based CLI via `mamfast` command instead.
+
+This module is preserved for backward compatibility with existing scripts
+and tests. No new features will be added to this interface.
+"""
 
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -36,6 +44,13 @@ from mamfast.commands import (  # Import all command handlers from the commands 
     cmd_validate_config,
 )
 from mamfast.utils.validation import validate_asin
+
+# Log deprecation warning when module is imported
+_deprecation_logger = logging.getLogger("mamfast.deprecation")
+_deprecation_logger.warning(
+    "cli_argparse is deprecated and will be removed in v2.0. "
+    "Use the 'mamfast' Typer CLI instead."
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -828,7 +843,16 @@ Libation Management:
 
 
 def main() -> int:
-    """Main entry point."""
+    """Main entry point.
+
+    ⚠️ DEPRECATED: This entry point is deprecated. Use `mamfast` instead.
+    """
+    # Show deprecation banner
+    from mamfast.console import console
+
+    console.print("\n[yellow]⚠️  This argparse CLI is deprecated. Use 'mamfast' instead.[/yellow]")
+    console.print("[dim]This interface will be removed in v2.0[/dim]\n")
+
     parser = build_parser()
     args = parser.parse_args()
 

@@ -1,8 +1,14 @@
-"""Tests for Audiobookshelf CLI commands."""
+"""Tests for Audiobookshelf CLI commands.
+
+⚠️ NOTE: Some tests in this file use the deprecated argparse CLI (cli_argparse)
+for backward compatibility testing. The main CLI has been migrated to Typer.
+Parser tests using argparse will be removed in v2.0.
+"""
 
 from __future__ import annotations
 
 import argparse
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -10,12 +16,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # Import from argparse CLI for parser tests (Typer CLI uses different testing approach)
-from mamfast.cli_argparse import build_parser
+# This import triggers a deprecation warning which is expected
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=DeprecationWarning)
+    from mamfast.cli_argparse import build_parser
 from mamfast.commands.abs import cmd_abs_init, should_ignore
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestAbsCliParser:
-    """Tests for ABS command parser setup."""
+    """Tests for ABS command parser setup.
+
+    ⚠️ DEPRECATED: These tests use the deprecated argparse CLI.
+    They will be removed in v2.0 when cli_argparse is removed.
+    """
 
     def test_abs_init_parser_exists(self) -> None:
         """Test abs-init subcommand is registered."""
@@ -265,8 +279,13 @@ class TestAbsInitCommand:
 # =============================================================================
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestAbsImportParser:
-    """Tests for abs-import command parser setup."""
+    """Tests for abs-import command parser setup.
+
+    ⚠️ DEPRECATED: These tests use the deprecated argparse CLI.
+    They will be removed in v2.0 when cli_argparse is removed.
+    """
 
     def test_abs_import_parser_exists(self) -> None:
         """Test abs-import subcommand is registered."""

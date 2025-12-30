@@ -432,10 +432,36 @@ def main():
 
 **Acceptance Criteria**:
 
-- [ ] Usage audit completed (document findings)
-- [ ] Deprecation warning added to argparse entry point
-- [ ] All tests migrated to Typer's `CliRunner` OR explicitly marked as argparse-compat tests
-- [ ] Timeline documented (remove in vX.Y)
+- [x] Usage audit completed (document findings) ✅ (Dec 2025)
+- [x] Deprecation warning added to argparse entry point ✅ (Dec 2025)
+- [x] All tests migrated to Typer's `CliRunner` OR explicitly marked as argparse-compat tests ✅ (Dec 2025)
+- [x] Timeline documented (remove in vX.Y) ✅ (Dec 2025)
+
+**Status**: ✅ COMPLETE (Dec 29, 2025)
+
+**Usage Audit Findings** (Dec 2025):
+
+| Location | Usage | Action |
+|----------|-------|--------|
+| `cli/__init__.py` | Imports `build_parser` for backward compat re-export | Keep until v2.0 |
+| `cli_legacy.py` | Imports `build_parser` for backward compat | Keep until v2.0 |
+| `tests/test_cli_abs.py` | `TestAbsCliParser`, `TestAbsImportParser` use argparse | Marked deprecated |
+| `tests/test_input_validation.py` | `TestCliIntegration` uses argparse for ASIN validation | Marked deprecated |
+| Docs (`CLI_AUDIT_REPORT.md`) | Documents argparse preservation | Update when removing |
+
+**No external dependencies found**:
+- No shell scripts or cron jobs reference `cli_argparse`
+- No CI tooling uses argparse entry point
+- All command handlers are shared (Typer and argparse call same handlers)
+
+**Changes Made**:
+
+- `cli_argparse.py`: Added deprecation docstring and logging warning on import
+- `cli_argparse.py`: Added deprecation banner in `main()` entry point
+- `tests/test_cli_abs.py`: Added `@pytest.mark.filterwarnings` and deprecation docstrings
+- `tests/test_input_validation.py`: Added `@pytest.mark.filterwarnings` and deprecation docstrings
+- **Removal Timeline**: v2.0 (documented in module docstring and console banner)
+- All 2,132 tests pass
 
 ---
 
