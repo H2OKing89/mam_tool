@@ -82,20 +82,22 @@ The project has evolved from a simple MAM upload script (`mam_tool`) into a comp
 
 ---
 
-## Phase 2: Suite Restructure (Future)
+## Phase 2: Suite Restructure (In Progress)
 
 After the rebrand stabilizes, reorganize commands into a domain-focused suite.
 
 ### Proposed Command Structure
 
-```
+```bash
 shelfr
 ├── status              # Quick status overview (top-level convenience)
 ├── config              # Show loaded configuration
 │
-├── mam                 # 📤 MAM tracker workflows
-│   ├── run             # Full upload pipeline
-│   └── ff              # Generate MAM FastFill JSON
+├── mam                 # 📤 MAM tracker workflows (✅ IMPLEMENTED)
+│   ├── bbcode          # Output raw BBCode (copyable)
+│   ├── render          # Preview BBCode visually
+│   ├── run             # Full upload pipeline (future)
+│   └── ff              # Generate MAM FastFill JSON (future)
 │
 ├── lib                 # 📚 Libation integration
 │   ├── scan            # Check Audible for new purchases
@@ -149,11 +151,12 @@ shelfr
 
 | Current (`shelfr` after Phase 1) | Future (`shelfr` Phase 2) | Status |
 |----------------------------------|---------------------------|--------|
-| `shelfr run` | `shelfr mam run` | Implemented |
+| `shelfr run` | `shelfr mam run` | Planned |
 | `shelfr status` | `shelfr status` | Implemented (stays top-level) |
 | `shelfr config` | `shelfr config` | Implemented (stays top-level) |
-| `shelfr tools mamff` | `shelfr mam ff` | Implemented |
-| `shelfr tools bbcode` | `shelfr mam bbcode` | Implemented |
+| `shelfr tools mamff` | `shelfr mam ff` | Planned |
+| `shelfr tools bbcode` | `shelfr mam bbcode` | ✅ Implemented |
+| — | `shelfr mam render` | ✅ Implemented (NEW) |
 | `shelfr libation *` | `shelfr lib *` | Implemented |
 | `shelfr abs *` | `shelfr abs *` | Implemented (no change) |
 | `shelfr check` | `shelfr doctor check` | Implemented |
