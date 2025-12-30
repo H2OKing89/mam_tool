@@ -1,0 +1,86 @@
+<svg class="rich-terminal" style="background:transparent" viewBox="0 0 994 188.79999999999998" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .terminal-3685317156-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .terminal-3685317156-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .terminal-3685317156-r1 { fill: #c5c8c6 }
+.terminal-3685317156-r2 { fill: #ff10f0;font-weight: bold }
+.terminal-3685317156-r3 { fill: #ec4899;font-weight: bold }
+.terminal-3685317156-r4 { fill: #c19ee0;font-weight: bold }
+.terminal-3685317156-r5 { fill: #9d4edd;font-weight: bold }
+.terminal-3685317156-r6 { fill: #7c3aed;font-weight: bold }
+.terminal-3685317156-r7 { fill: #6d28d9;font-weight: bold }
+.terminal-3685317156-r8 { fill: #9ca3af }
+    </style>
+
+    <defs>
+    <clipPath id="terminal-3685317156-clip-terminal">
+      <rect x="0" y="0" width="975.0" height="169.79999999999998" fill="none" />
+    </clipPath>
+    <clipPath id="terminal-3685317156-line-0">
+    <rect x="0" y="1.5" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-3685317156-line-1">
+    <rect x="0" y="25.9" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-3685317156-line-2">
+    <rect x="0" y="50.3" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-3685317156-line-3">
+    <rect x="0" y="74.7" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-3685317156-line-4">
+    <rect x="0" y="99.1" width="976" height="24.65"/>
+            </clipPath>
+<clipPath id="terminal-3685317156-line-5">
+    <rect x="0" y="123.5" width="976" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    
+            <g transform="translate(26,22)">
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#terminal-3685317156-clip-terminal)">
+    
+    <g class="terminal-3685317156-matrix">
+    <text class="terminal-3685317156-r2" x="195.2" y="20" textLength="573.4" clip-path="url(#terminal-3685317156-line-0)">███████╗██╗&#160;&#160;██╗███████╗██╗&#160;&#160;&#160;&#160;&#160;███████╗██████╗</text><text class="terminal-3685317156-r1" x="976" y="20" textLength="12.2" clip-path="url(#terminal-3685317156-line-0)">
+</text><text class="terminal-3685317156-r3" x="195.2" y="44.4" textLength="585.6" clip-path="url(#terminal-3685317156-line-1)">██╔════╝██║&#160;&#160;██║██╔════╝██║&#160;&#160;&#160;&#160;&#160;██╔════╝██╔══██╗</text><text class="terminal-3685317156-r1" x="976" y="44.4" textLength="12.2" clip-path="url(#terminal-3685317156-line-1)">
+</text><text class="terminal-3685317156-r4" x="195.2" y="68.8" textLength="585.6" clip-path="url(#terminal-3685317156-line-2)">███████╗███████║█████╗&#160;&#160;██║&#160;&#160;&#160;&#160;&#160;█████╗&#160;&#160;██████╔╝</text><text class="terminal-3685317156-r1" x="976" y="68.8" textLength="12.2" clip-path="url(#terminal-3685317156-line-2)">
+</text><text class="terminal-3685317156-r5" x="195.2" y="93.2" textLength="585.6" clip-path="url(#terminal-3685317156-line-3)">╚════██║██╔══██║██╔══╝&#160;&#160;██║&#160;&#160;&#160;&#160;&#160;██╔══╝&#160;&#160;██╔══██╗</text><text class="terminal-3685317156-r1" x="976" y="93.2" textLength="12.2" clip-path="url(#terminal-3685317156-line-3)">
+</text><text class="terminal-3685317156-r6" x="195.2" y="117.6" textLength="585.6" clip-path="url(#terminal-3685317156-line-4)">███████║██║&#160;&#160;██║███████╗███████╗██║&#160;&#160;&#160;&#160;&#160;██║&#160;&#160;██║</text><text class="terminal-3685317156-r1" x="976" y="117.6" textLength="12.2" clip-path="url(#terminal-3685317156-line-4)">
+</text><text class="terminal-3685317156-r7" x="195.2" y="142" textLength="585.6" clip-path="url(#terminal-3685317156-line-5)">╚══════╝╚═╝&#160;&#160;╚═╝╚══════╝╚══════╝╚═╝&#160;&#160;&#160;&#160;&#160;╚═╝&#160;&#160;╚═╝</text><text class="terminal-3685317156-r1" x="976" y="142" textLength="12.2" clip-path="url(#terminal-3685317156-line-5)">
+</text><text class="terminal-3685317156-r8" x="353.8" y="166.4" textLength="268.4" clip-path="url(#terminal-3685317156-line-6)">Ingest&#160;•&#160;Enrich&#160;•&#160;Seed</text><text class="terminal-3685317156-r1" x="976" y="166.4" textLength="12.2" clip-path="url(#terminal-3685317156-line-6)">
+</text>
+    </g>
+    </g>
+</svg>
