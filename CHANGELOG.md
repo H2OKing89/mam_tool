@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Configurable signature/branding in MAM descriptions** - New `description.show_signature` config option
+  - User template overrides in `config/templates/` (gitignored)
+  - Package default signature can be customized without git conflicts
+
 - **Comprehensive configuration validation** - All required environment variables and configuration values are now validated at startup with helpful error messages
   - Validates URLs are well-formed
   - Checks that required paths exist
@@ -42,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Atomic state file writes
 
 ### Changed
+
+- **Streamlined CLI** - Removed individual step commands from main CLI
+  - Removed: `mamfast scan`, `mamfast discover`, `mamfast torrent`, `mamfast upload`, `mamfast metadata`
+  - Use `mamfast run` for full pipeline (handles all steps internally)
+  - Use `mamfast libation scan/list` for Libation operations
+  - Use `mamfast tools prepare` for staging (moved from `mamfast prepare`)
+  - Use `mamfast tools mamff` for metadata JSON generation (replacement for `mamfast metadata`)
 
 - **Improved qBittorrent error handling** - Connection and authentication failures now provide specific troubleshooting steps
 - **Better torrent creation errors** - mkbrr failures include Docker image verification steps and path mapping diagnostics

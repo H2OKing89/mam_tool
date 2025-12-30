@@ -629,6 +629,7 @@ def experimental_feature() -> None:
 These improvements can be done alongside or after the refactor:
 
 **Status (December 2025):**
+
 - ✅ `--yes`/`-y` flag added to `abs orphans --cleanup-all`
 - ✅ `doctor` alias → `check` (hidden)
 - ✅ Existing aliases verified: `dupes`, `suspicious`, `lint`
@@ -705,7 +706,7 @@ When adding a new command:
 - [ ] Add to appropriate `cli/<category>.py` file
 - [ ] Add handler in `commands/<category>.py`
 - [ ] Use `RuntimeContext` from `ctx.obj` (not legacy `ArgsNamespace`)
-- [ ] Use `rich_help_panel` for help organization
+- [x] Use `rich_help_panel` for help organization ✅
 - [ ] Add `--dry-run` support if command makes changes
 - [ ] Add `--yes` / `-y` if command prompts for confirmation
 - [ ] Add `--json` output if produces structured data
