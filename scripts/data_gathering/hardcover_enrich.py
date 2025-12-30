@@ -1511,7 +1511,7 @@ class HardcoverEnricher:
                 self.stats.api_errors += 1
                 return None
 
-            except TimeoutError:
+            except (httpx.TimeoutException, TimeoutError):
                 self.stats.api_errors += 1
                 if attempt < Settings.API_RETRIES - 1:
                     backoff = min(Settings.REQUEST_TIMEOUT_MAX, Settings.API_TIMEOUT * (2**attempt))
@@ -1710,9 +1710,16 @@ class HardcoverEnricher:
                     tasks = [self.enrich_book(book) for book in batch]
                     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    for result in results:
+                    for idx, result in enumerate(results):
                         if isinstance(result, SearchResult):
                             self.enriched_schema.books.append(result)
+                        elif isinstance(result, Exception):
+                            # Log exception with context
+                            book_ctx = batch[idx] if idx < len(batch) else {"title": "unknown"}
+                            logger.error(
+                                f"Failed to enrich book '{book_ctx.get('abs', {}).get('title', 'unknown')}': {result}"
+                            )
+                            self.stats.api_errors += 1
                         live.update(self.dashboard.generate_layout())
 
         self.stats.current_book = ""
