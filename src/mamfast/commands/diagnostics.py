@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def cmd_dry_run(args: argparse.Namespace) -> int:
+def cmd_preview_naming(args: argparse.Namespace) -> int:
     """Preview naming transformations without making changes."""
     from mamfast.config import reload_settings
     from mamfast.console import DryRunTransform
