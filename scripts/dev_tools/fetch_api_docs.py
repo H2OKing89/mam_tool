@@ -708,7 +708,9 @@ async def run_fetch(
 
         # Fetch Hardcover docs
         if source in (SourceChoice.ALL, SourceChoice.HARDCOVER):
-            results = await fetch_github_source(client, SOURCES["hardcover"], "hardcover", metadata, force)
+            results = await fetch_github_source(
+                client, SOURCES["hardcover"], "hardcover", metadata, force
+            )
             all_results.extend(results)
 
     # Save metadata
