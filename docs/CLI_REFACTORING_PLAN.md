@@ -624,9 +624,16 @@ def experimental_feature() -> None:
 
 ---
 
-## CLI UX Polish (Quick Wins)
+## CLI UX Polish (Quick Wins) ✅ COMPLETE
 
 These improvements can be done alongside or after the refactor:
+
+**Status (December 2025):**
+- ✅ `--yes`/`-y` flag added to `abs orphans --cleanup-all`
+- ✅ `doctor` alias → `check` (hidden)
+- ✅ Existing aliases verified: `dupes`, `suspicious`, `lint`
+- ✅ Libation commands (`liberate`, `redownload`, `set-status`, `convert`) already have `--yes`/`-y`
+- ⚪ `state clear` doesn't use confirmation (no need for `--yes`)
 
 ### Global Options Consistency
 
@@ -639,19 +646,23 @@ These improvements can be done alongside or after the refactor:
 
 ### Command Aliases
 
-| Alias | Target | Rationale |
-| --- | --- | --- |
-| `mamfast doctor` | `mamfast check` | Intuitive for users |
-| `mamfast dupes` | `mamfast check-duplicates` | Shorter (already exists as hidden) |
-| `mamfast lint` | `mamfast validate-config` | Developer familiarity |
+| Alias | Target | Rationale | Status |
+| --- | --- | --- | --- |
+| `mamfast doctor` | `mamfast check` | Intuitive for users | ✅ Added |
+| `mamfast dupes` | `mamfast check-duplicates` | Shorter | ✅ Exists |
+| `mamfast lint` | `mamfast validate-config` | Developer familiarity | ✅ Exists |
+| `mamfast suspicious` | `mamfast check-suspicious` | Shorter | ✅ Exists |
 
-### Missing `--yes` Flag
+### `--yes` Flag Coverage
 
-Add to commands that prompt for confirmation:
+Commands with confirmation prompts now support `--yes`/`-y`:
 
-- `mamfast libation liberate`
-- `mamfast state clear`
-- `mamfast abs cleanup --cleanup-all`
+- ✅ `mamfast libation liberate` — already had `--yes`
+- ✅ `mamfast libation redownload` — already had `--yes`
+- ✅ `mamfast libation set-status` — already had `--yes`
+- ✅ `mamfast libation convert` — already had `--yes`
+- ✅ `mamfast abs orphans --cleanup-all` — added `--yes`
+- ⚪ `mamfast state clear` — no confirmation (atomic operation)
 
 ---
 
@@ -665,7 +676,7 @@ Add to commands that prompt for confirmation:
 ### Short-Term (1-2 Sprints)
 
 1. ✅ **Phase 2: Promote ABS to sub-app** — Consistency improvement
-2. **CLI UX Polish** — Add `--yes`, aliases, etc.
+2. ✅ **CLI UX Polish** — Add `--yes`, aliases, etc.
 
 ### Medium-Term (2-3 Sprints)
 
