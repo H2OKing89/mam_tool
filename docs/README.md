@@ -1,90 +1,130 @@
 # MAMFast Documentation
 
-This directory contains technical documentation, implementation plans, and reference materials for the MAMFast project.
+Complete technical documentation, implementation plans, and reference materials for the MAMFast project.
 
-## Directory Structure
+## 🚀 Quick Navigation
 
+### 📌 Where Am I?
 
-### `/archive/` - Completed Implementation Reports
+| Question | Answer |
+| --- | --- |
+| **What are we building?** | Start with main [README](../README.md) in project root |
+| **What's the current focus?** | See [implementation/README.md](implementation/README.md) — active work tracker |
+| **How does the CLI work?** | Check [cli/README.md](cli/README.md) |
+| **I need to know about...** | See folder guide below |
 
-Historical documentation for completed migrations and refactoring work:
-- `P0_UPGRADE_COMPLETE.md` - tenacity & platformdirs package upgrade (completed 2025-12-20)
-- `P1_SH_LIBRARY_COMPLETE.md` - sh library integration for subprocess calls (completed 2025-12-20)
-- `REFACTORING_SUMMARY.md` - P3 large file split (cli.py, naming.py) (completed 2025-12-20)
-- `P0_INTEGRATION_COMPLETE.md` - Earlier integration work
-- `PRODUCTION_SAFETY_IMPROVEMENTS.md` - Production safety enhancements
-- `NAMING_PLAN_ORIGINAL.md` - Original naming implementation plan
+## 📁 Folder Organization
 
-### `/audiobookshelf/` - Audiobookshelf Integration
+### 🔨 [cli/](cli/) — CLI Architecture & Refactoring
 
-Documentation for ABS library management, import workflows, and metadata handling:
-- `AUDIOBOOKSHELF_API.md` - ABS API reference and usage
-- `AUDIOBOOKSHELF_IMPORT.md` - Import workflow implementation
-- `AUDIOBOOKSHELF_IMPORT_PLAN.md` - Import feature planning
-- `ABS_RENAME_TOOL.md` - Rename tool implementation
-- `CLEANUP_PLAN.md` - Library cleanup strategies
-- `TRUMPING.md` - Duplicate detection and trumping logic
-- `UNKNOWN_ASIN_HANDLING.md` - Handling books without ASINs
+**Status**: ✅ COMPLETE
+**6-phase refactoring** with 2,132 passing tests.
 
-### `/naming/` - File Naming System
+- [cli/README.md](cli/README.md) — Overview & quick start
+- [cli/REFACTORING_PLAN.md](cli/REFACTORING_PLAN.md) — Architecture & phases
+- [cli/AUDIT_REPORT.md](cli/AUDIT_REPORT.md) — Test results & usage findings
+- [cli/AUDIT_VERIFICATION.md](cli/AUDIT_VERIFICATION.md) — Detailed evidence
 
-Naming conventions, test cases, and validation documentation:
-- Golden test samples for various edge cases
-- Series handling and volume parsing logic
-- Truncation and path validation rules
+### 📋 [implementation/](implementation/) — Active Plans & Backlog
 
-### `/tracked_issues/` - Issue Tracking
+**Status**: 📊 IN PROGRESS (P1+ phases)
+**What we're doing next** — see priority matrix in README.
 
-Active bug reports, feature requests, and technical investigations
+- [implementation/README.md](implementation/README.md) — Priority dashboard
+- [implementation/IMPROVEMENTS_PLAN.md](implementation/IMPROVEMENTS_PLAN.md) — P1+ feature roadmap
+- [implementation/VALIDATION_PLAN.md](implementation/VALIDATION_PLAN.md) — Input validation (P1)
+- [implementation/STATE_HARDENING_PLAN.md](implementation/STATE_HARDENING_PLAN.md) — State mgmt (P1)
+- [implementation/PACKAGE_UPGRADE_PLAN.md](implementation/PACKAGE_UPGRADE_PLAN.md) — Dependencies (P2)
+- [implementation/MIGRATION_BACKLOG.md](implementation/MIGRATION_BACKLOG.md) — Deferred work (P2+)
 
-### Root Documentation Files
+### 📖 [libation/](libation/) — Libation Integration
 
-#### Active Plans
-- `MIGRATION_BACKLOG.md` - Deferred migrations (P2 sh library migrations)
-- `PACKAGE_UPGRADE_PLAN.md` - Future package upgrades (P2 priorities)
-- `IMPROVEMENTS_PLAN.md` - General improvement ideas
-- `VALIDATION_PLAN.md` - Input validation enhancements
-- `STATE_HARDENING_PLAN.md` - State management improvements
+**Status**: ✅ OPERATIONAL
+**CLI wrapper & discovery pipeline** working.
 
-#### Reference
+- [libation/README.md](libation/README.md) — Overview
+- [libation/CLI.md](libation/CLI.md) — Command reference
+- [libation/WRAPPER_REVIEW.md](libation/WRAPPER_REVIEW.md) — Implementation notes
 
-- `LIBATION_CLI.md` - Libation CLI integration guide
+### 📚 [reference/](reference/) — Static Reference Materials
 
-## Documentation Guidelines
+**Status**: STABLE
+**APIs, naming systems, troubleshooting** — rarely edited.
 
-### When to Archive
+- [reference/README.md](reference/README.md) — Quick index
+- [reference/naming/](reference/naming/) — File naming rules, edge cases, golden tests
+- [reference/audiobookshelf/](reference/audiobookshelf/) — ABS API & workflows
+- [reference/audnex/](reference/audnex/) — Audnex API schemas
+- [reference/hardcover/](reference/hardcover/) — Hardcover GraphQL reference
+- [reference/mam/](reference/mam/) — MAM torrent system
+- [reference/tracking/](reference/tracking/) — Issue tracking (if present)
 
-Move implementation docs to `/archive/` when:
-- The work is **fully complete** and tested
-- The document is primarily historical (not actively referenced)
-- It describes a **completed migration or refactoring**
+### 📦 [archive/](archive/) — Completed Work
 
-Keep in root `docs/` when:
+**Status**: FROZEN
+**P0 completed implementations** — reference only.
 
-- The document describes **active work** or future plans
-- It's a **reference guide** actively used during development
-- It tracks **ongoing issues** or backlog items
+- `P0_UPGRADE_COMPLETE.md` — Package upgrades (tenacity, platformdirs)
+- `P1_SH_LIBRARY_COMPLETE.md` — sh library integration
+- `REFACTORING_SUMMARY.md` — P3 file splits (cli.py, naming.py)
+- `PRODUCTION_SAFETY_IMPROVEMENTS.md` — Safety enhancements
 
-### Linking Between Docs
+---
 
-When referencing other documentation:
-- Use **relative paths** for portability
-- Root links to archive: `archive/P0_UPGRADE_COMPLETE.md`
-- Archive links from archive: `P0_UPGRADE_COMPLETE.md`
-- Root links from archive: `../MIGRATION_BACKLOG.md`
+## 🎯 Workflows
 
-### File Naming
+### "I want to start a new feature"
 
-- Use `SCREAMING_SNAKE_CASE.md` for consistency
-- Include status indicators: `_COMPLETE`, `_PLAN`, `_BACKLOG`
-- Be descriptive: prefer `AUDIOBOOKSHELF_IMPORT.md` over `ABS.md`
+1. Check [implementation/README.md](implementation/README.md) for priority
+2. Pick a plan file (VALIDATION_PLAN, STATE_HARDENING_PLAN, etc.)
+3. Review acceptance criteria & blockers
+4. Start implementing; link PRs here
 
-## Root-Level User-Facing Documentation
+### "I need to understand the naming system"
 
-The following docs stay in the **project root** for visibility:
-- `README.md` - Project overview and quick start
-- `CHANGELOG.md` - Version history and release notes
-- `CONTRIBUTING.md` - Contribution guidelines
-- `SECURITY.md` - Security policies
-- `LICENSE` - Project license
-- `CLAUDE.md` - Claude AI coding assistant instructions
+→ [reference/naming/](reference/naming/)
+
+### "How does ABS import work?"
+
+→ [reference/audiobookshelf/](reference/audiobookshelf/)
+
+### "What's in the backlog?"
+
+→ [implementation/MIGRATION_BACKLOG.md](implementation/MIGRATION_BACKLOG.md)
+
+### "Is the CLI refactoring done?"
+
+→ [cli/README.md](cli/README.md) — Yes, see audit verification
+
+---
+
+## 🔍 Tools
+
+### Check for broken markdown links
+
+```bash
+python3 scripts/check_md_links.py
+```
+
+### Reorganize docs (git history preserved)
+
+```bash
+./scripts/refactor_docs.sh
+```
+
+---
+
+## 📊 Status Dashboard
+
+| Component | Status | Phase | Docs |
+| --- | --- | --- | --- |
+| CLI Refactoring | ✅ COMPLETE | P0 | [cli/README.md](cli/README.md) |
+| Input Validation | 📋 PLANNED | P1 | [implementation/VALIDATION_PLAN.md](implementation/VALIDATION_PLAN.md) |
+| State Hardening | 📋 PLANNED | P1 | [implementation/STATE_HARDENING_PLAN.md](implementation/STATE_HARDENING_PLAN.md) |
+| Package Upgrades | ⏳ BACKLOG | P2 | [implementation/PACKAGE_UPGRADE_PLAN.md](implementation/PACKAGE_UPGRADE_PLAN.md) |
+| Subprocess Migration | ⏸️ DEFERRED | P2+ | [implementation/MIGRATION_BACKLOG.md](implementation/MIGRATION_BACKLOG.md) |
+
+---
+
+**Last Updated**: December 30, 2025
+**Maintained By**: MAMFast Team

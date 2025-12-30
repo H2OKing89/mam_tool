@@ -129,4 +129,4 @@ When migrating subprocess calls to sh library:
 **Maintained By**: Development team
 **Related Documents**:
 - [P1_SH_LIBRARY_COMPLETE.md](P1_SH_LIBRARY_COMPLETE.md) - P1 migration completion report
-- [PACKAGE_UPGRADE_PLAN.md](PACKAGE_UPGRADE_PLAN.md) - Overall package upgrade roadmap
+- [../implementation/PACKAGE_UPGRADE_PLAN.md](../implementation/PACKAGE_UPGRADE_PLAN.md) - Overall package upgrade roadmap
