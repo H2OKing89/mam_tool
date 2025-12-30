@@ -72,4 +72,5 @@ CHEATSHEET.md
 docs/reference/mam
 
 # BBCode signature samples (user-specific, generated)
-samples/bbcode_sig*.json
+samples/bbcode_sig.json
+samples/bbcode_sig_nbsp.json
