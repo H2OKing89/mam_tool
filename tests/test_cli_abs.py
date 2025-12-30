@@ -822,7 +822,7 @@ class TestAbsCheckDuplicateCommand:
         """Test abs-check-duplicate handles missing config file."""
         from mamfast.commands.abs import cmd_abs_check_duplicate
 
-        with patch("mamfast.config.reload_settings") as mock_reload:
+        with patch("mamfast.commands.abs.check.reload_settings") as mock_reload:
             mock_reload.side_effect = FileNotFoundError("config not found")
             result = cmd_abs_check_duplicate(args)
             assert result == 1
@@ -834,7 +834,7 @@ class TestAbsCheckDuplicateCommand:
         mock_settings = MagicMock()
         mock_settings.audiobookshelf.enabled = False
 
-        with patch("mamfast.config.reload_settings", return_value=mock_settings):
+        with patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings):
             result = cmd_abs_check_duplicate(args)
             assert result == 1
 
@@ -856,9 +856,9 @@ class TestAbsCheckDuplicateCommand:
         mock_settings.audiobookshelf.libraries = [mock_lib_config]
 
         with (
-            patch("mamfast.config.reload_settings", return_value=mock_settings),
-            patch("mamfast.abs.AbsClient"),
-            patch("mamfast.abs.build_asin_index", side_effect=Exception("Connection refused")),
+            patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings),
+            patch("mamfast.commands.abs.check.AbsClient"),
+            patch("mamfast.commands.abs.check.build_asin_index", side_effect=Exception("Connection refused")),
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 1  # Error = non-zero
@@ -884,9 +884,9 @@ class TestAbsCheckDuplicateCommand:
         empty_index: dict[str, MagicMock] = {}
 
         with (
-            patch("mamfast.config.reload_settings", return_value=mock_settings),
-            patch("mamfast.abs.AbsClient", return_value=mock_client),
-            patch("mamfast.abs.build_asin_index", return_value=empty_index),
+            patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings),
+            patch("mamfast.commands.abs.check.AbsClient", return_value=mock_client),
+            patch("mamfast.commands.abs.check.build_asin_index", return_value=empty_index),
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 0  # Not found = safe to import
@@ -920,9 +920,9 @@ class TestAbsCheckDuplicateCommand:
         asin_index = {"B0ABCDEFGH": mock_entry}
 
         with (
-            patch("mamfast.config.reload_settings", return_value=mock_settings),
-            patch("mamfast.abs.AbsClient", return_value=mock_client),
-            patch("mamfast.abs.build_asin_index", return_value=asin_index),
+            patch("mamfast.commands.abs.check.reload_settings", return_value=mock_settings),
+            patch("mamfast.commands.abs.check.AbsClient", return_value=mock_client),
+            patch("mamfast.commands.abs.check.build_asin_index", return_value=asin_index),
         ):
             result = cmd_abs_check_duplicate(args)
             assert result == 1  # Found = duplicate
