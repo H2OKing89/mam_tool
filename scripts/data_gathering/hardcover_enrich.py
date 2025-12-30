@@ -115,7 +115,7 @@ log_dir.mkdir(exist_ok=True)
 log_file = log_dir / "hardcover_enrichment.log"
 
 # Create file handler for detailed logging
-file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+file_handler = logging.FileHandler(log_file, mode="a", encoding="utf-8")
 file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(
     logging.Formatter(
