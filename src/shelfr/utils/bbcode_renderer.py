@@ -80,7 +80,7 @@ def _parse_bbcode(text: str) -> RenderableType:
 
 def _render_text_segment(text: str, centered: bool = False) -> RenderableType:
     """Render a text segment, handling [pre] blocks specially.
-    
+
     Args:
         text: The text segment to render
         centered: Whether this segment should be centered
@@ -140,9 +140,6 @@ def _render_inline_bbcode(text: str, monospace: bool = False) -> Text:
     style_stack: list[Style] = []
     # Note: Rich doesn't support font family in Style, but we handle
     # monospace display through the [pre] block panel styling
-
-    # Track hide blocks (we'll render them as panels later)
-    hide_blocks: list[tuple[str, str]] = []  # (title, content)
 
     # Process character by character with tag detection
     i = 0
@@ -277,9 +274,7 @@ def render_bbcode_preview(
     console.print()
 
     # Add note about MAM upload page bug
-    console.print(
-        "[dim]⚠️  Note: MAM's upload page preview renderer has a bug that may show[/]"
-    )
+    console.print("[dim]⚠️  Note: MAM's upload page preview renderer has a bug that may show[/]")
     console.print(
         "[dim]   ASCII art incorrectly. The actual torrent page will render correctly.[/]"
     )

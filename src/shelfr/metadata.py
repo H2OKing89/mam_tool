@@ -668,7 +668,7 @@ def _convert_newlines_for_mam(text: str) -> str:
     import re
 
     # Non-breaking space character - prevents MAM from collapsing spaces
-    NBSP = "\u00a0"
+    nbsp = "\u00a0"
 
     # Pattern to split while keeping delimiters
     parts = re.split(r"(\[pre\]|\[/pre\])", text, flags=re.IGNORECASE)
@@ -686,7 +686,7 @@ def _convert_newlines_for_mam(text: str) -> str:
         elif inside_pre:
             # Convert actual newlines to [br] tags inside [pre] blocks
             # Convert regular spaces to non-breaking spaces to preserve alignment
-            converted = part.replace("\n", "[br]").replace(" ", NBSP)
+            converted = part.replace("\n", "[br]").replace(" ", nbsp)
             result_parts.append(converted)
         else:
             # Remove newlines outside [pre] blocks

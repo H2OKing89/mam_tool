@@ -55,7 +55,13 @@ def _extract_asin(path: Path) -> str | None:
 
 def _fetch_metadata_for_path(
     path: Path,
-) -> tuple[Path | None, str | None, dict | None, dict | None, dict | None]:
+) -> tuple[
+    Path | None,
+    str | None,
+    dict[str, object] | None,
+    dict[str, object] | None,
+    dict[str, object] | None,
+]:
     """Fetch metadata for a given path.
 
     Returns:
@@ -103,9 +109,7 @@ def cmd_mam_bbcode(args: argparse.Namespace) -> int:
 
     path: Path = args.path.resolve()
 
-    audio_file, asin, audnex_data, mediainfo_data, audnex_chapters = (
-        _fetch_metadata_for_path(path)
-    )
+    audio_file, asin, audnex_data, mediainfo_data, audnex_chapters = _fetch_metadata_for_path(path)
 
     if not audio_file:
         print_error("No audio file found (.m4b, .mp3, .m4a, .flac, .ogg)")
@@ -156,9 +160,7 @@ def cmd_mam_render(args: argparse.Namespace) -> int:
 
     path: Path = args.path.resolve()
 
-    audio_file, asin, audnex_data, mediainfo_data, audnex_chapters = (
-        _fetch_metadata_for_path(path)
-    )
+    audio_file, asin, audnex_data, mediainfo_data, audnex_chapters = _fetch_metadata_for_path(path)
 
     if not audio_file:
         print_error("No audio file found (.m4b, .mp3, .m4a, .flac, .ogg)")

@@ -1474,10 +1474,10 @@ def tools_bbcode(
       2. Fetches Audnex metadata
       3. Outputs BBCode description to terminal (copyable)
     """
-    from shelfr.commands.tools import cmd_tools_bbcode
+    from shelfr.commands.mam import cmd_mam_bbcode
 
     args = get_args(ctx, path=path, command="tools-bbcode")
-    result = cmd_tools_bbcode(args)
+    result = cmd_mam_bbcode(args)
     raise typer.Exit(result)
 
 
