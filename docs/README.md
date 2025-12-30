@@ -64,6 +64,8 @@ Complete technical documentation, implementation plans, and reference materials 
 **Status**: FROZEN
 **P0 completed implementations** — reference only.
 
+- [archive/README.md](archive/README.md) — Index & reading guide
+
 - `P0_UPGRADE_COMPLETE.md` — Package upgrades (tenacity, platformdirs)
 - `P1_SH_LIBRARY_COMPLETE.md` — sh library integration
 - `REFACTORING_SUMMARY.md` — P3 file splits (cli.py, naming.py)
