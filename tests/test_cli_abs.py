@@ -187,6 +187,9 @@ class TestAbsInitCommand:
         mock_client = MagicMock()
         mock_client.authorize.return_value = mock_user
         mock_client.get_libraries.return_value = [mock_lib]
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -197,7 +200,8 @@ class TestAbsInitCommand:
         assert result == 0
         mock_client.authorize.assert_called_once()
         mock_client.get_libraries.assert_called_once()
-        mock_client.close.assert_called_once()
+        # With context manager, close is called via __exit__
+        mock_client.__exit__.assert_called_once()
 
     def test_abs_init_auth_failure(
         self,
@@ -212,6 +216,9 @@ class TestAbsInitCommand:
 
         mock_client = MagicMock()
         mock_client.authorize.side_effect = AbsAuthError("Invalid API key")
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -234,6 +241,9 @@ class TestAbsInitCommand:
 
         mock_client = MagicMock()
         mock_client.authorize.side_effect = AbsConnectionError("Connection refused")
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),
@@ -264,6 +274,9 @@ class TestAbsInitCommand:
         mock_client = MagicMock()
         mock_client.authorize.return_value = mock_user
         mock_client.get_libraries.return_value = [mock_lib]
+        # Configure context manager support
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
 
         with (
             patch("mamfast.config.reload_settings", return_value=mock_settings),

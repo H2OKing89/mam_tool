@@ -690,6 +690,10 @@ def register_abs_deprecated_aliases(app: typer.Typer) -> None:
             Path | None,
             typer.Option(help="Output JSON report of orphaned folders."),
         ] = None,
+        yes: Annotated[
+            bool,
+            typer.Option("--yes", "-y", help="Skip confirmation prompts."),
+        ] = False,
     ) -> None:
         """[deprecated] Use 'abs orphans' instead."""
         _deprecation_warning("abs-orphans", "abs orphans")
@@ -702,6 +706,7 @@ def register_abs_deprecated_aliases(app: typer.Typer) -> None:
             cleanup_all=cleanup_all,
             min_match_score=min_match_score,
             report=report,
+            yes=yes,
             command="abs orphans",
         )
         result = cmd_abs_orphans(args)

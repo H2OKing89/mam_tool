@@ -134,7 +134,12 @@ def get_runtime_context(ctx_obj: object) -> RuntimeContext:
         config_path = ctx_obj.get("config", Path("config/config.yaml"))
         try:
             settings = reload_settings(config_file=config_path)
-        except Exception:
+        except FileNotFoundError:
+            settings = None  # Config doesn't exist yet
+        except Exception as e:
+            import logging
+
+            logging.getLogger(__name__).warning("Failed to load settings: %s", e)
             settings = None
 
         return RuntimeContext(

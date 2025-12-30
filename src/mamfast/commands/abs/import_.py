@@ -139,7 +139,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
         # Test connection first
         user = client.authorize()
         print_success(f"Connected as {user.username}")
-    except Exception as e:
+    except (ConnectionError, TimeoutError, OSError) as e:
         fatal_error(f"Failed to connect to ABS: {e}")
         return 1
 
@@ -147,7 +147,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     try:
         asin_index = build_asin_index(client, target_library.id)
         print_success(f"Indexed {len(asin_index)} books with ASINs")
-    except Exception as e:
+    except (ConnectionError, TimeoutError, OSError, ValueError) as e:
         client.close()  # Clean up on error
         fatal_error(f"Failed to build ASIN index: {e}")
         return 1
@@ -311,7 +311,7 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                 current_book="Done!",
             )
 
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError) as e:
         if use_abs_search:
             client.close()  # Clean up on error
         fatal_error(f"Import failed: {e}")

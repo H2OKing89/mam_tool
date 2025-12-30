@@ -23,6 +23,10 @@ def cmd_libation_export(args: argparse.Namespace) -> int:
     """Export Libation library data."""
     from mamfast.config import reload_settings
 
+    if args.output is None:
+        console.print("[red]✗ Output path is required:[/] Use -o/--output to specify output file")
+        return 1
+
     output_path = Path(args.output)
     format_type = args.format
 
@@ -50,8 +54,10 @@ def cmd_libation_export(args: argparse.Namespace) -> int:
     format_flags = {"json": "-j", "csv": "-c", "xlsx": "-x"}
     flag = format_flags.get(format_type, "-j")
 
-    # Export to container temp path first
-    container_path = f"/tmp/mamfast_export.{format_type}"
+    # Export to container temp path first (use PID for uniqueness)
+    import os
+
+    container_path = f"/tmp/mamfast_export_{os.getpid()}.{format_type}"
     result = _run_libation_cmd(container, "export", "-p", container_path, flag)
 
     if not result.success:

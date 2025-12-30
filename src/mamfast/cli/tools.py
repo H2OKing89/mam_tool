@@ -5,6 +5,7 @@ Commands: tools mamff, tools bbcode
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Annotated
 
@@ -12,6 +13,8 @@ import typer
 
 from mamfast.cli._app import validate_asin_callback
 from mamfast.cli._helpers import get_args
+
+logger = logging.getLogger(__name__)
 
 
 def register_tools_commands(tools_app: typer.Typer) -> None:

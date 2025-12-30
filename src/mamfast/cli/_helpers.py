@@ -41,10 +41,11 @@ def get_args(ctx: typer.Context, **kwargs: Any) -> ArgsNamespace:
     Returns:
         ArgsNamespace with both global and command-specific args
     """
+    ctx_obj = ctx.obj if isinstance(ctx.obj, dict) else {}
     args = ArgsNamespace(
-        verbose=ctx.obj.get("verbose", False),
-        config=ctx.obj.get("config", Path("config/config.yaml")),
-        dry_run=ctx.obj.get("dry_run", False),
+        verbose=ctx_obj.get("verbose", False),
+        config=ctx_obj.get("config", Path("config/config.yaml")),
+        dry_run=ctx_obj.get("dry_run", False),
         **kwargs,
     )
     return args

@@ -157,7 +157,11 @@ def print_book_table(
 
     if len(books) > limit:
         remaining = len(books) - limit
-        table.add_row("...", f"[dim]+ {remaining} more books[/]", "", "", "")
+        # Match column count based on whether status column is shown
+        if show_status:
+            table.add_row("...", f"[dim]+ {remaining} more books[/]", "", "", "")
+        else:
+            table.add_row("...", f"[dim]+ {remaining} more books[/]", "", "")
 
     console.print(table)
 

@@ -165,10 +165,13 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
                         "resolved_at": datetime.now(UTC).isoformat(),
                         "original_folder": folder_name,
                     }
-                    sidecar_path.write_text(
-                        json_module.dumps(sidecar_data, indent=2, sort_keys=True)
-                    )
-                    print_info(f"  Wrote: {sidecar_path.name}")
+                    try:
+                        sidecar_path.write_text(
+                            json_module.dumps(sidecar_data, indent=2, sort_keys=True)
+                        )
+                        print_info(f"  Wrote: {sidecar_path.name}")
+                    except OSError as e:
+                        print_warning(f"  Failed to write sidecar: {e}")
             else:
                 failed_count += 1
                 print_warning("No confident match found")

@@ -78,9 +78,10 @@ def cmd_abs_rename(args: argparse.Namespace) -> int:
                 abs_client = AbsClient(
                     host=abs_config.host,
                     api_key=abs_config.api_key,
+                    timeout=abs_config.timeout_seconds,
                 )
                 print_info("ABS search enabled")
-            except Exception as e:
+            except (ConnectionError, TimeoutError, OSError) as e:
                 print_warning(f"Failed to create ABS client: {e}")
 
     # Run the rename pipeline

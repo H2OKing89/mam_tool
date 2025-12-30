@@ -45,16 +45,21 @@ from mamfast.commands import (  # Import all command handlers from the commands 
 )
 from mamfast.utils.validation import validate_asin
 
-# Log deprecation warning when module is imported
+# Deprecation logger - warning emitted at runtime in build_parser()
 _deprecation_logger = logging.getLogger("mamfast.deprecation")
-_deprecation_logger.warning(
-    "cli_argparse is deprecated and will be removed in v2.0. "
-    "Use the 'mamfast' Typer CLI instead."
-)
+_deprecation_warned = False
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser with all subcommands."""
+    global _deprecation_warned
+    if not _deprecation_warned:
+        _deprecation_logger.warning(
+            "cli_argparse is deprecated and will be removed in v2.0. "
+            "Use the 'mamfast' Typer CLI instead."
+        )
+        _deprecation_warned = True
+
     parser = argparse.ArgumentParser(
         prog="mamfast",
         description="Fast MAM audiobook upload automation tool",

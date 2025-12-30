@@ -128,7 +128,7 @@ def cmd_abs_restore(args: argparse.Namespace) -> int:
         restored_path = restore_from_archive(
             archive_path=archive_path,
             library_root=library_root,
-            dry_run=args.dry_run,
+            # dry_run already handled above with early return
         )
         if restored_path:
             print_success(f"Restored to: {restored_path}")

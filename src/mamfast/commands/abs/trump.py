@@ -6,6 +6,7 @@ This module contains the `cmd_abs_trump_check` command handler.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from pathlib import Path
 
 from mamfast.commands.abs._common import (
@@ -78,18 +79,7 @@ def cmd_abs_trump_check(args: argparse.Namespace) -> int:
 
     trump_prefs = TrumpPrefs.from_config(trumping_config)
     # Force enabled for preview purposes
-    trump_prefs_preview = TrumpPrefs(
-        enabled=True,
-        aggressiveness=trump_prefs.aggressiveness,
-        min_bitrate_increase_kbps=trump_prefs.min_bitrate_increase_kbps,
-        prefer_chapters=trump_prefs.prefer_chapters,
-        prefer_stereo=trump_prefs.prefer_stereo,
-        min_duration_ratio=trump_prefs.min_duration_ratio,
-        max_duration_ratio=trump_prefs.max_duration_ratio,
-        archive_root=trump_prefs.archive_root,
-        archive_by_year=trump_prefs.archive_by_year,
-        own_ripper_tags=trump_prefs.own_ripper_tags,
-    )
+    trump_prefs_preview = replace(trump_prefs, enabled=True)
 
     # Discover books to check
     print_step(1, 3, "Discovering staged books")
@@ -123,7 +113,11 @@ def cmd_abs_trump_check(args: argparse.Namespace) -> int:
         asin_index = build_asin_index(client, target_library.id)
         client.close()
         print_success(f"Indexed {len(asin_index)} books with ASINs")
+    except (ConnectionError, TimeoutError, OSError) as e:
+        fatal_error(f"Failed to query ABS: {e}")
+        return 1
     except Exception as e:
+        # Catch any other API-related errors
         fatal_error(f"Failed to query ABS: {e}")
         return 1
 

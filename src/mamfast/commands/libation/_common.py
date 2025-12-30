@@ -75,7 +75,9 @@ def run_libation_cmd(
 
 def export_library(container: str) -> list[dict[str, Any]]:
     """Export library data from Libation as JSON."""
-    export_path = "/tmp/mamfast_export.json"
+    import os
+
+    export_path = f"/tmp/mamfast_export_{os.getpid()}.json"
 
     # Run export command
     result = run_libation_cmd(container, "export", "-p", export_path, "-j")

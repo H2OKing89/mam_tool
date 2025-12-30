@@ -76,7 +76,11 @@ def cmd_abs_check_duplicate(args: argparse.Namespace) -> int:
             else:
                 print_success(f"ASIN {asin} not found in library - safe to import")
                 return 0
+    except (ConnectionError, TimeoutError, OSError) as e:
+        fatal_error(f"Failed to query ABS: {e}")
+        return 1
     except Exception as e:
+        # Catch any other API-related errors
         fatal_error(f"Failed to query ABS: {e}")
         return 1
 

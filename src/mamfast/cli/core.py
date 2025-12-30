@@ -146,6 +146,10 @@ def register_core_commands(app: typer.Typer) -> None:
             typer.Option(help="Override mkbrr preset (default from config)."),
         ] = None,
         asin: AsinArg = None,
+        dry_run_hint: Annotated[
+            bool,
+            typer.Option("--dry-run", hidden=True),
+        ] = False,
     ) -> None:
         """🧲 Create .torrent files for staged releases.
 
@@ -158,6 +162,16 @@ def register_core_commands(app: typer.Typer) -> None:
 
         [dim]Tip: Creates .torrent file using mkbrr in Docker container.[/]
         """
+        from mamfast.console import console
+
+        if dry_run_hint:
+            console.print(
+                "[yellow]⚠️  --dry-run must come BEFORE the subcommand:[/]\n\n"
+                "    [green]mamfast --dry-run torrent[/]  ✓\n"
+                "    [red]mamfast torrent --dry-run[/]  ✗\n"
+            )
+            raise typer.Exit(2)
+
         from mamfast.commands import cmd_torrent
 
         args = get_args(ctx, path=path, preset=preset, asin=asin, command="torrent")

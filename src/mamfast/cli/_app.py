@@ -220,8 +220,13 @@ def setup_logging(verbose: bool, config_path: Path) -> None:
     try:
         settings = reload_settings(config_file=config_path)
         log_file = settings.paths.log_file
-    except Exception:
-        pass  # Config may not exist yet
+    except FileNotFoundError:
+        pass  # Config may not exist yet, use defaults
+    except Exception as e:
+        # Log config errors but don't block startup
+        import logging
+
+        logging.getLogger(__name__).debug("Could not load config for logging setup: %s", e)
 
     _setup_logging(
         log_level=log_level,

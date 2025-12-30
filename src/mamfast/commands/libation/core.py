@@ -76,7 +76,7 @@ def _check_container_health(container: str) -> tuple[bool, str | None]:
                 f"Try: docker restart {container}"
             )
         # If /data doesn't exist, that's a config issue but not a health issue
-        logger.debug(f"Could not list /data in container (may not exist): {e}")
+        logger.debug("Could not list /data in container (may not exist): %s", e)
 
     return True, None
 

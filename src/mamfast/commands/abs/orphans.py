@@ -155,9 +155,12 @@ def cmd_abs_orphans(args: argparse.Namespace) -> int:
                 for o in result.orphaned_no_match
             ],
         }
-        with open(args.report, "w", encoding="utf-8") as f:
-            json_module.dump(report_data, f, indent=2)
-        print_success(f"Report written to {args.report}")
+        try:
+            with open(args.report, "w", encoding="utf-8") as f:
+                json_module.dump(report_data, f, indent=2)
+            print_success(f"Report written to {args.report}")
+        except OSError as e:
+            print_warning(f"Failed to write report to {args.report}: {e}")
 
     # Cleanup if requested
     if args.cleanup or args.cleanup_all:
