@@ -1,6 +1,6 @@
 # Audnex Normalization Layer
 
-> How MAMFast normalizes Audible metadata using the Audnex API.
+> How Shelfr normalizes Audible metadata using the Audnex API.
 
 ## Related Documentation
 
@@ -17,6 +17,7 @@
 Audible stores metadata inconsistently, particularly for series books:
 
 ### Pattern 1: Series in Title
+
 ```json
 {
   "title": "The Way of Kings",
@@ -24,9 +25,11 @@ Audible stores metadata inconsistently, particularly for series books:
   "seriesPrimary": null
 }
 ```
+
 The series info is in `subtitle`, not `seriesPrimary`.
 
 ### Pattern 2: Swapped Title/Subtitle
+
 ```json
 {
   "title": "The Stormlight Archive, Book 1",
@@ -37,9 +40,11 @@ The series info is in `subtitle`, not `seriesPrimary`.
   }
 }
 ```
+
 The actual book title is in `subtitle`, series info is in `title`.
 
 ### Pattern 3: Correct Format
+
 ```json
 {
   "title": "The Way of Kings",
@@ -50,6 +55,7 @@ The actual book title is in `subtitle`, series info is in `title`.
   }
 }
 ```
+
 This is the correct format, but rare.
 
 ---
@@ -117,6 +123,7 @@ SERIES_PATTERN = re.compile(
 ```
 
 Matches:
+
 - "The Stormlight Archive, Book 1"
 - "Mistborn Volume 2"
 - "Red Rising #3"
@@ -149,6 +156,7 @@ def _needs_swap(title: str, subtitle: str | None, series_primary: dict | None) -
 ### Example 1: Swap Required
 
 **Input (Audnex Response):**
+
 ```json
 {
   "asin": "B003ZWFO7E",
@@ -162,6 +170,7 @@ def _needs_swap(title: str, subtitle: str | None, series_primary: dict | None) -
 ```
 
 **Output (NormalizedBook):**
+
 ```python
 NormalizedBook(
     asin="B003ZWFO7E",
@@ -179,6 +188,7 @@ NormalizedBook(
 ### Example 2: No Swap Needed (Standalone)
 
 **Input:**
+
 ```json
 {
   "asin": "B08G9PRS1K",
@@ -189,6 +199,7 @@ NormalizedBook(
 ```
 
 **Output:**
+
 ```python
 NormalizedBook(
     asin="B08G9PRS1K",
@@ -206,6 +217,7 @@ NormalizedBook(
 ### Example 3: Series with Arc Name
 
 **Input:**
+
 ```json
 {
   "asin": "B08XXXXX",
@@ -219,6 +231,7 @@ NormalizedBook(
 ```
 
 **Output:**
+
 ```python
 NormalizedBook(
     asin="B08XXXXX",
@@ -240,11 +253,12 @@ NormalizedBook(
 ### Fuzzy Matching
 
 Series name matching uses fuzzy comparison to handle variations:
+
 - "The Stormlight Archive" ≈ "Stormlight Archive"
 - "A Song of Ice and Fire" ≈ "Song of Ice & Fire"
 
 ```python
-from mamfast.utils.fuzzy import fuzzy_match
+from Shelfr.utils.fuzzy import fuzzy_match
 
 # 80% similarity threshold
 if fuzzy_match(extracted, expected, threshold=0.8):
@@ -299,7 +313,7 @@ See `tests/fixtures/audnex_normalization_samples.json` for comprehensive test ca
 
 ## See Also
 
-- [schemas/audnex.py](/src/mamfast/schemas/audnex.py) - Audnex response validation
-- [models.py](/src/mamfast/models.py) - NormalizedBook dataclass
-- [utils/naming/normalization.py](/src/mamfast/utils/naming/normalization.py) - `normalize_audnex_book()` implementation
+- [schemas/audnex.py](/src/Shelfr/schemas/audnex.py) - Audnex response validation
+- [models.py](/src/Shelfr/models.py) - NormalizedBook dataclass
+- [utils/naming/normalization.py](/src/Shelfr/utils/naming/normalization.py) - `normalize_audnex_book()` implementation
 - [test_normalization.py](/tests/test_normalization.py) - Normalization tests

@@ -53,9 +53,9 @@ def register_tools_commands(tools_app: typer.Typer) -> None:
         in the staging directory.
 
         [bold]Examples:[/]
-          mamfast tools prepare                # Prepare all discovered books
-          mamfast tools prepare -a B0DK9T5P28  # Prepare specific book
-          mamfast --dry-run tools prepare      # Preview without changes
+          shelfr tools prepare                # Prepare all discovered books
+          shelfr tools prepare -a B0DK9T5P28  # Prepare specific book
+          shelfr --dry-run tools prepare      # Preview without changes
 
         [bold]What it does:[/]
           1. Discovers unprocessed audiobooks in Libation library
@@ -67,8 +67,8 @@ def register_tools_commands(tools_app: typer.Typer) -> None:
         if dry_run_hint:
             console.print(
                 "[yellow]--dry-run must come BEFORE the subcommand:[/]\n\n"
-                "    [green]mamfast --dry-run tools prepare[/]  [OK]\n"
-                "    [red]mamfast tools prepare --dry-run[/]  [X]\n"
+                "    [green]shelfr --dry-run tools prepare[/]  [OK]\n"
+                "    [red]shelfr tools prepare --dry-run[/]  [X]\n"
             )
             raise typer.Exit(2)
 
@@ -103,9 +103,9 @@ def register_tools_commands(tools_app: typer.Typer) -> None:
         Fetches metadata from Audnex and extracts info from MediaInfo.
 
         [bold]Examples:[/]
-          mamfast tools mamff /path/to/release/folder
-          mamfast tools mamff /path/to/book.m4b
-          mamfast tools mamff ./folder --output ./custom.json
+          shelfr tools mamff /path/to/release/folder
+          shelfr tools mamff /path/to/book.m4b
+          shelfr tools mamff ./folder --output ./custom.json
 
         [bold]What it does:[/]
           1. Extracts ASIN from folder/file name

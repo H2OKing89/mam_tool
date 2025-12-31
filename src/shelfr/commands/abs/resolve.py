@@ -160,7 +160,7 @@ def cmd_abs_resolve_asins(args: argparse.Namespace) -> int:
 
                     # Write sidecar if requested
                     if args.write_sidecar:
-                        sidecar_path = folder / "_mamfast_resolved_asin.json"
+                        sidecar_path = folder / "_shelfr_resolved_asin.json"
                         sidecar_data = {
                             "asin": resolution.asin,
                             "source": resolution.source,

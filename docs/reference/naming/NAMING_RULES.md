@@ -1,6 +1,6 @@
 # Naming Rules Reference
 
-> Matching rules, phrase removal patterns, author map, and volume normalization for MAMFast.
+> Matching rules, phrase removal patterns, author map, and volume normalization for Shelfr.
 
 ## Related Documentation
 
@@ -56,6 +56,7 @@ Remove edition and format indicators:
 **Pattern Type:** Case-insensitive literal match
 
 **Examples:**
+
 | Input | Output |
 |-------|--------|
 | `Project Hail Mary (Unabridged)` | `Project Hail Mary` |
@@ -84,6 +85,7 @@ Remove common marketing text:
 **Pattern Type:** Word-boundary regex match
 
 **Examples:**
+
 | Input | Output |
 |-------|--------|
 | `The Martian: A Novel` | `The Martian` |
@@ -123,6 +125,7 @@ Remove embedded narrator credits:
 **Pattern Type:** Regex (matches narrator name)
 
 **Examples:**
+
 | Input | Output |
 |-------|--------|
 | `The Book, Narrated by John Smith` | `The Book` |
@@ -239,6 +242,7 @@ Detect and extract series information:
 ```
 
 **Matches:**
+
 - "The Stormlight Archive, Book 1"
 - "Mistborn Volume 2"
 - "Red Rising #3"
@@ -434,7 +438,7 @@ When multiple rules could match, precedence is:
 
 ### Example
 
-```
+```bash
 Input: "The Book: A Novel (Unabridged)"
 
 Rule 1: "(Unabridged)" - edition_markers[0]
@@ -450,6 +454,6 @@ Step 2: "The Book"
 ## See Also
 
 - [config/naming.json](/config/naming.json) - Rule definitions
-- [schemas/naming.py](/src/mamfast/schemas/naming.py) - Pydantic validation
-- [src/mamfast/utils/naming/](/src/mamfast/utils/naming/) - Implementation
+- [schemas/naming.py](/src/Shelfr/schemas/naming.py) - Pydantic validation
+- [src/Shelfr/utils/naming/](/src/Shelfr/utils/naming/) - Implementation
 - [test_naming.py](/tests/test_naming.py) - Unit tests

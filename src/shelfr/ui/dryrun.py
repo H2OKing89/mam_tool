@@ -1,4 +1,4 @@
-"""Dry-run output components for MAMFast UI.
+"""Dry-run output components for shelfr UI.
 
 These components display what would happen without making changes.
 """

@@ -1,4 +1,4 @@
-"""Core workflow commands for MAMFast CLI.
+"""Core workflow commands for shelfr CLI.
 
 These commands handle the main audiobook processing pipeline:
 scan → discover → prepare → metadata → torrent → upload → run

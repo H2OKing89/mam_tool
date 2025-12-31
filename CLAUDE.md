@@ -1,6 +1,6 @@
-# CLAUDE.md - AI Assistant Guide for MAMFast
+# CLAUDE.md - AI Assistant Guide for Shelfr
 
-This document provides AI assistants with essential context about the MAMFast codebase, development workflows, and key conventions to follow when making changes.
+This document provides AI assistants with essential context about the Shelfr codebase, development workflows, and key conventions to follow when making changes.
 
 ## Recent Updates (2025-12-22)
 
@@ -44,7 +44,7 @@ This document provides AI assistants with essential context about the MAMFast co
 
 ## Repository Overview
 
-**MAMFast** is a Python-based automation tool for preparing and uploading audiobooks to MyAnonaMouse (MAM). It orchestrates a complete pipeline from Libation audiobook library discovery to torrent creation and qBittorrent upload.
+**Shelfr** is a Python-based automation tool for preparing and uploading audiobooks to MyAnonaMouse (MAM). It orchestrates a complete pipeline from Libation audiobook library discovery to torrent creation and qBittorrent upload.
 
 **Key Purpose**: Automate the tedious workflow of:
 1. Discovering audiobooks in Libation library
@@ -69,7 +69,7 @@ This document provides AI assistants with essential context about the MAMFast co
 
 ```
 mam_tool/
-├── src/mamfast/               # Main package
+├── src/Shelfr/               # Main package
 │   ├── __init__.py           # Version: 0.1.0
 │   ├── cli.py                # Command-line interface (argparse)
 │   ├── config.py             # Configuration loading (.env, YAML, JSON)
@@ -396,7 +396,7 @@ def network_operation():
 **NEW**: Circuit breaker pattern for external services to prevent cascading failures:
 
 ```python
-from mamfast.utils.circuit_breaker import CircuitBreaker, CircuitState
+from Shelfr.utils.circuit_breaker import CircuitBreaker, CircuitState
 
 breaker = CircuitBreaker(
     failure_threshold=5,      # Open after 5 failures
@@ -420,7 +420,7 @@ def call_external_api():
 **NEW**: Typed exception hierarchy for better error handling:
 
 ```
-MAMFastError (base)
+ShelfrError (base)
 ├── ConfigurationError - Config file issues
 ├── ValidationError - Pre-flight/runtime validation
 │   ├── DiscoveryValidationError
@@ -449,7 +449,7 @@ MAMFastError (base)
 
 **Example**:
 ```python
-from mamfast.exceptions import MetadataError, AudnexError
+from Shelfr.exceptions import MetadataError, AudnexError
 
 try:
     metadata = fetch_audnex_metadata(asin)
@@ -495,7 +495,7 @@ except AudnexError as e:
 
 **Validation Functions**:
 ```python
-from mamfast.schemas import validate_config_yaml, validate_audnex_book
+from Shelfr.schemas import validate_config_yaml, validate_audnex_book
 
 # Validate configuration
 config = validate_config_yaml(config_dict)
@@ -590,14 +590,14 @@ safe_name = sanitize_filename(
    - Compares bitrates, file formats, edition flags
 
 **CLI Commands** (`commands/abs.py`):
-- `mamfast abs-init` - Test ABS connection, list libraries
-- `mamfast abs-import` - Import staged books into ABS library
-- `mamfast abs-check-duplicate <ASIN>` - Check if ASIN exists in library
-- `mamfast abs-rename` - Bulk rename existing ABS library items
-- `mamfast abs-cleanup` - Delete/archive source files after import
-- `mamfast abs-trump-check` - Detect trumpable duplicates
-- `mamfast abs-orphans` - Find ABS items without corresponding seed files
-- `mamfast abs-resolve-asins` - Find ASINs for books via search
+- `Shelfr abs-init` - Test ABS connection, list libraries
+- `Shelfr abs-import` - Import staged books into ABS library
+- `Shelfr abs-check-duplicate <ASIN>` - Check if ASIN exists in library
+- `Shelfr abs-rename` - Bulk rename existing ABS library items
+- `Shelfr abs-cleanup` - Delete/archive source files after import
+- `Shelfr abs-trump-check` - Detect trumpable duplicates
+- `Shelfr abs-orphans` - Find ABS items without corresponding seed files
+- `Shelfr abs-resolve-asins` - Find ASINs for books via search
 
 **Configuration** (`config.yaml`):
 ```yaml
@@ -634,8 +634,8 @@ Libation → Discovery → Staging → Torrent → qBittorrent → ABS Import �
 
 ```bash
 # Clone and setup
-git clone <repo-url> mamfast
-cd mamfast
+git clone <repo-url> Shelfr
+cd Shelfr
 python -m venv .venv
 source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
@@ -671,7 +671,7 @@ pre-commit run --all-files
 pytest
 
 # With coverage
-pytest --cov=src/mamfast --cov-branch --cov-report=term
+pytest --cov=src/Shelfr --cov-branch --cov-report=term
 
 # Specific test file
 pytest tests/test_discovery.py
@@ -774,7 +774,7 @@ mypy src/
    import httpx
    from rich.progress import Progress
 
-   from mamfast.models import AudiobookRelease
+   from Shelfr.models import AudiobookRelease
    ```
 
 4. **Error Handling**: Use specific exceptions
@@ -888,7 +888,7 @@ logger.debug(f"QB password: {settings.qbittorrent.password}")  # NEVER DO THIS
 
 ### Adding a New CLI Command
 
-**Commands are now organized into modules** in `src/mamfast/commands/`:
+**Commands are now organized into modules** in `src/Shelfr/commands/`:
 
 1. **Choose the appropriate module**:
    - `commands/core.py` - Main workflow commands (scan, discover, run)
@@ -904,14 +904,14 @@ logger.debug(f"QB password: {settings.qbittorrent.password}")  # NEVER DO THIS
        try:
            # Implementation here
            return 0  # Success
-       except MAMFastError as e:
+       except ShelfrError as e:
            logger.error(f"Error: {e}")
            return 1  # Failure
    ```
 
 3. **Export from `commands/__init__.py`**:
    ```python
-   from mamfast.commands.yourmodule import cmd_yourcommand
+   from Shelfr.commands.yourmodule import cmd_yourcommand
 
    __all__ = [
        # ... other exports
@@ -943,7 +943,7 @@ logger.debug(f"QB password: {settings.qbittorrent.password}")  # NEVER DO THIS
 
 ### Adding External API Integration
 
-1. **Create module** `src/mamfast/newservice.py`
+1. **Create module** `src/Shelfr/newservice.py`
 2. **Define config class** in `config.py` (e.g., `NewServiceConfig`)
 3. **Define Pydantic schema** in `schemas/newservice.py` for API responses
 4. **Add retry decorator** for network calls (use tenacity)
@@ -1031,7 +1031,7 @@ logger.debug(f"QB password: {settings.qbittorrent.password}")  # NEVER DO THIS
 ```python
 from unittest.mock import MagicMock, patch
 
-@patch("mamfast.qbittorrent.qbittorrentapi.Client")
+@patch("Shelfr.qbittorrent.qbittorrentapi.Client")
 def test_upload_torrent(mock_client):
     """Test torrent upload to qBittorrent."""
     mock_qb = MagicMock()
@@ -1172,7 +1172,7 @@ container_path = "/data/seedvault/audiobooks/release"
 **Important**:
 ```python
 # State file automatically migrates from v1 to v2 on first write
-from mamfast.utils.state import load_state, save_state
+from Shelfr.utils.state import load_state, save_state
 
 state = load_state(state_file)  # Auto-detects version
 # Modify state
@@ -1200,7 +1200,7 @@ save_state(state, state_file)  # Saves as v2 with atomic write
   - `constants.py` - Naming constants and patterns
 
 **When working with naming**:
-- Import from `mamfast.utils.naming` (not submodules directly)
+- Import from `Shelfr.utils.naming` (not submodules directly)
 - Use `generate_mam_path()` for MAM-compliant paths
 - Use `normalize_audnex_metadata()` for Audnex data
 - Test with golden samples in `tests/golden/`
@@ -1214,7 +1214,7 @@ import subprocess
 result = subprocess.run(["docker", "ps"], capture_output=True)
 
 # New (preferred)
-from mamfast.utils.cmd import run
+from Shelfr.utils.cmd import run
 
 result = run(["docker", "ps"], capture_output=True)
 # Raises ExternalToolError on failure
@@ -1230,7 +1230,7 @@ result = run(["docker", "ps"], capture_output=True)
 
 **Use `rapidfuzz` for author/title matching**:
 ```python
-from mamfast.utils.fuzzy import fuzzy_match_author, fuzzy_match_title
+from Shelfr.utils.fuzzy import fuzzy_match_author, fuzzy_match_title
 
 score = fuzzy_match_author("J.K. Rowling", "JK Rowling")  # → 95.0
 is_match = score >= 90.0  # Threshold for matching
@@ -1343,7 +1343,7 @@ pre-commit run --all-files           # Run all checks manually
 # Testing
 pytest                               # Run all tests
 pytest -v                            # Verbose output
-pytest --cov=src/mamfast            # With coverage
+pytest --cov=src/Shelfr            # With coverage
 pytest tests/test_discovery.py      # Specific file
 pytest -k test_valid_asin           # Matching pattern
 
@@ -1354,40 +1354,40 @@ ruff format src/                     # Format
 mypy src/                            # Type check
 
 # Application - Main Workflow
-mamfast --help                       # Show all commands
-mamfast config                       # Debug: print loaded config
-mamfast discover                     # List new audiobooks
-mamfast run --dry-run                # Preview full pipeline
-mamfast run --skip-scan              # Run without Libation scan
+Shelfr --help                       # Show all commands
+Shelfr config                       # Debug: print loaded config
+Shelfr discover                     # List new audiobooks
+Shelfr run --dry-run                # Preview full pipeline
+Shelfr run --skip-scan              # Run without Libation scan
 
 # Audiobookshelf Integration
-mamfast abs-init                     # Test ABS connection, list libraries
-mamfast abs-import                   # Import staged books to ABS
-mamfast abs-import --dry-run         # Preview import without changes
-mamfast abs-check-duplicate B0ABC123 # Check if ASIN exists
-mamfast abs-rename                   # Bulk rename ABS library
-mamfast abs-rename --dry-run         # Preview rename changes
-mamfast abs-cleanup                  # Delete/archive source files
-mamfast abs-trump-check              # Detect trumpable duplicates
-mamfast abs-orphans                  # Find ABS items without seed files
-mamfast abs-resolve-asins            # Find ASINs via ABS search
+Shelfr abs-init                     # Test ABS connection, list libraries
+Shelfr abs-import                   # Import staged books to ABS
+Shelfr abs-import --dry-run         # Preview import without changes
+Shelfr abs-check-duplicate B0ABC123 # Check if ASIN exists
+Shelfr abs-rename                   # Bulk rename ABS library
+Shelfr abs-rename --dry-run         # Preview rename changes
+Shelfr abs-cleanup                  # Delete/archive source files
+Shelfr abs-trump-check              # Detect trumpable duplicates
+Shelfr abs-orphans                  # Find ABS items without seed files
+Shelfr abs-resolve-asins            # Find ASINs via ABS search
 
 # State Management
-mamfast state list                   # List processed releases
-mamfast state list --failed          # List failed releases
-mamfast state prune                  # Remove old entries
-mamfast state retry <ASIN>           # Retry failed release
-mamfast state clear                  # Clear all state (dangerous!)
+Shelfr state list                   # List processed releases
+Shelfr state list --failed          # List failed releases
+Shelfr state prune                  # Remove old entries
+Shelfr state retry <ASIN>           # Retry failed release
+Shelfr state clear                  # Clear all state (dangerous!)
 
 # Diagnostics
-mamfast check                        # Check configuration
-mamfast check-duplicates             # Find duplicate ASINs
-mamfast check-suspicious             # Find suspicious metadata
-mamfast validate                     # Validate all staged releases
+Shelfr check                        # Check configuration
+Shelfr check-duplicates             # Find duplicate ASINs
+Shelfr check-suspicious             # Find suspicious metadata
+Shelfr validate                     # Validate all staged releases
 
 # Debugging
-mamfast -v discover                  # Verbose logging
-mamfast -c /path/to/config.yaml run  # Custom config
+Shelfr -v discover                  # Verbose logging
+Shelfr -c /path/to/config.yaml run  # Custom config
 ```
 
 ## Resources & Documentation
@@ -1435,5 +1435,5 @@ mamfast -c /path/to/config.yaml run  # Custom config
 ---
 
 **Last Updated**: 2025-12-22
-**Maintained By**: MAMFast Project
+**Maintained By**: Shelfr Project
 **For AI Assistants**: This document is regularly updated. Check git history for changes.

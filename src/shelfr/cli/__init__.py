@@ -1,4 +1,4 @@
-"""MAMFast CLI - Beautiful command-line interface built with Typer and Rich.
+"""shelfr CLI - Beautiful command-line interface built with Typer and Rich.
 
 This package provides a modern, user-friendly CLI for audiobook upload automation.
 Built with Typer for clean command structure and Rich for beautiful output.
@@ -12,7 +12,7 @@ The CLI is organized into sub-apps:
 - Tools (tools prepare, tools mamff)
 
 Individual step commands (scan, discover, torrent, upload) have been moved
-to internal workflow - use `mamfast run` for full pipeline.
+to internal workflow - use `shelfr run` for full pipeline.
 """
 
 from __future__ import annotations

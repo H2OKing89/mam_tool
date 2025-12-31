@@ -50,7 +50,7 @@ tui = [
 
 [project.scripts]
 shelfr = "shelfr.cli:main"
-mamfast = "shelfr.cli:main"  # Deprecated alias
+Shelfr = "shelfr.cli:main"  # Deprecated alias
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/shelfr"]
@@ -124,4 +124,9 @@ addopts = "-ra -q"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+]
+filterwarnings = [
+    # Textual's DirectoryTree starts async file watchers on import;
+    # when testing CLI --help, these coroutines are never awaited (harmless)
+    "ignore:coroutine 'DirectoryTree.watch_path' was never awaited:RuntimeWarning",
 ]

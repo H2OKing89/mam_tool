@@ -59,13 +59,13 @@ def _get_state_file() -> Path:
 def _get_run_lock_file() -> Path:
     """Get the run lock file path (next to state file)."""
     state_file = _get_state_file()
-    return state_file.parent / "mamfast.lock"
+    return state_file.parent / "shelfr.lock"
 
 
 @contextmanager
 def run_lock(force: bool = False) -> Generator[None, None, None]:
     """
-    Global run lock to prevent concurrent MAMFast instances.
+    Global run lock to prevent concurrent shelfr instances.
 
     Prevents race conditions by ensuring only one instance runs at a time.
     Use force=True to bypass the lock (dangerous, only for debugging).
@@ -98,7 +98,7 @@ def run_lock(force: bool = False) -> Generator[None, None, None]:
             yield
         except BlockingIOError as e:
             raise StateLockError(
-                f"Another MAMFast instance is already running.\n"
+                f"Another shelfr instance is already running.\n"
                 f"Lock file: {lock_file}\n\n"
                 f"If you're sure no other instance is running, delete the lock file:\n"
                 f"  rm {lock_file}\n\n"

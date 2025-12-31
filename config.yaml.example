@@ -1,5 +1,5 @@
 # =============================================================================
-# MAMFast Configuration Example
+# shelfr Configuration Example
 # =============================================================================
 # Copy this file to config/config.yaml and adjust for your setup.
 # Environment variables in .env override some settings.
@@ -31,7 +31,7 @@ paths:
   state_file: "./data/processed.json"
 
   # Log file
-  log_file: "./logs/mamfast.log"
+  log_file: "./logs/shelfr.log"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAM Compliance
@@ -105,7 +105,7 @@ mkbrr:
 qbittorrent:
   category: "upload.audiobooks"       # Category for uploaded torrents
   tags:
-    - "mamfast"
+    - "shelfr"
     - "auto-upload"
   auto_start: true                    # Start seeding immediately after upload
   # Automatic Torrent Management (TMM):
@@ -137,11 +137,11 @@ audnex:
 
   # Preferred ASIN region for folder/file naming
   # When an audiobook's ASIN is found in a different region (e.g., "es" for Spain),
-  # mamfast will use Audiobookshelf's Audible search to find the ASIN for the
+  # Shelfr will use Audiobookshelf's Audible search to find the ASIN for the
   # preferred region. This ensures consistent ASINs across your library.
   #
   # Example: A book downloaded from Audible Spain has ASIN B0FDCW8SS7 (Spain).
-  # With preferred_asin_region: us, mamfast searches ABS and finds the US ASIN
+  # With preferred_asin_region: us, shelfr searches ABS and finds the US ASIN
   # B0FDCLSZ7G, which is then used in folder/file names.
   #
   # Set to null to disable ASIN normalization (use whatever ASIN is found).
@@ -191,12 +191,12 @@ audiobookshelf:
     - container: "/audiobooks"
       host: "/path/to/audiobooks"
 
-  # Library configuration (run 'mamfast abs-init' to discover library IDs)
-  # Multiple libraries can be defined; only those with mamfast_managed=true are imported
+  # Library configuration (run 'shelfr abs init' to discover library IDs)
+  # Multiple libraries can be defined; only those with shelfr_managed=true are imported
   libraries:
     - id: "lib_xxxxxxxxxxxxx"         # From ABS library ID
       name: "Audiobooks"
-      mamfast_managed: true           # Import to this library
+      Shelfr_managed: true           # Import to this library (legacy name, use shelfr_managed in new configs)
 
   # Import settings
   import:
@@ -305,7 +305,7 @@ audiobookshelf:
       verify_in_abs: false
 
       # Hidden marker filename (for strategy=hide)
-      hide_marker: ".mamfast_imported"
+      hide_marker: ".shelfr_imported"
 
       # Age-based filter: only cleanup sources older than N days (0 = disabled)
       # Useful for keeping recent imports available for troubleshooting

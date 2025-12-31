@@ -6,14 +6,16 @@
 ## Overview
 
 Successfully refactored two large files into well-organized subpackages:
+
 - **cli.py**: 4,100 lines → 820 lines (80% reduction)
-- **naming.py**: 2,800 lines → split into 9 modules (8 implementation + __init__.py)
+- **naming.py**: 2,800 lines → split into 9 modules (8 implementation + **init**.py)
 
 ## 1. CLI Refactoring (cli.py → commands/ subpackage)
 
 ### Before
+
 ```
-src/mamfast/cli.py - 4,100 lines
+src/Shelfr/cli.py - 4,100 lines
 ├── build_parser() - 660 lines
 ├── Core commands (scan, discover, prepare, metadata, torrent, upload, run) - ~550 lines
 ├── Utility commands (status, check, validate, config) - ~700 lines
@@ -22,8 +24,9 @@ src/mamfast/cli.py - 4,100 lines
 ```
 
 ### After
+
 ```
-src/mamfast/
+src/Shelfr/
 ├── cli.py - 820 lines (build_parser + main only)
 └── commands/
     ├── __init__.py - 79 lines (re-exports all commands)
@@ -35,12 +38,14 @@ src/mamfast/
 ```
 
 ### Key Changes
-- **Preserved public API**: `from mamfast.cli import main` still works
+
+- **Preserved public API**: `from Shelfr.cli import main` still works
 - **Clean separation**: Each module has a single responsibility
 - **No breaking changes**: All imports updated throughout codebase
 - **Better organization**: Related commands grouped together
 
 ### Benefits
+
 1. **Easier navigation** - Find commands quickly by category
 2. **Better testing** - Test command groups in isolation
 3. **Reduced merge conflicts** - Parallel development on different command sets
@@ -50,13 +55,15 @@ src/mamfast/
 ## 2. Naming Utilities Refactoring (Already Complete)
 
 ### Before
+
 ```
-src/mamfast/utils/naming.py - 2,800 lines
+src/Shelfr/utils/naming.py - 2,800 lines
 ```
 
 ### After
+
 ```
-src/mamfast/utils/naming/
+src/Shelfr/utils/naming/
 ├── __init__.py - 197 lines (re-exports public API)
 ├── authors.py - 180 lines (author role detection, filtering)
 ├── constants.py - 190 lines (shared constants and types)
@@ -69,8 +76,9 @@ src/mamfast/utils/naming/
 ```
 
 ### Key Changes
+
 - **Logical grouping**: Each module has a clear purpose
-- **API preserved**: `from mamfast.utils.naming import build_mam_path` still works
+- **API preserved**: `from Shelfr.utils.naming import build_mam_path` still works
 - **No breaking changes**: All existing code continues to work
 
 ## 3. Import Compatibility
@@ -78,27 +86,30 @@ src/mamfast/utils/naming/
 All refactoring maintains **100% backward compatibility**:
 
 ### CLI Commands
+
 ```python
 # Old (still works)
-from mamfast.cli import main
+from Shelfr.cli import main
 
 # New (also works)
-from mamfast.commands import cmd_scan, cmd_discover
+from Shelfr.commands import cmd_scan, cmd_discover
 ```
 
 ### Naming Utilities
+
 ```python
 # Old (still works)
-from mamfast.utils.naming import build_mam_path, filter_title
+from Shelfr.utils.naming import build_mam_path, filter_title
 
 # New (also works)
-from mamfast.utils.naming.mam_paths import build_mam_path
-from mamfast.utils.naming.filters import filter_title
+from Shelfr.utils.naming.mam_paths import build_mam_path
+from Shelfr.utils.naming.filters import filter_title
 ```
 
 ## 4. File Size Comparison
 
 ### Before Refactoring
+
 | File | Lines | Purpose |
 |------|-------|---------|
 | cli.py | 4,100 | All CLI commands |
@@ -106,16 +117,17 @@ from mamfast.utils.naming.filters import filter_title
 | **Total** | **6,900** | **2 files** |
 
 ### After Refactoring
+
 | File | Lines | Purpose |
 |------|-------|---------|
 | cli.py | 820 | Parser + main |
-| commands/__init__.py | 79 | Re-exports |
+| commands/**init**.py | 79 | Re-exports |
 | commands/core.py | 572 | Core workflow |
 | commands/utility.py | 483 | Status/diagnostic |
 | commands/diagnostics.py | 368 | Analysis commands |
 | commands/state.py | 273 | State management |
 | commands/abs.py | 2,090 | ABS integration |
-| naming/__init__.py | 197 | Re-exports |
+| naming/**init**.py | 197 | Re-exports |
 | naming/authors.py | 180 | Author utilities |
 | naming/constants.py | 190 | Constants |
 | naming/filters.py | 667 | Filtering |
@@ -127,6 +139,7 @@ from mamfast.utils.naming.filters import filter_title
 | **Total** | **7,675** | **16 files** |
 
 ### Statistics
+
 - **Average file size before**: 3,450 lines
 - **Average file size after**: 480 lines (86% reduction)
 - **Largest file before**: 4,100 lines (cli.py)
@@ -135,14 +148,17 @@ from mamfast.utils.naming.filters import filter_title
 ## 5. Testing & Verification
 
 ### Import Tests
+
 ✅ All imports verified working:
+
 ```bash
-python3 -c "from mamfast.cli import main; print('CLI import OK')"
-python3 -c "from mamfast.commands import cmd_scan; print('Commands import OK')"
-python3 -c "from mamfast.utils.naming import build_mam_path; print('Naming import OK')"
+python3 -c "from Shelfr.cli import main; print('CLI import OK')"
+python3 -c "from Shelfr.commands import cmd_scan; print('Commands import OK')"
+python3 -c "from Shelfr.utils.naming import build_mam_path; print('Naming import OK')"
 ```
 
 ### Module Structure Tests
+
 ✅ All modules loadable without errors
 ✅ No circular import issues
 ✅ All re-exports working correctly
@@ -150,17 +166,21 @@ python3 -c "from mamfast.utils.naming import build_mam_path; print('Naming impor
 ## 6. Migration Guide for Developers
 
 ### For New Development
+
 Use specific imports for better clarity:
+
 ```python
 # Instead of this
-from mamfast.cli import cmd_scan
+from Shelfr.cli import cmd_scan
 
 # Use this
-from mamfast.commands.core import cmd_scan
+from Shelfr.commands.core import cmd_scan
 ```
 
 ### For Testing
+
 Test specific command groups:
+
 ```python
 # Test only ABS commands
 pytest tests/test_abs_commands.py
@@ -172,6 +192,7 @@ pytest tests/test_core_commands.py
 ## 7. Next Steps (Future Improvements)
 
 ### Potential Further Refactoring
+
 1. **commands/abs.py** (2,090 lines) could be split into:
    - `abs/init.py` - Connection and library discovery
    - `abs/import.py` - Import workflow
@@ -189,6 +210,7 @@ pytest tests/test_core_commands.py
    - `mam_paths/truncation.py` - Path truncation logic
 
 ### Code Quality Improvements
+
 - Add type hints to all function signatures ✅ (already done)
 - Add comprehensive docstrings ✅ (already done)
 - Improve test coverage for edge cases
@@ -196,18 +218,21 @@ pytest tests/test_core_commands.py
 ## 8. Benefits Achieved
 
 ### Developer Experience
+
 - ✅ **Faster file navigation** - Smaller files load instantly
 - ✅ **Better code organization** - Related functions grouped logically
 - ✅ **Reduced cognitive load** - Each module has clear boundaries
 - ✅ **Easier onboarding** - New developers can understand structure quickly
 
 ### Maintenance
+
 - ✅ **Reduced merge conflicts** - Changes scoped to specific areas
 - ✅ **Better git blame** - Easier to track changes per command
 - ✅ **Cleaner diffs** - Changes isolated to relevant modules
 - ✅ **Easier refactoring** - Can modify one module without affecting others
 
 ### Testing
+
 - ✅ **Targeted testing** - Test specific command groups
 - ✅ **Faster test execution** - Can run subset of tests
 - ✅ **Better isolation** - Easier to mock dependencies
@@ -217,7 +242,7 @@ pytest tests/test_core_commands.py
 The P3 large file refactoring is **complete and successful**:
 
 - ✅ cli.py: 4,100 lines → 820 lines (80% reduction)
-- ✅ naming.py: Already split into 9 well-organized modules (8 implementation + __init__.py)
+- ✅ naming.py: Already split into 9 well-organized modules (8 implementation + **init**.py)
 - ✅ All imports working correctly
 - ✅ No breaking changes
 - ✅ Better code organization and maintainability

@@ -1,4 +1,4 @@
-"""Trumping output components for MAMFast UI.
+"""Trumping output components for shelfr UI.
 
 These components display trumping decisions and quality comparisons.
 """

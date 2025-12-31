@@ -8,7 +8,7 @@ LibationCli is the command-line interface for Libation, an Audible audiobook man
 
 ## Understanding Libation's Two-Stage Model
 
-**This is critical for MAMFast integration.**
+**This is critical for Shelfr integration.**
 
 Libation uses a two-stage model for audiobook management:
 
@@ -71,6 +71,7 @@ for s, c in statuses.most_common():
 ```
 
 Example output:
+
 ```
 Book Status Distribution:
   Liberated: 381
@@ -80,7 +81,6 @@ Book Status Distribution:
 ---
 
 ## Quick Reference
-
 
 ```bash
 # Help
@@ -132,6 +132,7 @@ libationcli copydb -c "my postgres connection string"
 ## Commands
 
 ### scan
+
 Scan your Audible library for new books.
 
 ```bash
@@ -145,6 +146,7 @@ LibationCli scan [--libationFiles PATH] [-o KEY=VALUE] [ACCOUNTS...]
 | `ACCOUNTS` | (positional) Optional: user ID or nicknames of accounts to scan |
 
 **Examples:**
+
 ```bash
 # Scan all accounts
 LibationCli scan
@@ -156,6 +158,7 @@ LibationCli scan "my-account-nickname"
 ---
 
 ### liberate
+
 Download and decrypt audiobooks. Default: download and decrypt all un-liberated titles and download PDFs.
 
 ```bash
@@ -172,6 +175,7 @@ LibationCli liberate [-p] [-f] [-l LICENSE] [--libationFiles PATH] [-o KEY=VALUE
 | `ASINS` | (positional) Optional: product IDs of specific books to liberate |
 
 **Examples:**
+
 ```bash
 # Liberate all un-liberated books
 LibationCli liberate
@@ -189,6 +193,7 @@ LibationCli liberate -p
 ---
 
 ### convert
+
 Convert M4B (AAC) files to MP3 format.
 
 ```bash
@@ -204,6 +209,7 @@ LibationCli convert [--libationFiles PATH] [-o KEY=VALUE] [ASINS...]
 ---
 
 ### export
+
 Export library data to file.
 
 ```bash
@@ -220,6 +226,7 @@ LibationCli export -p PATH {-x|-c|-j} [--libationFiles PATH] [-o KEY=VALUE]
 | `-o, --override` | Configuration setting override |
 
 **Examples:**
+
 ```bash
 # Export to Excel
 LibationCli export -p /data/library.xlsx -x
@@ -234,6 +241,7 @@ LibationCli export -p /data/library.csv -c
 ---
 
 ### search
+
 Search for books in your library using Lucene query syntax.
 
 ```bash
@@ -248,6 +256,7 @@ LibationCli search [-n COUNT] [--libationFiles PATH] [-o KEY=VALUE] QUERY
 | `QUERY` | **Required.** Lucene search string |
 
 **Examples:**
+
 ```bash
 # Search by title
 LibationCli search "Sword Art Online"
@@ -262,6 +271,7 @@ LibationCli search -n 50 "fantasy"
 ---
 
 ### get-license
+
 Get license information for a specific book (useful for manual decryption).
 
 ```bash
@@ -275,6 +285,7 @@ LibationCli get-license [--libationFiles PATH] [-o KEY=VALUE] ASIN
 | `ASIN` | **Required.** Product ID of book to request license for |
 
 **Example:**
+
 ```bash
 LibationCli get-license B0DK9T5P28
 ```
@@ -282,9 +293,11 @@ LibationCli get-license B0DK9T5P28
 ---
 
 ### set-status
+
 Set download statuses throughout library based on whether each book's audio file can be found.
 
 **Note:** Must include at least one flag: `--downloaded` or `--not-downloaded`.
+
 - **Downloaded (`-d`)**: If the audio file can be found, set status to 'Downloaded'
 - **Not Downloaded (`-n`)**: If the audio file cannot be found, set status to 'Not Downloaded'
 - **UI vs CLI**: UI operates on visible books with prompt; CLI operates on full library without prompt
@@ -303,6 +316,7 @@ LibationCli set-status {-d|-n} [-f] [--libationFiles PATH] [-o KEY=VALUE] [ASINS
 | `ASINS` | (positional) Optional: product IDs of books to update |
 
 **Examples:**
+
 ```bash
 # Mark files that exist as 'Downloaded'
 LibationCli set-status -d
@@ -320,6 +334,7 @@ LibationCli set-status -n -f B0DK9T5P28
 ---
 
 ### get-setting
+
 List current settings and their values.
 
 ```bash
@@ -335,6 +350,7 @@ LibationCli get-setting [-l] [-b] [--libationFiles PATH] [-o KEY=VALUE] [SETTING
 | `SETTING_NAMES` | (positional) Optional: specific setting names to display |
 
 **Examples:**
+
 ```bash
 # Show all settings
 LibationCli get-setting
@@ -349,6 +365,7 @@ LibationCli get-setting FileTemplate FolderTemplate
 ---
 
 ### copydb
+
 Copy local SQLite database to PostgreSQL.
 
 ```bash
@@ -364,6 +381,7 @@ LibationCli copydb -c CONNECTION_STRING [--libationFiles PATH] [-o KEY=VALUE]
 ---
 
 ### version
+
 Display version information.
 
 ```bash
@@ -373,6 +391,7 @@ LibationCli version
 ---
 
 ### help
+
 Display help for a specific command.
 
 ```bash
@@ -484,11 +503,13 @@ Content only appears if book has a series.
 ### Example Templates
 
 **FolderTemplate:**
+
 ```
 <first author>/<if series-><series>/<-if series><audible title> vol_<series#[00.##]> (<year>) (<first author>) {ASIN.<id>} [H2OKing]
 ```
 
 **FileTemplate:**
+
 ```
 <audible title> vol_<series#[00.##]> (<year>) (<first author>) {ASIN.<id>}
 ```
@@ -572,6 +593,7 @@ print(f'Marked Liberated but never downloaded: {len(liberated) - len([b for b in
 ```
 
 **Important:** `BookStatus=Liberated` does NOT mean the file exists on disk. Check `LastDownloaded` for actual download confirmation. Books can be marked "Liberated" but have `LastDownloaded=null` if:
+
 - Files were moved/deleted after liberation
 - Status was manually set
 - Files exist in a different location
@@ -605,11 +627,11 @@ The `Books` setting inside Libation (usually `/data`) maps to the host path show
 
 ---
 
-## MAMFast Integration Notes
+## Shelfr Integration Notes
 
 ### Understanding the Workflow
 
-MAMFast's `run` command executes this sequence:
+Shelfr's `run` command executes this sequence:
 
 ```
 1. scan      → Index new books from Audible (adds to DB as NotLiberated)
@@ -618,14 +640,15 @@ MAMFast's `run` command executes this sequence:
 4. process   → Stage → Metadata → Torrent → Upload
 ```
 
-**Current mamfast behavior (as of v1.x):**
-- `mamfast run` calls BOTH `scan` AND `liberate` automatically
+**Current Shelfr behavior (as of v1.x):**
+
+- `Shelfr run` calls BOTH `scan` AND `liberate` automatically
 - `liberate` runs regardless of `scan` results (correct behavior!)
 - If `liberate` fails silently, `discover` finds nothing
 
 ### Verified Behavior (December 2025)
 
-| Scenario | scan output | liberate behavior | MAMFast result |
+| Scenario | scan output | liberate behavior | Shelfr result |
 |----------|-------------|-------------------|----------------|
 | New books on Audible | "New: 5" | Downloads 5 books | Discovers 5 |
 | No new books, 20 NotLiberated | "New: 0" | Downloads 20 books | Discovers 20 |
@@ -655,9 +678,10 @@ docker restart Libation
 ```
 
 **Symptoms:**
+
 - `liberate` errors: "Books directory is not set"
 - Files not appearing in `library_root`
-- MAMFast finds nothing despite successful liberate
+- Shelfr finds nothing despite successful liberate
 
 ### Checking if liberate Actually Ran
 
@@ -665,8 +689,8 @@ docker restart Libation
 # Check what's in library_root
 ls -la /mnt/user/data/audio/audiobook-import/
 
-# Check liberate stderr (mamfast captures this)
-mamfast -v run 2>&1 | grep -i error
+# Check liberate stderr (Shelfr captures this)
+Shelfr -v run 2>&1 | grep -i error
 
 # Manual liberate with visible output
 docker exec -it Libation /libation/LibationCli liberate
@@ -674,7 +698,7 @@ docker exec -it Libation /libation/LibationCli liberate
 
 ### Getting NotLiberated Count Programmatically
 
-For future MAMFast enhancements, here's how to get the count:
+For future Shelfr enhancements, here's how to get the count:
 
 ```bash
 # Export and parse
@@ -687,9 +711,9 @@ print(sum(1 for b in d if b.get('BookStatus') == 'NotLiberated'))
 echo "NotLiberated books: $NOT_LIBERATED"
 ```
 
-### Recommended mamfast Enhancement
+### Recommended Shelfr Enhancement
 
-The current mamfast workflow is correct but could be improved:
+The current Shelfr workflow is correct but could be improved:
 
 ```python
 # Current (correct but opaque):
@@ -720,7 +744,7 @@ This is **normal and expected**:
 4. But those 20 are still `NotLiberated` in DB
 5. Running `liberate` will download all 20
 
-**MAMFast now handles this correctly** by checking Libation's status after `scan` and only calling `liberate` when there are pending `NotLiberated` books.
+**Shelfr now handles this correctly** by checking Libation's status after `scan` and only calling `liberate` when there are pending `NotLiberated` books.
 
 ---
 

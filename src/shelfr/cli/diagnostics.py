@@ -43,9 +43,9 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
           • Service connections (qBittorrent, ABS, Audnex)
 
         [bold]Examples:[/]
-          mamfast check                [dim]# Run all checks[/]
-          mamfast check --config-only  [dim]# Configuration only[/]
-          mamfast check --services-only [dim]# Test service connections[/]
+          shelfr check                [dim]# Run all checks[/]
+          shelfr check --config-only  [dim]# Configuration only[/]
+          shelfr check --services-only [dim]# Test service connections[/]
 
         [bold cyan]Tip:[/] Run this after any configuration changes!
         """
@@ -81,9 +81,9 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
           - Audio file presence and format
 
         [bold]Examples:[/]
-          mamfast validate               [dim]# Validate all[/]
-          mamfast validate -a B0DK9T5P28 [dim]# Validate specific ASIN[/]
-          mamfast validate --json        [dim]# JSON output[/]
+          shelfr validate               [dim]# Validate all[/]
+          shelfr validate -a B0DK9T5P28 [dim]# Validate specific ASIN[/]
+          shelfr validate --json        [dim]# JSON output[/]
         """
         from shelfr.commands import cmd_validate
 
@@ -125,9 +125,9 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
         without making any changes. Great for testing naming rules!
 
         [bold]Examples:[/]
-          mamfast preview-naming               [dim]# Preview first 20[/]
-          mamfast preview-naming -n 50         [dim]# Preview 50 releases[/]
-          mamfast preview-naming -a B0DK9T5P28 [dim]# Preview specific ASIN[/]
+          shelfr preview-naming               [dim]# Preview first 20[/]
+          shelfr preview-naming -n 50         [dim]# Preview 50 releases[/]
+          shelfr preview-naming -a B0DK9T5P28 [dim]# Preview specific ASIN[/]
 
         [bold cyan]Tip:[/] Use this to verify naming.json rules work correctly
         before running the full pipeline.
@@ -164,9 +164,9 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
         Helps avoid uploading the same audiobook twice!
 
         [bold]Examples:[/]
-          mamfast check-duplicates          [dim]# Default 85% threshold[/]
-          mamfast check-duplicates -t 90    [dim]# Stricter matching[/]
-          mamfast check-duplicates --json   [dim]# JSON output[/]
+          shelfr check-duplicates          [dim]# Default 85% threshold[/]
+          shelfr check-duplicates -t 90    [dim]# Stricter matching[/]
+          shelfr check-duplicates --json   [dim]# JSON output[/]
 
         [bold cyan]Tip:[/] Higher threshold = stricter matching.
         Use 90%+ for more exact matches, 80% for looser detection.
@@ -206,8 +206,8 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
         Compares original titles to cleaned versions and flags significant changes.
 
         [bold]Examples:[/]
-          mamfast check-suspicious       # Default threshold
-          mamfast check-suspicious -t 40 # More aggressive detection
+          shelfr check-suspicious       # Default threshold
+          shelfr check-suspicious -t 40 # More aggressive detection
         """
         from shelfr.commands import cmd_check_suspicious
 

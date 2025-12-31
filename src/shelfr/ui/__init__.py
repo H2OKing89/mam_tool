@@ -1,7 +1,7 @@
-"""MAMFast UI - Beautiful Rich console output components.
+"""shelfr UI - Beautiful Rich console output components.
 
 This package provides a comprehensive set of Rich-based UI components
-for beautiful terminal output throughout MAMFast.
+for beautiful terminal output throughout shelfr.
 
 Modules:
     core: Console instance, theme, and base configuration
@@ -34,7 +34,7 @@ from shelfr.ui.banner import (
 
 # Core - always import these
 from shelfr.ui.core import (
-    MAMFAST_THEME,
+    SHELFR_THEME,
     StepResult,
     console,
     err_console,
@@ -136,7 +136,7 @@ from shelfr.ui.validation import (
 
 __all__ = [
     # Core
-    "MAMFAST_THEME",
+    "SHELFR_THEME",
     "console",
     "err_console",
     "StepResult",

@@ -38,7 +38,7 @@ def data_dir(*, ensure: bool = True) -> Path:
     macOS: ~/Library/Application Support/shelfr
     Windows: C:\\Users\\<user>\\AppData\\Local\\shelfr
 
-    Override with SHELFR_DATA_DIR env var (MAMFAST_DATA_DIR also supported).
+    Override with SHELFR_DATA_DIR env var (Shelfr_DATA_DIR also supported for legacy compatibility).
 
     Args:
         ensure: Create directory if it doesn't exist
@@ -48,7 +48,7 @@ def data_dir(*, ensure: bool = True) -> Path:
     """
     d = (
         _env_override("SHELFR_DATA_DIR")
-        or _env_override("MAMFAST_DATA_DIR")
+        or _env_override("Shelfr_DATA_DIR")
         or Path(user_data_dir(APP_NAME, APPAUTHOR))
     )
     if ensure:
@@ -63,7 +63,8 @@ def cache_dir(*, ensure: bool = True) -> Path:
     macOS: ~/Library/Caches/shelfr
     Windows: C:\\Users\\<user>\\AppData\\Local\\shelfr\\Cache
 
-    Override with SHELFR_CACHE_DIR env var (MAMFAST_CACHE_DIR also supported).
+    Override with SHELFR_CACHE_DIR env var.
+    Legacy Shelfr_CACHE_DIR also supported for backward compatibility.
 
     Args:
         ensure: Create directory if it doesn't exist
@@ -73,7 +74,7 @@ def cache_dir(*, ensure: bool = True) -> Path:
     """
     d = (
         _env_override("SHELFR_CACHE_DIR")
-        or _env_override("MAMFAST_CACHE_DIR")
+        or _env_override("Shelfr_CACHE_DIR")
         or Path(user_cache_dir(APP_NAME, APPAUTHOR))
     )
     if ensure:
@@ -88,7 +89,7 @@ def log_dir(*, ensure: bool = True) -> Path:
     macOS: ~/Library/Logs/shelfr
     Windows: C:\\Users\\<user>\\AppData\\Local\\shelfr\\Logs
 
-    Override with SHELFR_LOG_DIR env var (MAMFAST_LOG_DIR also supported).
+    Override with SHELFR_LOG_DIR env var (Shelfr_LOG_DIR also supported for legacy compatibility).
 
     Args:
         ensure: Create directory if it doesn't exist
@@ -98,7 +99,7 @@ def log_dir(*, ensure: bool = True) -> Path:
     """
     d = (
         _env_override("SHELFR_LOG_DIR")
-        or _env_override("MAMFAST_LOG_DIR")
+        or _env_override("Shelfr_LOG_DIR")
         or Path(user_log_dir(APP_NAME, APPAUTHOR))
     )
     if ensure:
@@ -112,13 +113,14 @@ def config_dir() -> Path:
     Returns config/ directory relative to package location.
     This is where user-specific files like config.yaml and templates go.
 
-    Override with SHELFR_CONFIG_DIR env var (MAMFAST_CONFIG_DIR also supported).
+    Override with SHELFR_CONFIG_DIR env var.
+    Legacy Shelfr_CONFIG_DIR also supported for backward compatibility.
 
     Returns:
         Path to config directory (does NOT auto-create)
     """
     # Support both old and new env var names
-    override = _env_override("SHELFR_CONFIG_DIR") or _env_override("MAMFAST_CONFIG_DIR")
+    override = _env_override("SHELFR_CONFIG_DIR") or _env_override("Shelfr_CONFIG_DIR")
     if override:
         return override
 

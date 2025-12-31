@@ -42,13 +42,13 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
         Manage audiobook imports, deduplication, and library maintenance.
 
         [bold]Commands:[/]
-          mamfast abs init          Initialize ABS connection
-          mamfast abs import        Import staged audiobooks
-          mamfast abs check-asin    Check if ASIN exists in library
-          mamfast abs trump-preview Preview trumping decisions
-          mamfast abs cleanup       Cleanup Libation source files
+          shelfr abs init          Initialize ABS connection
+          shelfr abs import        Import staged audiobooks
+          shelfr abs check-asin    Check if ASIN exists in library
+          shelfr abs trump-preview Preview trumping decisions
+          shelfr abs cleanup       Cleanup Libation source files
 
-        Running [cyan]mamfast abs[/] without a command shows this help.
+        Running [cyan]shelfr abs[/] without a command shows this help.
         """
         if ctx.invoked_subcommand is None:
             # Show help when no subcommand given
@@ -120,9 +120,9 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
         Moves staged books to ABS library structure with duplicate detection.
 
         [bold]Examples:[/]
-          mamfast abs import                    # Import all staged
-          mamfast abs import /path/to/book      # Import specific folder
-          mamfast abs import -d skip            # Skip duplicates
+          shelfr abs import                    # Import all staged
+          shelfr abs import /path/to/book      # Import specific folder
+          shelfr abs import -d skip            # Skip duplicates
         """
         from shelfr.commands import cmd_abs_import
 
@@ -156,7 +156,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
         Quick lookup to check for duplicates before importing.
 
         [bold]Example:[/]
-          mamfast abs check-asin B0DK9T5P28
+          shelfr abs check-asin B0DK9T5P28
         """
         from shelfr.commands import cmd_abs_check_duplicate
 
@@ -204,9 +204,9 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
         Restore books that were archived by trumping back to the library.
 
         [bold]Examples:[/]
-          mamfast abs restore --list            # List archives
-          mamfast abs restore -a B0DK9T5P28     # Filter by ASIN
-          mamfast abs restore /path/to/archive  # Restore specific
+          shelfr abs restore --list            # List archives
+          shelfr abs restore -a B0DK9T5P28     # Filter by ASIN
+          shelfr abs restore /path/to/archive  # Restore specific
         """
         from shelfr.commands import cmd_abs_restore
 

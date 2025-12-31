@@ -61,9 +61,9 @@ def cmd_abs_trump_check(args: argparse.Namespace) -> int:
     abs_config = settings.audiobookshelf
 
     # Get managed library
-    managed_libs = [lib for lib in abs_config.libraries if lib.mamfast_managed]
+    managed_libs = [lib for lib in abs_config.libraries if lib.shelfr_managed]
     if not managed_libs:
-        fatal_error("No mamfast_managed libraries configured")
+        fatal_error("No shelfr_managed libraries configured")
         return 1
     target_library = managed_libs[0]
 

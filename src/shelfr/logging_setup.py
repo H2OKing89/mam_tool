@@ -1,4 +1,4 @@
-"""Logging configuration for MAMFast."""
+"""Logging configuration for shelfr."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def setup_logging(
     quiet_console: bool = False,
 ) -> logging.Logger:
     """
-    Configure logging for MAMFast.
+    Configure logging for shelfr.
 
     Args:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR)
@@ -34,8 +34,8 @@ def setup_logging(
     global _console_handler
     level = getattr(logging, log_level.upper(), logging.INFO)
 
-    # Root logger for mamfast
-    logger = logging.getLogger("mamfast")
+    # Root logger for shelfr
+    logger = logging.getLogger("shelfr")
     logger.setLevel(level)
     logger.handlers.clear()
 

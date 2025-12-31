@@ -1,4 +1,4 @@
-"""Core console configuration and theme for MAMFast UI.
+"""Core console configuration and theme for shelfr UI.
 
 This module provides the foundational Rich console instances and theme
 that all other UI modules build upon.
@@ -15,7 +15,7 @@ from rich.theme import Theme
 # Theme Configuration
 # =============================================================================
 
-MAMFAST_THEME = Theme(
+SHELFR_THEME = Theme(
     {
         # Status colors
         "info": "cyan",
@@ -46,10 +46,10 @@ MAMFAST_THEME = Theme(
 # =============================================================================
 
 # Primary console for normal output
-console = Console(theme=MAMFAST_THEME, stderr=False)
+console = Console(theme=SHELFR_THEME, stderr=False)
 
 # Error console for stderr output
-err_console = Console(theme=MAMFAST_THEME, stderr=True)
+err_console = Console(theme=SHELFR_THEME, stderr=True)
 
 
 # =============================================================================

@@ -41,9 +41,9 @@ def register_state_commands(state_app: typer.Typer) -> None:
         Shows processed and/or failed entries from the state file.
 
         [bold]Examples:[/]
-          mamfast state list            # All entries
-          mamfast state list --failed   # Only failed
-          mamfast state list --json     # JSON output
+          shelfr state list            # All entries
+          shelfr state list --failed   # Only failed
+          shelfr state list --json     # JSON output
         """
         from shelfr.commands import cmd_state
 
@@ -65,7 +65,7 @@ def register_state_commands(state_app: typer.Typer) -> None:
 
         Cleans up state entries whose files no longer exist.
 
-        [bold]Tip:[/] Use [cyan]mamfast --dry-run state prune[/] to preview.
+        [bold]Tip:[/] Use [cyan]shelfr --dry-run state prune[/] to preview.
         """
         from shelfr.commands import cmd_state
 
@@ -85,7 +85,7 @@ def register_state_commands(state_app: typer.Typer) -> None:
         Removes the ASIN from failed state so it can be processed again.
 
         [bold]Example:[/]
-          mamfast state retry B0DK9T5P28
+          shelfr state retry B0DK9T5P28
         """
         from shelfr.commands import cmd_state
 
@@ -105,7 +105,7 @@ def register_state_commands(state_app: typer.Typer) -> None:
         Removes the ASIN from processed state for full re-processing.
 
         [bold]Example:[/]
-          mamfast state clear B0DK9T5P28
+          shelfr state clear B0DK9T5P28
         """
         from shelfr.commands import cmd_state
 
@@ -126,8 +126,8 @@ def register_state_commands(state_app: typer.Typer) -> None:
         Exports the current state to a JSON file for backup or analysis.
 
         [bold]Examples:[/]
-          mamfast state export                # Print to stdout
-          mamfast state export -o backup.json # Save to file
+          shelfr state export                # Print to stdout
+          shelfr state export -o backup.json # Save to file
         """
         from shelfr.commands import cmd_state
 

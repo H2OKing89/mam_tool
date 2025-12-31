@@ -1,5 +1,5 @@
 """
-Workflow orchestration for the MAMFast pipeline.
+Workflow orchestration for the shelfr pipeline.
 
 Coordinates all processing steps:
 1. Libation scan

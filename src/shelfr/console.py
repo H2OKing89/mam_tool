@@ -1,7 +1,7 @@
-"""Rich console output for MAMFast CLI.
+"""Rich console output for shelfr CLI.
 
 This module provides backward compatibility by re-exporting
-all UI components from the new mamfast.ui package.
+all UI components from the shelfr.ui package.
 
 For new code, prefer importing directly from shelfr.ui:
     from shelfr.ui import console, print_success
@@ -16,7 +16,7 @@ from __future__ import annotations
 # Re-export everything from the ui package for backward compatibility
 from shelfr.ui import (
     # Core
-    MAMFAST_THEME,
+    SHELFR_THEME,
     # Dry run
     DryRunTransform,
     # Validation
@@ -79,7 +79,7 @@ from shelfr.ui import (
 
 __all__ = [
     # Core
-    "MAMFAST_THEME",
+    "SHELFR_THEME",
     "console",
     "err_console",
     "StepResult",

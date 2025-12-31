@@ -16,8 +16,8 @@ from shelfr.cli._helpers import get_args
 def register_core_commands(app: typer.Typer) -> None:
     """Register core pipeline commands on the app."""
 
-    # NOTE: scan, discover removed - use `mamfast libation scan/liberate/books` instead
-    # NOTE: prepare moved to `mamfast tools prepare`
+    # NOTE: scan, discover removed - use `shelfr libation scan/liberate/books` instead
+    # NOTE: prepare moved to `shelfr tools prepare`
     # NOTE: torrent, upload removed - workflow handles these; future mkbrr/qbit wrappers planned
 
     @app.command(rich_help_panel=CORE_COMMANDS)
@@ -43,7 +43,7 @@ def register_core_commands(app: typer.Typer) -> None:
             typer.Option(
                 "--dry-run",
                 hidden=True,
-                help="(Use 'mamfast --dry-run run' instead)",
+                help="(Use 'shelfr --dry-run run' instead)",
             ),
         ] = False,
     ) -> None:
@@ -52,14 +52,14 @@ def register_core_commands(app: typer.Typer) -> None:
         Executes all steps: [cyan]scan -> discover -> prepare -> metadata -> torrent -> upload[/]
 
         [bold]Examples:[/]
-          mamfast run               [dim]# Full pipeline[/]
-          mamfast --dry-run run     [dim]# Preview without changes[/]
-          mamfast run --skip-scan   [dim]# Skip Libation scan[/]
+          shelfr run               [dim]# Full pipeline[/]
+          shelfr --dry-run run     [dim]# Preview without changes[/]
+          shelfr run --skip-scan   [dim]# Skip Libation scan[/]
 
         [bold cyan]Tips:[/]
-          - Always run [green]mamfast check[/] first to verify your setup
+          - Always run [green]shelfr check[/] first to verify your setup
           - Use [green]--dry-run[/] to preview what will happen
-          - Check [green]mamfast status[/] to see pending releases
+          - Check [green]shelfr status[/] to see pending releases
         """
         from shelfr.console import console
 
@@ -67,8 +67,8 @@ def register_core_commands(app: typer.Typer) -> None:
         if dry_run_hint:
             console.print(
                 "[yellow]--dry-run must come BEFORE the subcommand:[/]\n\n"
-                "    [green]mamfast --dry-run run[/]  [OK]\n"
-                "    [red]mamfast run --dry-run[/]  [X]\n"
+                "    [green]shelfr --dry-run run[/]  [OK]\n"
+                "    [red]shelfr run --dry-run[/]  [X]\n"
             )
             raise typer.Exit(2)
 
@@ -110,7 +110,7 @@ def register_core_commands(app: typer.Typer) -> None:
         Shows the current configuration values for debugging.
         Useful for verifying paths and settings are correct.
 
-        [bold cyan]Tip:[/] Run [green]mamfast check[/] for a more thorough
+        [bold cyan]Tip:[/] Run [green]shelfr check[/] for a more thorough
         configuration validation with health checks.
         """
         from shelfr.commands import cmd_config

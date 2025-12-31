@@ -1,4 +1,4 @@
-"""MediaInfo formatting helpers for MAMFast UI.
+"""MediaInfo formatting helpers for shelfr UI.
 
 These components format audio file metadata for display.
 """

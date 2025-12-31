@@ -1,4 +1,4 @@
-"""Panel and header components for MAMFast UI.
+"""Panel and header components for shelfr UI.
 
 These components provide styled containers for content display.
 """
@@ -24,7 +24,7 @@ def print_header(title: str, subtitle: str | None = None, dry_run: bool = False)
     Example:
         >>> print_header("Full Pipeline", subtitle="Processing 5 releases", dry_run=True)
         ╭──────────────────────────────────────╮
-        │             MAMFast                  │
+        │               shelfr                 │
         │         Full Pipeline                │
         │     Processing 5 releases            │
         │           [DRY RUN]                  │
@@ -40,7 +40,7 @@ def print_header(title: str, subtitle: str | None = None, dry_run: bool = False)
     console.print(
         Panel(
             content,
-            title="[bold cyan]MAMFast[/]",
+            title="[bold cyan]shelfr[/]",
             border_style="cyan",
             padding=(0, 2),
         )
