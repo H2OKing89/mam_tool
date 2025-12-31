@@ -8,9 +8,10 @@ Supports: create, inspect, check operations.
 from __future__ import annotations
 
 import logging
+import re
 import shlex
 from dataclasses import dataclass
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +24,7 @@ from shelfr.utils.permissions import fix_directory_ownership
 from shelfr.utils.retry import retry_with_backoff
 
 if TYPE_CHECKING:
-    from shelfr.schemas.mkbrr import TorrentInfo
+    from shelfr.schemas.mkbrr import CheckResult, TorrentInfo
 
 logger = logging.getLogger(__name__)
 
@@ -1018,3 +1019,357 @@ def _decode_value(value: Any) -> Any:
     elif isinstance(value, dict):
         return {_decode_bytes(k): _decode_value(v) for k, v in value.items()}
     return value
+
+
+# =============================================================================
+# Text Output Parsers (Step 6: Best-effort fallback for Docker inspect/check)
+# =============================================================================
+
+
+def parse_inspect_output(stdout: str) -> TorrentInfo:
+    """
+    Parse mkbrr inspect text output into TorrentInfo.
+
+    This is a best-effort fallback parser for when bencode parsing isn't available.
+    Prefer using parse_torrent_file() with the actual .torrent file when possible.
+
+    Expected format (from mkbrr display.go ShowTorrentInfo):
+        Torrent info:
+          Name:         <name>
+          Hash:         <info_hash>
+          Size:         <size>
+          Piece length: <piece_length>
+          Pieces:       <num_pieces>
+          Magnet:       <magnet_link>
+          Tracker:      <tracker>  (or Trackers: with list)
+          Web seeds:    (list)
+          Private:      yes
+          Source:       <source>
+          Comment:      <comment>
+          Created by:   <created_by>
+          Created on:   <date>
+          Files:        <count>
+
+    Args:
+        stdout: Raw stdout from mkbrr inspect command
+
+    Returns:
+        TorrentInfo with parsed fields (best-effort, some fields may be None)
+
+    Raises:
+        ValueError: If output cannot be parsed at all (missing required Name/Hash)
+    """
+    from shelfr.schemas.mkbrr import TorrentInfo
+
+    # Strip ANSI color codes
+    clean_output = _strip_ansi_codes(stdout)
+
+    # Helper to extract field value
+    def extract_field(pattern: str, text: str) -> str | None:
+        match = re.search(pattern, text, re.IGNORECASE | re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    # Required fields
+    name = extract_field(r"Name:\s*(.+?)(?:\n|$)", clean_output)
+    info_hash = extract_field(r"Hash:\s*([a-fA-F0-9]+)", clean_output)
+
+    if not name or not info_hash:
+        raise ValueError(
+            f"Cannot parse inspect output: missing Name or Hash. "
+            f"Got name={name!r}, hash={info_hash!r}"
+        )
+
+    # Parse size (handles formats like "1.5 GiB", "500 MiB", "1234567")
+    size = _parse_size_string(extract_field(r"Size:\s*(.+?)(?:\n|$)", clean_output))
+
+    # Parse piece length
+    piece_length = _parse_size_string(extract_field(r"Piece length:\s*(.+?)(?:\n|$)", clean_output))
+
+    # Parse piece count
+    pieces_str = extract_field(r"Pieces:\s*(\d+)", clean_output)
+    piece_count = int(pieces_str) if pieces_str else 0
+
+    # Parse trackers (single or multi-line)
+    trackers = _parse_trackers(clean_output)
+
+    # Parse web seeds
+    web_seeds = _parse_web_seeds(clean_output)
+
+    # Boolean/optional fields
+    private_str = extract_field(r"Private:\s*(\w+)", clean_output)
+    private = private_str.lower() == "yes" if private_str else False
+
+    source = extract_field(r"Source:\s*(.+?)(?:\n|$)", clean_output)
+    comment = extract_field(r"Comment:\s*(.+?)(?:\n|$)", clean_output)
+    created_by = extract_field(r"Created by:\s*(.+?)(?:\n|$)", clean_output)
+
+    # Parse creation date (format: "2024-01-15 10:30:45 UTC")
+    creation_date = _parse_creation_date(
+        extract_field(r"Created on:\s*(.+?)(?:\n|$)", clean_output)
+    )
+
+    # File count (we don't get individual files from inspect output)
+    files_str = extract_field(r"Files:\s*(\d+)", clean_output)
+    file_count = int(files_str) if files_str else None
+
+    return TorrentInfo(
+        name=name,
+        info_hash=info_hash,
+        size=size,
+        piece_length=piece_length,
+        piece_count=piece_count,
+        private=private,
+        trackers=trackers,
+        web_seeds=web_seeds,
+        source=source,
+        comment=comment,
+        created_by=created_by,
+        creation_date=creation_date,
+        files=[],  # Not available in text output
+        extra_fields={"_parsed_file_count": file_count} if file_count else None,
+    )
+
+
+def parse_check_output(stdout: str) -> CheckResult:
+    """
+    Parse mkbrr check text output into CheckResult.
+
+    Expected format (from mkbrr display.go ShowVerificationResult):
+        Completion:     100.00%
+        Good pieces:    1234
+        Bad pieces:     0
+        Missing files:  0
+        Check time:     1.23s
+
+    In quiet mode, only outputs: "100.00%"
+
+    Args:
+        stdout: Raw stdout from mkbrr check command
+
+    Returns:
+        CheckResult with parsed verification data
+
+    Raises:
+        ValueError: If output cannot be parsed
+    """
+    from shelfr.schemas.mkbrr import CheckResult
+
+    # Strip ANSI color codes
+    clean_output = _strip_ansi_codes(stdout)
+
+    # Helper to extract field value
+    def extract_field(pattern: str) -> str | None:
+        match = re.search(pattern, clean_output, re.IGNORECASE | re.MULTILINE)
+        return match.group(1).strip() if match else None
+
+    # Try quiet mode first (just percentage)
+    quiet_match = re.match(r"^\s*([\d.]+)%\s*$", clean_output.strip())
+    if quiet_match:
+        completion = float(quiet_match.group(1))
+        # In quiet mode, we don't have piece counts - estimate total_pieces as 1
+        return CheckResult(
+            valid=completion >= 100.0,
+            percent_complete=completion,
+            good_pieces=1 if completion >= 100.0 else 0,
+            bad_pieces=0 if completion >= 100.0 else 1,
+            total_pieces=1,  # Unknown, use 1 as placeholder
+        )
+
+    # Parse completion percentage
+    completion_str = extract_field(r"Completion:\s*([\d.]+)%?")
+    if not completion_str:
+        raise ValueError(
+            f"Cannot parse check output: missing Completion. Output: {clean_output[:200]!r}"
+        )
+
+    completion = float(completion_str)
+
+    # Parse piece counts
+    good_str = extract_field(r"Good pieces:\s*(\d+)")
+    bad_str = extract_field(r"Bad pieces:\s*(\d+)")
+
+    good_pieces = int(good_str) if good_str else 0
+    bad_pieces = int(bad_str) if bad_str else 0
+    total_pieces = good_pieces + bad_pieces
+
+    # Handle edge case where total is 0 (shouldn't happen, but be safe)
+    if total_pieces == 0:
+        total_pieces = 1
+
+    # Parse missing files count and extract file names if in verbose mode
+    missing_files_count_str = extract_field(r"Missing files:\s*(\d+)")
+    missing_files_count = int(missing_files_count_str) if missing_files_count_str else 0
+
+    # Try to extract missing file names from verbose output
+    missing_files: list[str] = []
+    if missing_files_count > 0:
+        # Look for file names after "Missing files:" section
+        # Format: "    ├─ filename.ext" or "    └─ filename.ext"
+        file_pattern = r"[├└]─\s+(.+?)(?:\n|$)"
+        # Find the Missing files section and extract entries
+        missing_section = re.search(
+            r"Missing files:.*?\n((?:\s+[├└]─.+?\n?)+)",
+            clean_output,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if missing_section:
+            for match in re.finditer(file_pattern, missing_section.group(1)):
+                missing_files.append(match.group(1).strip())
+
+    # Parse check duration
+    duration_str = extract_field(r"Check time:\s*(.+?)(?:\n|$)")
+    duration_seconds = _parse_duration_string(duration_str) if duration_str else None
+
+    # Determine if valid: 100% complete, no bad pieces, no missing files
+    valid = completion >= 100.0 and bad_pieces == 0 and missing_files_count == 0
+
+    return CheckResult(
+        valid=valid,
+        percent_complete=completion,
+        good_pieces=good_pieces,
+        bad_pieces=bad_pieces,
+        total_pieces=total_pieces,
+        missing_files=missing_files,
+        check_time_seconds=duration_seconds,
+    )
+
+
+def _strip_ansi_codes(text: str) -> str:
+    """Remove ANSI escape sequences from text."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
+
+
+def _parse_size_string(size_str: str | None) -> int:
+    """
+    Parse human-readable size string to bytes.
+
+    Handles: "1.5 GiB", "500 MiB", "256 KiB", "1234" (raw bytes)
+    """
+    if not size_str:
+        return 0
+
+    size_str = size_str.strip()
+
+    # Try raw integer first
+    if size_str.isdigit():
+        return int(size_str)
+
+    # Parse with unit suffix
+    match = re.match(r"([\d.]+)\s*([KMGTP]i?B?)?", size_str, re.IGNORECASE)
+    if not match:
+        return 0
+
+    value = float(match.group(1))
+    unit = (match.group(2) or "").upper().rstrip("B")
+
+    multipliers = {
+        "": 1,
+        "K": 1024,
+        "KI": 1024,
+        "M": 1024**2,
+        "MI": 1024**2,
+        "G": 1024**3,
+        "GI": 1024**3,
+        "T": 1024**4,
+        "TI": 1024**4,
+        "P": 1024**5,
+        "PI": 1024**5,
+    }
+
+    return int(value * multipliers.get(unit, 1))
+
+
+def _parse_trackers(text: str) -> list[str]:
+    """Extract tracker URLs from inspect output."""
+    trackers: list[str] = []
+
+    # Single tracker line
+    single_match = re.search(r"Tracker:\s*(https?://\S+)", text, re.IGNORECASE)
+    if single_match:
+        trackers.append(single_match.group(1))
+        return trackers
+
+    # Multi-tracker (Trackers: header followed by indented URLs)
+    trackers_section = re.search(
+        r"Trackers:.*?\n((?:\s+https?://\S+\n?)+)", text, re.IGNORECASE | re.DOTALL
+    )
+    if trackers_section:
+        for url_match in re.finditer(r"(https?://\S+)", trackers_section.group(1)):
+            trackers.append(url_match.group(1))
+
+    return trackers
+
+
+def _parse_web_seeds(text: str) -> list[str]:
+    """Extract web seed URLs from inspect output."""
+    web_seeds: list[str] = []
+
+    # Web seeds section (header followed by indented URLs)
+    seeds_section = re.search(
+        r"Web seeds:.*?\n((?:\s+https?://\S+\n?)+)", text, re.IGNORECASE | re.DOTALL
+    )
+    if seeds_section:
+        for url_match in re.finditer(r"(https?://\S+)", seeds_section.group(1)):
+            web_seeds.append(url_match.group(1))
+
+    return web_seeds
+
+
+def _parse_creation_date(date_str: str | None) -> datetime | None:
+    """Parse creation date string to datetime."""
+    if not date_str:
+        return None
+
+    # Expected format: "2024-01-15 10:30:45 MST"
+    formats = [
+        "%Y-%m-%d %H:%M:%S %Z",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+    ]
+
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+
+    logger.debug(f"Could not parse creation date: {date_str!r}")
+    return None
+
+
+def _parse_duration_string(duration_str: str | None) -> float | None:
+    """
+    Parse duration string to seconds.
+
+    Handles: "1.23s", "2m30s", "1h2m3s", "500ms"
+    """
+    if not duration_str:
+        return None
+
+    duration_str = duration_str.strip()
+
+    # Simple seconds format: "1.23s"
+    simple_match = re.match(r"^([\d.]+)\s*s$", duration_str, re.IGNORECASE)
+    if simple_match:
+        return float(simple_match.group(1))
+
+    # Milliseconds: "500ms"
+    ms_match = re.match(r"^([\d.]+)\s*ms$", duration_str, re.IGNORECASE)
+    if ms_match:
+        return float(ms_match.group(1)) / 1000
+
+    # Complex format: "1h2m3s" or "2m30s"
+    total_seconds = 0.0
+    hours_match = re.search(r"(\d+)\s*h", duration_str, re.IGNORECASE)
+    mins_match = re.search(r"(\d+)\s*m(?!s)", duration_str, re.IGNORECASE)
+    secs_match = re.search(r"([\d.]+)\s*s", duration_str, re.IGNORECASE)
+
+    if hours_match:
+        total_seconds += int(hours_match.group(1)) * 3600
+    if mins_match:
+        total_seconds += int(mins_match.group(1)) * 60
+    if secs_match:
+        total_seconds += float(secs_match.group(1))
+
+    return total_seconds if total_seconds > 0 else None
