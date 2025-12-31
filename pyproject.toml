@@ -40,6 +40,11 @@ dev = [
     "types-PyYAML",
     "pre-commit>=3.0",
 ]
+tui = [
+    "prompt_toolkit>=3.0.0",
+    "pygments>=2.0.0",
+    "textual>=0.89.0",
+]
 
 [project.scripts]
 shelfr = "shelfr.cli:main"
