@@ -1,4 +1,4 @@
-"""MAMFast CLI - Beautiful command-line interface built with Typer and Rich.
+"""shelfr CLI - Beautiful command-line interface built with Typer and Rich.
 
 This module provides a modern, user-friendly CLI for audiobook upload automation.
 Built with Typer for clean command structure and Rich for beautiful output.
@@ -16,7 +16,7 @@ import typer
 from rich.panel import Panel
 
 from shelfr import __version__
-from shelfr.console import console as mamfast_console
+from shelfr.console import console as shelfr_console
 
 # =============================================================================
 # App Configuration
@@ -33,9 +33,9 @@ TOOLS_COMMANDS = "Tools"
 def version_callback(value: bool) -> None:
     """Print version and exit."""
     if value:
-        mamfast_console.print(
+        shelfr_console.print(
             Panel(
-                f"[bold cyan]MAMFast[/] [dim]v{__version__}[/]\n"
+                f"[bold cyan]shelfr[/] [dim]v{__version__}[/]\n"
                 "[dim]Fast MAM audiobook upload automation[/]",
                 border_style="cyan",
             )
@@ -46,7 +46,7 @@ def version_callback(value: bool) -> None:
 def make_app() -> typer.Typer:
     """Create and configure the main Typer application."""
     return typer.Typer(
-        name="mamfast",
+        name="shelfr",
         help="Fast MAM audiobook upload automation tool",
         rich_markup_mode="rich",
         pretty_exceptions_enable=True,
@@ -131,13 +131,13 @@ def main_callback(
 ) -> None:
     """Fast MAM audiobook upload automation tool.
 
-    MAMFast automates the audiobook upload workflow:
+    Shelfr automates the audiobook upload workflow:
     [cyan]Libation[/] → [cyan]Staging[/] → [cyan]Metadata[/] → [cyan]Torrent[/] → [cyan]Upload[/]
 
     [bold]Quick Start:[/]
-      mamfast scan              Scan for new audiobooks
-      mamfast run               Run full pipeline
-      mamfast libation guide    Learn about Libation integration
+      Shelfr scan              Scan for new audiobooks
+      Shelfr run               Run full pipeline
+      Shelfr libation guide    Learn about Libation integration
     """
     # Store global options in context for commands to access
     ctx.ensure_object(dict)
@@ -232,9 +232,9 @@ def get_args(ctx: typer.Context, **kwargs: object) -> ArgsNamespace:
 
 # NOTE: Individual step commands (scan, discover, prepare, torrent, upload)
 # have been removed from the main CLI. Use:
-#   - `mamfast libation scan` and `mamfast libation list` for Libation operations
-#   - `mamfast tools prepare` for staging releases
-#   - `mamfast run` for the full pipeline (handles all steps internally)
+#   - `shelfr libation scan` and `shelfr libation list` for Libation operations
+#   - `shelfr tools prepare` for staging releases
+#   - `shelfr run` for the full pipeline (handles all steps internally)
 
 
 @app.command(rich_help_panel=CORE_COMMANDS)
@@ -260,7 +260,7 @@ def run(
         typer.Option(
             "--dry-run",
             hidden=True,
-            help="(Use 'mamfast --dry-run run' instead)",
+            help="(Use 'shelfr --dry-run run' instead)",
         ),
     ] = False,
 ) -> None:
@@ -269,9 +269,9 @@ def run(
     Executes all steps: [cyan]scan → discover → prepare → metadata → torrent → upload[/]
 
     [bold]Examples:[/]
-      mamfast run               # Full pipeline
-      mamfast --dry-run run     # Preview without changes
-      mamfast run --skip-scan   # Skip Libation scan
+      shelfr run               # Full pipeline
+      shelfr --dry-run run     # Preview without changes
+      shelfr run --skip-scan   # Skip Libation scan
     """
     from shelfr.console import console
 
@@ -279,8 +279,8 @@ def run(
     if dry_run_hint:
         console.print(
             "[yellow]⚠  --dry-run must come BEFORE the subcommand:[/]\n\n"
-            "    [green]mamfast --dry-run run[/]  ✓\n"
-            "    [red]mamfast run --dry-run[/]  ✗\n"
+            "    [green]shelfr --dry-run run[/]  ✓\n"
+            "    [red]shelfr run --dry-run[/]  ✗\n"
         )
         raise typer.Exit(2)
 
@@ -349,9 +349,9 @@ def check(
     Validates configuration, paths, and service connectivity.
 
     [bold]Examples:[/]
-      mamfast check               # Run all checks
-      mamfast check --config-only # Configuration only
-      mamfast check --services-only # Test services
+      Shelfr check               # Run all checks
+      Shelfr check --config-only # Configuration only
+      Shelfr check --services-only # Test services
     """
     from shelfr.commands import cmd_check
 
@@ -380,9 +380,9 @@ def validate(
     Runs validation checks on all discovered releases without processing.
 
     [bold]Examples:[/]
-      mamfast validate              # Validate all
-      mamfast validate -a B0DK9T5P28 # Validate specific ASIN
-      mamfast validate --json       # JSON output
+      Shelfr validate              # Validate all
+      Shelfr validate -a B0DK9T5P28 # Validate specific ASIN
+      Shelfr validate --json       # JSON output
     """
     from shelfr.commands import cmd_validate
 
@@ -423,10 +423,10 @@ def preview_naming_cmd(
     without making any changes.
 
     [bold]Examples:[/]
-      mamfast preview-naming              # Preview first 20 releases
-      mamfast preview-naming -n 50        # Preview 50 releases
-      mamfast preview-naming -a B0DK9T5P28 # Preview specific ASIN
-      mamfast preview-naming --json       # JSON output
+      Shelfr preview-naming              # Preview first 20 releases
+      Shelfr preview-naming -n 50        # Preview 50 releases
+      Shelfr preview-naming -a B0DK9T5P28 # Preview specific ASIN
+      Shelfr preview-naming --json       # JSON output
     """
     from shelfr.commands import cmd_preview_naming
 
@@ -460,9 +460,9 @@ def check_duplicates(
     Uses fuzzy matching to find near-duplicate titles in your library.
 
     [bold]Examples:[/]
-      mamfast check-duplicates         # Default 85% threshold
-      mamfast check-duplicates -t 90   # Stricter matching
-      mamfast check-duplicates --json  # JSON output
+      Shelfr check-duplicates         # Default 85% threshold
+      Shelfr check-duplicates -t 90   # Stricter matching
+      Shelfr check-duplicates --json  # JSON output
     """
     from shelfr.commands import cmd_check_duplicates
 
@@ -500,8 +500,8 @@ def check_suspicious(
     Compares original titles to cleaned versions and flags significant changes.
 
     [bold]Examples:[/]
-      mamfast check-suspicious       # Default threshold
-      mamfast check-suspicious -t 40 # More aggressive detection
+      Shelfr check-suspicious       # Default threshold
+      Shelfr check-suspicious -t 40 # More aggressive detection
     """
     from shelfr.commands import cmd_check_suspicious
 
@@ -547,9 +547,9 @@ def state_list(
     Shows processed and/or failed entries from the state file.
 
     [bold]Examples:[/]
-      mamfast state list            # All entries
-      mamfast state list --failed   # Only failed
-      mamfast state list --json     # JSON output
+      Shelfr state list            # All entries
+      Shelfr state list --failed   # Only failed
+      Shelfr state list --json     # JSON output
     """
     from shelfr.commands import cmd_state
 
@@ -572,7 +572,7 @@ def state_prune(ctx: typer.Context) -> None:
 
     Cleans up state entries whose files no longer exist.
 
-    [bold]Tip:[/] Use [cyan]mamfast --dry-run state prune[/] to preview.
+    [bold]Tip:[/] Use [cyan]Shelfr --dry-run state prune[/] to preview.
     """
     from shelfr.commands import cmd_state
 
@@ -591,7 +591,7 @@ def state_retry(
     Removes the ASIN from failed state so it can be processed again.
 
     [bold]Example:[/]
-      mamfast state retry B0DK9T5P28
+      Shelfr state retry B0DK9T5P28
     """
     from shelfr.commands import cmd_state
 
@@ -612,7 +612,7 @@ def state_clear(
     Removes the ASIN from processed state for full re-processing.
 
     [bold]Example:[/]
-      mamfast state clear B0DK9T5P28
+      Shelfr state clear B0DK9T5P28
     """
     from shelfr.commands import cmd_state
 
@@ -634,8 +634,8 @@ def state_export(
     Exports the current state to a JSON file for backup or analysis.
 
     [bold]Examples:[/]
-      mamfast state export                # Print to stdout
-      mamfast state export -o backup.json # Save to file
+      Shelfr state export                # Print to stdout
+      Shelfr state export -o backup.json # Save to file
     """
     from shelfr.commands import cmd_state
 
@@ -740,9 +740,9 @@ def abs_import(
     Moves staged books to ABS library structure with duplicate detection.
 
     [bold]Examples:[/]
-      mamfast abs-import                    # Import all staged
-      mamfast abs-import /path/to/book      # Import specific folder
-      mamfast abs-import -d skip            # Skip duplicates
+      Shelfr abs-import                    # Import all staged
+      Shelfr abs-import /path/to/book      # Import specific folder
+      Shelfr abs-import -d skip            # Skip duplicates
     """
     from shelfr.commands import cmd_abs_import
 
@@ -775,7 +775,7 @@ def abs_check_duplicate(
     Quick lookup to check for duplicates before importing.
 
     [bold]Example:[/]
-      mamfast abs-check-duplicate B0DK9T5P28
+      Shelfr abs-check-duplicate B0DK9T5P28
     """
     from shelfr.commands import cmd_abs_check_duplicate
 
@@ -825,9 +825,9 @@ def abs_restore(
     Restore books that were archived by trumping back to the library.
 
     [bold]Examples:[/]
-      mamfast abs-restore --list            # List archives
-      mamfast abs-restore -a B0DK9T5P28     # Filter by ASIN
-      mamfast abs-restore /path/to/archive  # Restore specific
+      Shelfr abs-restore --list            # List archives
+      Shelfr abs-restore -a B0DK9T5P28     # Filter by ASIN
+      Shelfr abs-restore /path/to/archive  # Restore specific
     """
     from shelfr.commands import cmd_abs_restore
 
@@ -1037,13 +1037,13 @@ def libation_callback(ctx: typer.Context) -> None:
     Manage your Audible audiobook library through Libation.
 
     [bold]Commands:[/]
-      mamfast libation scan        Scan for new purchases
-      mamfast libation liberate    Download pending audiobooks
-      mamfast libation status      Show library status
-      mamfast libation search      Search your library
-      mamfast libation guide       Show integration guide
+      Shelfr libation scan        Scan for new purchases
+      Shelfr libation liberate    Download pending audiobooks
+      Shelfr libation status      Show library status
+      Shelfr libation search      Search your library
+      Shelfr libation guide       Show integration guide
 
-    Running [cyan]mamfast libation[/] without a command shows library status.
+    Running [cyan]Shelfr libation[/] without a command shows library status.
     """
     if ctx.invoked_subcommand is None:
         # Default to status when no subcommand
@@ -1067,8 +1067,8 @@ def libation_scan(
     Checks your Audible account for new audiobook purchases.
 
     [bold]Examples:[/]
-      mamfast libation scan              # Just scan
-      mamfast libation scan --liberate   # Scan and download
+      Shelfr libation scan              # Just scan
+      Shelfr libation scan --liberate   # Scan and download
     """
     from shelfr.commands.libation import cmd_libation_scan
 
@@ -1098,8 +1098,8 @@ def libation_liberate(
     Downloads all books with 'NotDownloaded' status from your library.
 
     [bold]Examples:[/]
-      mamfast libation liberate            # Download all pending
-      mamfast libation liberate --asin B0DK9T5P28  # Specific book
+      Shelfr libation liberate            # Download all pending
+      Shelfr libation liberate --asin B0DK9T5P28  # Specific book
     """
     from shelfr.commands.libation import cmd_libation_liberate
 
@@ -1153,8 +1153,8 @@ def libation_search(
     Search for books by title, author, or ASIN.
 
     [bold]Examples:[/]
-      mamfast libation search "Brandon Sanderson"
-      mamfast libation search "Mistborn" --format json
+      Shelfr libation search "Brandon Sanderson"
+      Shelfr libation search "Mistborn" --format json
     """
     from shelfr.commands.libation import cmd_libation_search
 
@@ -1187,8 +1187,8 @@ def libation_export(
     Export your library data to JSON or CSV format.
 
     [bold]Examples:[/]
-      mamfast libation export -o library.json
-      mamfast libation export -f csv -o library.csv
+      Shelfr libation export -o library.json
+      Shelfr libation export -f csv -o library.csv
     """
     from shelfr.commands.libation import cmd_libation_export
 
@@ -1254,9 +1254,9 @@ def libation_books(
     Shows books with optional status filtering.
 
     [bold]Examples:[/]
-      mamfast libation books
-      mamfast libation books --status not_downloaded
-      mamfast libation books --format json
+      Shelfr libation books
+      Shelfr libation books --status not_downloaded
+      Shelfr libation books --format json
     """
     from shelfr.commands.libation import cmd_libation_books
 
@@ -1292,7 +1292,7 @@ def libation_redownload(
     Forces re-download of a specific audiobook by ASIN.
 
     [bold]Example:[/]
-      mamfast libation redownload B0DK9T5P28
+      Shelfr libation redownload B0DK9T5P28
     """
     from shelfr.commands.libation import cmd_libation_redownload
 
@@ -1327,7 +1327,7 @@ def libation_set_status(
     Change the download status of a specific audiobook.
 
     [bold]Example:[/]
-      mamfast libation set-status B0DK9T5P28 Downloaded
+      Shelfr libation set-status B0DK9T5P28 Downloaded
     """
     from shelfr.commands.libation import cmd_libation_set_status
 
@@ -1367,8 +1367,8 @@ def libation_convert(
     Converts audiobooks from M4B to MP3 format.
 
     [bold]Examples:[/]
-      mamfast libation convert
-      mamfast libation convert --asin B0DK9T5P28
+      Shelfr libation convert
+      Shelfr libation convert --asin B0DK9T5P28
     """
     from shelfr.commands.libation import cmd_libation_convert
 
@@ -1389,7 +1389,7 @@ def libation_guide(
 ) -> None:
     """Show detailed integration guide.
 
-    Comprehensive tutorial on using Libation with MAMFast.
+    Comprehensive tutorial on using Libation with Shelfr.
 
     [bold]Sections:[/]
       overview, scanning, liberating, statuses, tips, troubleshooting
@@ -1431,9 +1431,9 @@ def tools_mamff(
     Fetches metadata from Audnex and extracts info from MediaInfo.
 
     [bold]Examples:[/]
-      mamfast tools mamff /path/to/release/folder
-      mamfast tools mamff /path/to/book.m4b
-      mamfast tools mamff ./folder --output ./custom.json
+      Shelfr tools mamff /path/to/release/folder
+      Shelfr tools mamff /path/to/book.m4b
+      Shelfr tools mamff ./folder --output ./custom.json
 
     [bold]What it does:[/]
       1. Extracts ASIN from folder/file name
@@ -1511,7 +1511,7 @@ def main() -> int:
 # =============================================================================
 
 # Many unit tests (and possibly downstream scripts) historically imported these
-# symbols from `mamfast.cli`. The Typer CLI remains the entrypoint, but we
+# symbols from `Shelfr.cli`. The Typer CLI remains the entrypoint, but we
 # re-export argparse parser + ABS command handlers to preserve compatibility.
 from shelfr.cli_argparse import build_parser as build_parser  # noqa: E402
 from shelfr.commands.abs import (  # noqa: E402,F401

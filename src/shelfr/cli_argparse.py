@@ -1,7 +1,7 @@
-"""MAMFast CLI - Legacy argparse command-line interface.
+"""Shelfr CLI - Legacy argparse command-line interface.
 
 ⚠ DEPRECATED: This module is deprecated and will be removed in v2.0.
-Use the Typer-based CLI via `mamfast` command instead.
+Use the Typer-based CLI via `Shelfr` command instead.
 
 This module is preserved for backward compatibility with existing scripts
 and tests. No new features will be added to this interface.
@@ -40,7 +40,7 @@ from shelfr.commands import (  # Import all command handlers from the commands s
 from shelfr.utils.validation import validate_asin
 
 # Deprecation logger - warning emitted at runtime in build_parser()
-_deprecation_logger = logging.getLogger("mamfast.deprecation")
+_deprecation_logger = logging.getLogger("shelfr.deprecation")
 _deprecation_warned = False
 
 
@@ -50,27 +50,27 @@ def build_parser() -> argparse.ArgumentParser:
     if not _deprecation_warned:
         _deprecation_logger.warning(
             "cli_argparse is deprecated and will be removed in v2.0. "
-            "Use the 'mamfast' Typer CLI instead."
+            "Use the 'Shelfr' Typer CLI instead."
         )
         _deprecation_warned = True
 
     parser = argparse.ArgumentParser(
-        prog="mamfast",
+        prog="Shelfr",
         description="Fast MAM audiobook upload automation tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  mamfast run               # Full pipeline: scan → upload
-  mamfast run --skip-scan   # Full pipeline without Libation scan
-  mamfast status            # Show processing status
-  mamfast check             # Run health checks
+  Shelfr run               # Full pipeline: scan → upload
+  Shelfr run --skip-scan   # Full pipeline without Libation scan
+  Shelfr status            # Show processing status
+  Shelfr check             # Run health checks
 
 Libation Management:
-  mamfast libation          # Show library status dashboard
-  mamfast libation scan     # Check Audible for new purchases
-  mamfast libation liberate # Download all pending audiobooks
-  mamfast libation search   # Search your audiobook library
-  mamfast libation guide    # Detailed Libation integration guide
+  Shelfr libation          # Show library status dashboard
+  Shelfr libation scan     # Check Audible for new purchases
+  Shelfr libation liberate # Download all pending audiobooks
+  Shelfr libation search   # Search your audiobook library
+  Shelfr libation guide    # Detailed Libation integration guide
         """,
     )
 
@@ -78,7 +78,7 @@ Libation Management:
         "-V",
         "--version",
         action="version",
-        version=f"mamfast {__version__}",
+        version=f"Shelfr {__version__}",
     )
 
     parser.add_argument(
@@ -111,9 +111,9 @@ Libation Management:
 
     # NOTE: Individual step commands (scan, discover, prepare, torrent, upload)
     # have been removed from the main CLI. Use:
-    #   - `mamfast libation scan` and `mamfast libation list` for Libation operations
-    #   - `mamfast tools prepare` for staging releases
-    #   - `mamfast run` for the full pipeline (handles all steps internally)
+    #   - `Shelfr libation scan` and `Shelfr libation list` for Libation operations
+    #   - `Shelfr tools prepare` for staging releases
+    #   - `Shelfr run` for the full pipeline (handles all steps internally)
 
     # -------------------------------------------------------------------------
     # run: Full pipeline
@@ -121,7 +121,7 @@ Libation Management:
     run_parser = subparsers.add_parser(
         "run",
         help="Run full pipeline: scan → discover → prepare → metadata → torrent → upload",
-        epilog="Tip: Use 'mamfast --dry-run run' to preview without making changes.",
+        epilog="Tip: Use 'Shelfr --dry-run run' to preview without making changes.",
     )
     run_parser.add_argument(
         "--skip-scan",
@@ -322,7 +322,7 @@ Libation Management:
     state_parser = subparsers.add_parser(
         "state",
         help="Manage processed.json state (list, prune, retry, clear)",
-        epilog="Use 'mamfast state <subcommand> --help' for subcommand details.",
+        epilog="Use 'Shelfr state <subcommand> --help' for subcommand details.",
     )
     state_subparsers = state_parser.add_subparsers(
         dest="state_command",
@@ -363,7 +363,7 @@ Libation Management:
     state_subparsers.add_parser(
         "prune",
         help="Remove stale entries with missing required paths",
-        epilog="Tip: Use 'mamfast --dry-run state prune' to preview changes.",
+        epilog="Tip: Use 'Shelfr --dry-run state prune' to preview changes.",
     )
 
     # state retry
@@ -739,12 +739,12 @@ Libation Management:
 def main() -> int:
     """Main entry point.
 
-    ⚠ DEPRECATED: This entry point is deprecated. Use `mamfast` instead.
+    ⚠ DEPRECATED: This entry point is deprecated. Use `Shelfr` instead.
     """
     # Show deprecation banner
     from shelfr.console import console
 
-    console.print("\n[yellow]⚠  This argparse CLI is deprecated. Use 'mamfast' instead.[/yellow]")
+    console.print("\n[yellow]⚠  This argparse CLI is deprecated. Use 'Shelfr' instead.[/yellow]")
     console.print("[dim]This interface will be removed in v2.0[/dim]\n")
 
     parser = build_parser()

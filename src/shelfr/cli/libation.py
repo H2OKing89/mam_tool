@@ -33,13 +33,13 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Manage your Audible audiobook library through Libation.
 
         [bold]Commands:[/]
-          mamfast libation scan        Scan for new purchases
-          mamfast libation liberate    Download pending audiobooks
-          mamfast libation status      Show library status
-          mamfast libation search      Search your library
-          mamfast libation guide       Show integration guide
+          shelfr libation scan        Scan for new purchases
+          shelfr libation liberate    Download pending audiobooks
+          shelfr libation status      Show library status
+          shelfr libation search      Search your library
+          shelfr libation guide       Show integration guide
 
-        Running [cyan]mamfast libation[/] without a command shows library status.
+        Running [cyan]shelfr libation[/] without a command shows library status.
         """
         if ctx.invoked_subcommand is None:
             # Default to status when no subcommand
@@ -62,8 +62,8 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Checks your Audible account for new audiobook purchases.
 
         [bold]Examples:[/]
-          mamfast libation scan              # Just scan
-          mamfast libation scan --liberate   # Scan and download
+          shelfr libation scan              # Just scan
+          shelfr libation scan --liberate   # Scan and download
         """
         from shelfr.commands.libation import cmd_libation_scan
 
@@ -92,8 +92,8 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Downloads all books with 'NotDownloaded' status from your library.
 
         [bold]Examples:[/]
-          mamfast libation liberate            # Download all pending
-          mamfast libation liberate --asin B0DK9T5P28  # Specific book
+          shelfr libation liberate            # Download all pending
+          shelfr libation liberate --asin B0DK9T5P28  # Specific book
         """
         from shelfr.commands.libation import cmd_libation_liberate
 
@@ -137,8 +137,8 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Search for books by title, author, or ASIN.
 
         [bold]Examples:[/]
-          mamfast libation search "Brandon Sanderson"
-          mamfast libation search "Mistborn" --format json
+          shelfr libation search "Brandon Sanderson"
+          shelfr libation search "Mistborn" --format json
         """
         from shelfr.commands.libation import cmd_libation_search
 
@@ -163,8 +163,8 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Export your library data to JSON or CSV format.
 
         [bold]Examples:[/]
-          mamfast libation export -o library.json
-          mamfast libation export -f csv -o library.csv
+          shelfr libation export -o library.json
+          shelfr libation export -f csv -o library.csv
         """
         from shelfr.commands.libation import cmd_libation_export
 
@@ -211,9 +211,9 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Shows books with optional status filtering.
 
         [bold]Examples:[/]
-          mamfast libation books
-          mamfast libation books --status not_downloaded
-          mamfast libation books --format json
+          shelfr libation books
+          shelfr libation books --status not_downloaded
+          shelfr libation books --format json
         """
         from shelfr.commands.libation import cmd_libation_books
 
@@ -250,7 +250,7 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Forces re-download of a specific audiobook by ASIN.
 
         [bold]Example:[/]
-          mamfast libation redownload B0DK9T5P28
+          shelfr libation redownload B0DK9T5P28
         """
         from shelfr.commands.libation import cmd_libation_redownload
 
@@ -277,7 +277,7 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Change the download status of a specific audiobook.
 
         [bold]Example:[/]
-          mamfast libation set-status B0DK9T5P28 Downloaded
+          shelfr libation set-status B0DK9T5P28 Downloaded
         """
         from shelfr.commands.libation import cmd_libation_set_status
 
@@ -318,8 +318,8 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
         Converts audiobooks from M4B to MP3 format.
 
         [bold]Examples:[/]
-          mamfast libation convert
-          mamfast libation convert --asin B0DK9T5P28
+          shelfr libation convert
+          shelfr libation convert --asin B0DK9T5P28
         """
         from shelfr.commands.libation import cmd_libation_convert
 
@@ -339,7 +339,7 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
     ) -> None:
         """Show detailed integration guide.
 
-        Comprehensive tutorial on using Libation with MAMFast.
+        Comprehensive tutorial on using Libation with shelfr.
 
         [bold]Sections:[/]
           overview, scanning, liberating, statuses, tips, troubleshooting

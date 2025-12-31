@@ -371,13 +371,13 @@ def create_main_callback(app: typer.Typer) -> None:
     ) -> None:
         """Fast MAM audiobook upload automation tool.
 
-        MAMFast automates the audiobook upload workflow:
+        shelfr automates the audiobook upload workflow:
         [cyan]Libation → Staging → Metadata → Torrent → Upload[/]
 
         [bold]Quick Start:[/]
-          mamfast scan              Scan for new audiobooks
-          mamfast run               Run full pipeline
-          mamfast libation guide    Learn about Libation integration
+          shelfr scan              Scan for new audiobooks
+          shelfr run               Run full pipeline
+          shelfr libation guide    Learn about Libation integration
         """
         # Show banner when no command is invoked (help will be shown after)
         if ctx.invoked_subcommand is None:
