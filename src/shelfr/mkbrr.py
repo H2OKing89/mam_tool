@@ -682,11 +682,14 @@ def modify_torrent(
         logger.info(f"Dry-run modifying torrent(s): {paths_str}")
     else:
         logger.info(f"Modifying torrent(s): {paths_str}")
-    logger.debug(f"Command: {' '.join(cmd)}")
+    logger.debug(f"Command: {shlex.join(cmd)}")
 
     try:
         # Capture output to show modification results
-        result = _run_docker_command(cmd, timeout=60, capture_output=True)
+        # Modify is faster than create (no rehashing), use shorter timeout
+        settings = get_settings()
+        timeout = min(settings.mkbrr.timeout_seconds, 120)  # Cap at 2 min for modify
+        result = _run_docker_command(cmd, timeout=timeout, capture_output=True)
 
         if result.exit_code == 0:
             # Fix permissions on output directory if we wrote files
@@ -1082,12 +1085,13 @@ def parse_inspect_output(stdout: str) -> TorrentInfo:
     # Parse size (handles formats like "1.5 GiB", "500 MiB", "1234567")
     size = _parse_size_string(extract_field(r"Size:\s*(.+?)(?:\n|$)", clean_output))
 
-    # Parse piece length
-    piece_length = _parse_size_string(extract_field(r"Piece length:\s*(.+?)(?:\n|$)", clean_output))
+    # Parse piece length (default to 256KiB if unparseable)
+    piece_length_str = extract_field(r"Piece length:\s*(.+?)(?:\n|$)", clean_output)
+    piece_length = _parse_size_string(piece_length_str) or 262144
 
     # Parse piece count
     pieces_str = extract_field(r"Pieces:\s*(\d+)", clean_output)
-    piece_count = int(pieces_str) if pieces_str else 0
+    piece_count = int(pieces_str) if pieces_str else 1  # Default to 1 if unparseable
 
     # Parse trackers (single or multi-line)
     trackers = _parse_trackers(clean_output)

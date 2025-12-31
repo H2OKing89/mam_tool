@@ -23,6 +23,9 @@ Icon modes:
 Note:
     Emoji mode should ONLY be used in non-aligned output (banners, plain text).
     For tables, panels, and progress bars, always use unicode or ascii mode.
+
+    Icon mode is global per-process. Not thread-safe if used in multi-threaded
+    contexts. For CLI usage (single-threaded), this is acceptable.
 """
 
 from __future__ import annotations
@@ -233,7 +236,9 @@ def get_icons() -> Icons:
     return _icons
 
 
-# Convenience accessor - most code should use this
+# NOTE: Use get_icons() to access the current icon set dynamically.
+# The icons object below is a static reference to UNICODE_ICONS that does NOT
+# reflect runtime mode changes made by set_icon_mode(). Always prefer get_icons().
 icons = UNICODE_ICONS
 
 

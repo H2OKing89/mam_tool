@@ -15,6 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from shelfr.console import console, print_error, print_info, print_success, print_warning
+from shelfr.schemas.mkbrr import CheckResult, TorrentInfo
 from shelfr.ui.icons import icons
 
 logger = logging.getLogger(__name__)
@@ -757,8 +758,3 @@ def _format_size(size_bytes: int) -> str:
     elif size_bytes >= 1024:
         return f"{size_bytes / 1024:.2f} KiB"
     return f"{size_bytes} B"
-
-
-# Type imports at module level for type hints
-if True:  # TYPE_CHECKING equivalent that works at runtime for display functions
-    from shelfr.schemas.mkbrr import CheckResult, TorrentInfo

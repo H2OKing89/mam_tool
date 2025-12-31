@@ -90,10 +90,15 @@ class TorrentInfo(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def piece_length_exponent(self) -> int:
-        """Piece length as power of 2 exponent (e.g., 18 for 256KiB)."""
+        """Piece length as power of 2 exponent (e.g., 18 for 256KiB).
+
+        Note: For malformed torrents with non-power-of-2 piece lengths,
+        returns the truncated exponent (floor of log2).
+        """
         import math
 
-        return int(math.log2(self.piece_length))
+        exp = math.log2(self.piece_length)
+        return int(exp)  # Truncates non-power-of-2 values
 
     def human_piece_length(self) -> str:
         """Return human-readable piece length (e.g., '256 KiB')."""

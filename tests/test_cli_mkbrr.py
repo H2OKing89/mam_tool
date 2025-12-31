@@ -225,7 +225,7 @@ class TestMkbrrInspect:
         with patch(f"{MKBRR_MODULE}.parse_torrent_file", return_value=mock_info):
             result = runner.invoke(app, ["mkbrr", "inspect", str(torrent_file)])
             assert result.exit_code == 0
-            assert "test" in result.output or "abc123" in result.output
+            assert "test" in result.output or "aaaa" in result.output
 
 
 class TestMkbrrCheck:
@@ -437,12 +437,21 @@ class TestMkbrrGlobalFlags:
         test_file = tmp_path / "test.txt"
         test_file.write_text("test")
 
-        # Dry-run should prevent actual creation
-        result = runner.invoke(
-            app, ["--dry-run", "mkbrr", "create", str(test_file), "--preset", "mam"]
-        )
-        # Should accept the flag (may fail for other reasons)
-        assert "--dry-run" not in result.output or "Unknown option" not in result.output
+        mock_result = MkbrrResult(success=True, return_code=0)
+        mock_settings = MagicMock()
+        mock_settings.mkbrr.timeout_seconds = 300
+
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result),
+            patch("shelfr.config.get_settings", return_value=mock_settings),
+        ):
+            # Dry-run should prevent actual creation
+            result = runner.invoke(
+                app, ["--dry-run", "mkbrr", "create", str(test_file), "--preset", "mam"]
+            )
+            # Should accept the flag
+            assert "Unknown option" not in result.output
 
     def test_verbose_with_inspect(self, runner: CliRunner, tmp_path: Path) -> None:
         """Test --verbose global flag with mkbrr inspect."""
