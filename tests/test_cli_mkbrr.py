@@ -134,7 +134,10 @@ class TestMkbrrCreate:
             stdout="Created torrent: test.torrent",
         )
 
-        with patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result):
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result),
+        ):
             result = runner.invoke(app, ["mkbrr", "create", str(test_file)])
             assert result.exit_code == 0
             assert "Created" in result.output or "torrent" in result.output.lower()
@@ -150,7 +153,10 @@ class TestMkbrrCreate:
             torrent_path=tmp_path / "test.torrent",
         )
 
-        with patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result) as mock_create:
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result) as mock_create,
+        ):
             result = runner.invoke(app, ["mkbrr", "create", str(test_file), "--preset", "mam"])
             assert result.exit_code == 0
             mock_create.assert_called_once()
@@ -168,7 +174,10 @@ class TestMkbrrCreate:
             error="Docker not available",
         )
 
-        with patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result):
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.create_torrent", return_value=mock_result),
+        ):
             result = runner.invoke(app, ["mkbrr", "create", str(test_file)])
             assert result.exit_code == 1
             assert "Docker" in result.output or "error" in result.output.lower()
@@ -233,7 +242,10 @@ class TestMkbrrCheck:
             stdout="Completion: 100.00%\nGood pieces: 100\nBad pieces: 0",
         )
 
-        with patch(f"{MKBRR_MODULE}.check_torrent", return_value=mock_result):
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.check_torrent", return_value=mock_result),
+        ):
             result = runner.invoke(app, ["mkbrr", "check", str(torrent_file), str(content_dir)])
             assert result.exit_code == 0
 
@@ -250,7 +262,10 @@ class TestMkbrrCheck:
             stdout="Completion: 50.00%\nGood pieces: 50\nBad pieces: 50",
         )
 
-        with patch(f"{MKBRR_MODULE}.check_torrent", return_value=mock_result):
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.check_torrent", return_value=mock_result),
+        ):
             result = runner.invoke(app, ["mkbrr", "check", str(torrent_file), str(content_dir)])
             # Check command may show warning for partial verification
             assert "50" in result.output or result.exit_code in (0, 1)
@@ -275,7 +290,10 @@ class TestMkbrrModify:
             stdout="Would modify: test.torrent",
         )
 
-        with patch(f"{MKBRR_MODULE}.modify_torrent", return_value=mock_result):
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.modify_torrent", return_value=mock_result),
+        ):
             result = runner.invoke(
                 app,
                 ["mkbrr", "modify", str(torrent_file), "--source", "TEST", "--dry-run"],
@@ -294,7 +312,10 @@ class TestMkbrrModify:
             torrent_path=tmp_path / "modified.torrent",
         )
 
-        with patch(f"{MKBRR_MODULE}.modify_torrent", return_value=mock_result) as mock_modify:
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.modify_torrent", return_value=mock_result) as mock_modify,
+        ):
             result = runner.invoke(
                 app,
                 [
@@ -364,8 +385,9 @@ class TestMkbrrUpdate:
         mock_settings.mkbrr.image = "ghcr.io/autobrr/mkbrr:latest"
 
         with (
-            patch(f"{MKBRR_MODULE}.run", return_value=mock_result),
-            patch(f"{MKBRR_MODULE}.get_settings", return_value=mock_settings),
+            patch("shelfr.utils.cmd.run", return_value=mock_result),
+            patch("shelfr.config.get_settings", return_value=mock_settings),
+            patch(f"{MKBRR_MODULE}.get_mkbrr_version", return_value="1.5.0"),
         ):
             result = runner.invoke(app, ["mkbrr", "update"])
             assert result.exit_code == 0
