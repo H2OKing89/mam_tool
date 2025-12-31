@@ -39,6 +39,7 @@
 ### Problem
 
 Multiple data sources lack runtime validation:
+
 - `naming.json` - typos silently fail ✅ SOLVED
 - `config.yaml` - wrong types not caught until runtime ✅ SOLVED
 - Audnex API responses - unexpected structure causes crashes ✅ SOLVED
@@ -338,6 +339,7 @@ Shelfr validate-config
 ```
 
 Output:
+
 ```
 ✅ config.yaml: valid
 ✅ naming.json: valid (v1.2.0, 47 rules)
@@ -374,7 +376,7 @@ dependencies = [
 - [ ] `test_state_schema.py` - processed.json validation
 - [ ] `test_schema_migration.py` - Version upgrades
 
-[↑ Back to top](#Shelfr-improvements-plan)
+[↑ Back to top](#shelfr-improvements-plan)
 
 ---
 
@@ -385,11 +387,13 @@ dependencies = [
 ### Problem
 
 Current sanitization handles common cases but may miss edge cases:
+
 - Reserved Windows names (CON, PRN, NUL, etc.)
 - Unicode normalization issues
 - Platform-specific quirks
 
 These affect multiple components:
+
 - **Naming**: Release folder names, file names
 - **Hardlinker**: Destination paths for hardlinks
 - **Torrent output**: .torrent file names
@@ -496,7 +500,7 @@ dependencies = [
   - Edge cases (empty, dots, spaces, null bytes)
   - Integration with naming.py functions
 
-[↑ Back to top](#Shelfr-improvements-plan)
+[↑ Back to top](#shelfr-improvements-plan)
 
 ---
 
@@ -656,6 +660,7 @@ Shelfr preview-naming --limit 5 --verbose
 ```
 
 Output:
+
 ```
 ╭─────────────────────────────────────────────────────────────╮
 │ Dry Run: Processing 5 releases                              │
@@ -692,7 +697,7 @@ Already have `rich>=13.0`.
   - Workflow progress helpers
   - Exception and error formatting
 
-[↑ Back to top](#Shelfr-improvements-plan)
+[↑ Back to top](#shelfr-improvements-plan)
 
 ---
 
@@ -703,6 +708,7 @@ Already have `rich>=13.0`.
 ### Problem
 
 Current validation uses length-based heuristics:
+
 ```python
 if abs(len(out) - len(in)) / len(in) > 0.5:
     flag_suspicious()
@@ -711,6 +717,7 @@ if abs(len(out) - len(in)) / len(in) > 0.5:
 This misses semantic changes where length is similar but meaning differs.
 
 Beyond just naming validation, fuzzy matching is useful across the codebase:
+
 - **Duplicate detection** - Find near-duplicate releases in library
 - **Author matching** - Match "Reki Kawahara" to "川原 礫"
 - **Series grouping** - Group "Re:Zero" and "Re: Zero" and "ReZero"
@@ -934,6 +941,7 @@ Shelfr check-duplicates --threshold 85
 ```
 
 Output:
+
 ```
 ⚠️  Found 3 suspicious title changes:
 
@@ -1018,7 +1026,7 @@ dependencies = [
 
 **Total Tests**: 877 (55 fuzzy + 10 console + 7 integration = 72 new tests)
 
-[↑ Back to top](#Shelfr-improvements-plan)
+[↑ Back to top](#shelfr-improvements-plan)
 
 ---
 
@@ -1121,7 +1129,7 @@ def test_cleanup_never_empties_valid_title(title: str):
 | `hishel` | HTTP caching not needed yet |
 | Full Pydantic Settings migration | Would require rewriting working config |
 
-[↑ Back to top](#Shelfr-improvements-plan)
+[↑ Back to top](#shelfr-improvements-plan)
 
 ---
 
@@ -1154,7 +1162,7 @@ graph TD
 
 Total to "Phase 1 + 2 done": ~2 hours
 
-[↑ Back to top](#Shelfr-improvements-plan)
+[↑ Back to top](#shelfr-improvements-plan)
 
 ---
 
@@ -1171,6 +1179,7 @@ dependencies = [
 ```
 
 All are:
+
 - ✅ Well-maintained
 - ✅ No heavy transitive dependencies
 - ✅ MIT/BSD licensed

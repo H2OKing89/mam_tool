@@ -9,6 +9,7 @@
 ## Summary
 
 Successfully implemented P0 package upgrades from [../implementation/PACKAGE_UPGRADE_PLAN.md](../implementation/../implementation/PACKAGE_UPGRADE_PLAN.md):
+
 - ✅ **tenacity** - Production-tested retry logic with exponential backoff
 - ✅ **platformdirs** - Cross-platform XDG-compliant path handling
 
@@ -17,11 +18,13 @@ Successfully implemented P0 package upgrades from [../implementation/PACKAGE_UPG
 ### 1. tenacity Integration (⭐⭐⭐⭐⭐)
 
 **Files Modified:**
+
 - [pyproject.toml](pyproject.toml#L25) - Added `tenacity>=8.0` dependency
 - [src/Shelfr/utils/retry.py](src/Shelfr/utils/retry.py) - Complete rewrite using tenacity
 - [tests/test_retry.py](tests/test_retry.py#L16-L63) - Added new test cases
 
 **Key Features:**
+
 - Drop-in replacement for custom retry logic
 - **100% backward compatibility** - All existing code continues to work
 - Supports both old (`max_attempts`, `exceptions`) and new (`max_retries`, `retry_exceptions`) parameter names
@@ -29,6 +32,7 @@ Successfully implemented P0 package upgrades from [../implementation/PACKAGE_UPG
 - More sophisticated retry strategies (exponential jitter prevents thundering herd)
 
 **Before:**
+
 ```python
 # Custom implementation: 134 lines of hand-rolled retry logic
 def retry_with_backoff(
@@ -42,6 +46,7 @@ def retry_with_backoff(
 ```
 
 **After:**
+
 ```python
 # Production-tested tenacity: Clean, declarative, battle-tested
 from tenacity import (
@@ -64,6 +69,7 @@ def retry_with_backoff(
 ```
 
 **Verification:**
+
 ```bash
 $ python3 -c "from Shelfr.utils.retry import retry_with_backoff; ..."
 ✓ Old API works: success, called 3 times
@@ -72,6 +78,7 @@ $ python3 -c "from Shelfr.utils.retry import retry_with_backoff; ..."
 ```
 
 **Benefits:**
+
 - ✅ Zero breaking changes - all 12 existing `@retry_with_backoff` decorators work unchanged
 - ✅ Better logging - automatic retry warnings with context
 - ✅ More strategies available - can easily add stop conditions, wait strategies
@@ -82,14 +89,17 @@ $ python3 -c "from Shelfr.utils.retry import retry_with_backoff; ..."
 ### 2. platformdirs Integration (⭐⭐⭐⭐)
 
 **Files Created:**
+
 - [src/Shelfr/paths.py](src/Shelfr/paths.py) - New cross-platform path module
 
 **Files Modified:**
+
 - [pyproject.toml](pyproject.toml#L26) - Added `platformdirs>=4.0` dependency
 - [src/Shelfr/config.py](src/Shelfr/config.py#L1025-L1036) - Updated default paths to use platformdirs
 - [README.md](README.md#L172-L200) - Added environment variable documentation
 
 **Key Features:**
+
 - XDG Base Directory specification compliance on Linux
 - Native directory conventions on macOS and Windows
 - Environment variable overrides for flexibility (critical for Unraid/Docker deployments)
@@ -104,6 +114,7 @@ $ python3 -c "from Shelfr.utils.retry import retry_with_backoff; ..."
 | **Windows** | `C:\Users\<user>\AppData\Local\Shelfr` | `C:\Users\<user>\AppData\Local\Shelfr\Logs` | `C:\Users\<user>\AppData\Local\Shelfr\Cache` |
 
 **Environment Variable Overrides:**
+
 ```bash
 # For Unraid/Docker deployments
 export Shelfr_DATA_DIR="/mnt/cache/appdata/Shelfr/data"
@@ -112,6 +123,7 @@ export Shelfr_CACHE_DIR="/mnt/cache/appdata/Shelfr/cache"
 ```
 
 **Verification:**
+
 ```bash
 $ python3 -c "from Shelfr.paths import data_dir, log_dir, cache_dir; ..."
 ✓ data_dir: /root/.local/share/Shelfr
@@ -123,6 +135,7 @@ $ Shelfr_DATA_DIR=/tmp/test python3 -c "from Shelfr.paths import data_dir; ..."
 ```
 
 **Benefits:**
+
 - ✅ OS-correct defaults - follows platform conventions
 - ✅ Flexible overrides - env vars for Docker/Unraid
 - ✅ Backward compatible - config.yaml paths still take precedence
@@ -135,11 +148,13 @@ $ Shelfr_DATA_DIR=/tmp/test python3 -c "from Shelfr.paths import data_dir; ..."
 ### Existing Code Compatibility
 
 **No changes required** for existing code using:
+
 - `@retry_with_backoff()` decorators (12 occurrences across codebase)
 - `NETWORK_EXCEPTIONS`, `SUBPROCESS_EXCEPTIONS` constants
 - `RetryableError` exception class
 
 **Path resolution now respects:**
+
 1. Explicit `config.yaml` paths (highest priority)
 2. Environment variable overrides (`Shelfr_DATA_DIR`, etc.)
 3. OS-appropriate defaults via platformdirs (fallback)
@@ -147,6 +162,7 @@ $ Shelfr_DATA_DIR=/tmp/test python3 -c "from Shelfr.paths import data_dir; ..."
 ### Files Using Retry Logic (Verified Working)
 
 All existing retry decorators continue to work with old parameter names:
+
 - [src/Shelfr/qbittorrent.py](src/Shelfr/qbittorrent.py#L62) - `max_attempts=3`
 - [src/Shelfr/metadata.py](src/Shelfr/metadata.py#L973) - `max_attempts=3`
 - [src/Shelfr/mkbrr.py](src/Shelfr/mkbrr.py#L66) - `max_attempts=3`
@@ -160,18 +176,21 @@ All existing retry decorators continue to work with old parameter names:
 ### Manual Verification Tests
 
 ✅ **Retry Logic:**
+
 - Old API (`max_attempts`, `exceptions`) works correctly
 - New API (`max_retries`, `retry_exceptions`) works correctly
 - Exponential backoff with jitter applied
 - Logging shows retry attempts with warnings
 
 ✅ **Platform Paths:**
+
 - Default paths are XDG-compliant on Linux
 - Environment variable overrides work correctly
 - Directories created automatically when `ensure=True`
 - Integration with config.py successful
 
 ✅ **Import Tests:**
+
 - All modules import without errors
 - No circular import issues
 - Backward compatibility preserved
@@ -179,11 +198,13 @@ All existing retry decorators continue to work with old parameter names:
 ### Unit Tests
 
 ✅ **New Tests Added:**
+
 - `TestTenacityRetryWithBackoff::test_retry_with_backoff_attempts` - Verifies retry count
 - `TestTenacityRetryWithBackoff::test_success_on_first_try_new_api` - New API success case
 - `TestTenacityRetryWithBackoff::test_success_after_retry_new_api` - New API retry case
 
 ✅ **Existing Tests:**
+
 - All existing retry tests still pass (backward compatibility)
 - No test modifications required
 
@@ -196,10 +217,12 @@ All existing retry decorators continue to work with old parameter names:
 **No action required!** The upgrades are drop-in replacements.
 
 **Optional improvements:**
+
 - Set environment variables for custom paths (Unraid/Docker users)
 - Review logs for better retry visibility (tenacity adds detailed logging)
 
 **Environment variables to consider:**
+
 ```bash
 # Add to .env or docker-compose
 Shelfr_DATA_DIR=/mnt/cache/appdata/Shelfr/data  # For state files
@@ -209,6 +232,7 @@ Shelfr_LOG_DIR=/mnt/cache/appdata/Shelfr/logs   # For log files
 ### For Developers
 
 **New API available** (but old API still works):
+
 ```python
 # New style (recommended for new code)
 @retry_with_backoff(
@@ -230,6 +254,7 @@ def legacy_network_call():
 ```
 
 **Path utilities:**
+
 ```python
 from Shelfr.paths import data_dir, log_dir, cache_dir
 
@@ -285,6 +310,7 @@ According to [../implementation/PACKAGE_UPGRADE_PLAN.md](../implementation/../im
 ✅ **P0 upgrades complete and production-ready!**
 
 **Impact Summary:**
+
 - **Code Quality**: Replaced 134 lines of custom retry logic with battle-tested library
 - **Maintainability**: Easier to understand retry behavior with declarative tenacity
 - **Portability**: OS-correct paths with flexible override support
@@ -292,6 +318,7 @@ According to [../implementation/PACKAGE_UPGRADE_PLAN.md](../implementation/../im
 - **Time Investment**: ~1.5 hours (as estimated)
 
 **Recommendation**:
+
 - ✅ Merge these changes to main
 - ✅ Deploy to dev/staging for extended testing
 - ✅ Monitor logs for improved retry visibility

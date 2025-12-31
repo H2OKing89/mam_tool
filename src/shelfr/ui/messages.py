@@ -121,7 +121,7 @@ def fatal_error(message: str, hint: str | None = None) -> None:
         hint: Optional hint for resolution
 
     Example:
-        >>> fatal_error("Config not found", "Run 'Shelfr check' for diagnostics")
+        >>> fatal_error("Config not found", "Run 'shelfr check' for diagnostics")
     """
     err_console.print(f"\n[error]Error:[/] {message}")
     if hint:

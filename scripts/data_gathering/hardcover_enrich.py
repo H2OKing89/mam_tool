@@ -57,12 +57,12 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
-# Import from Shelfr package (requires: pip install -e . from repo root)
+# Import from shelfr package (requires: pip install -e . from repo root)
 try:
-    from Shelfr.utils.circuit_breaker import CircuitOpenError, hardcover_breaker
+    from shelfr.utils.circuit_breaker import CircuitOpenError, hardcover_breaker
 except ImportError as e:
     raise ImportError(
-        "Cannot import from Shelfr package. Please install in editable mode:\n"
+        "Cannot import from shelfr package. Please install in editable mode:\n"
         "  cd /path/to/mam_tool && pip install -e .\n"
         "Or ensure the package is installed and PYTHONPATH is set correctly."
     ) from e

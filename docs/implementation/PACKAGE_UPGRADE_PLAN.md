@@ -19,6 +19,7 @@
 **Implementation**:
 
 1. Add dependency to `pyproject.toml`:
+
 ```toml
 dependencies = [
     # ... existing ...
@@ -26,7 +27,7 @@ dependencies = [
 ]
 ```
 
-2. Replace `src/Shelfr/utils/retry.py` entirely with:
+1. Replace `src/Shelfr/utils/retry.py` entirely with:
 
 ```python
 """Retry logic using tenacity library.
@@ -83,7 +84,7 @@ def retry_with_backoff(
     )
 ```
 
-3. **Test** (add to `tests/test_retry.py`):
+1. **Test** (add to `tests/test_retry.py`):
 
 ```python
 def test_retry_with_backoff_attempts():
@@ -114,6 +115,7 @@ def test_retry_with_backoff_attempts():
 **Implementation**:
 
 1. Add dependency to `pyproject.toml`:
+
 ```toml
 dependencies = [
     # ... existing ...
@@ -121,7 +123,7 @@ dependencies = [
 ]
 ```
 
-2. Create `src/Shelfr/paths.py` (new file):
+1. Create `src/Shelfr/paths.py` (new file):
 
 ```python
 """Cross-platform path handling using platformdirs.
@@ -209,7 +211,7 @@ def log_dir(*, ensure: bool = True) -> Path:
     return d
 ```
 
-3. Update `src/Shelfr/utils/state.py`:
+1. Update `src/Shelfr/utils/state.py`:
 
 ```python
 # Add at top
@@ -225,7 +227,7 @@ def _get_run_lock_file() -> Path:
     return data_dir() / "Shelfr.lock"
 ```
 
-4. Update `src/Shelfr/logging_setup.py`:
+1. Update `src/Shelfr/logging_setup.py`:
 
 ```python
 # Add at top
@@ -245,7 +247,7 @@ def setup_logging(
     # ... rest of function
 ```
 
-5. **Update README** to document env var overrides:
+1. **Update README** to document env var overrides:
 
 ```markdown
 ## Environment Variables
@@ -261,6 +263,7 @@ Example for Unraid:
 export Shelfr_DATA_DIR="/mnt/cache/appdata/Shelfr/data"
 export Shelfr_LOG_DIR="/mnt/cache/appdata/Shelfr/logs"
 ```
+
 ```
 
 **Benefits**: Unraid users can set env vars, dev machines get OS-correct defaults.
@@ -285,7 +288,7 @@ dependencies = [
 ]
 ```
 
-2. Create `src/Shelfr/utils/cmd.py` (new file):
+1. Create `src/Shelfr/utils/cmd.py` (new file):
 
 ```python
 """Command execution utilities using sh library.
@@ -400,7 +403,7 @@ def run(
         ) from e
 ```
 
-3. **Migrate files one at a time**:
+1. **Migrate files one at a time**:
 
 **Example - `src/Shelfr/libation.py`**:
 
@@ -423,7 +426,7 @@ result = run(
 stdout = result.stdout
 ```
 
-4. **Test** (add to `tests/test_cmd.py`):
+1. **Test** (add to `tests/test_cmd.py`):
 
 ```python
 def test_run_success():
@@ -452,6 +455,7 @@ def test_run_failure():
 **Implementation**:
 
 1. Add dependency:
+
 ```toml
 dependencies = [
     # ... existing ...
@@ -459,7 +463,7 @@ dependencies = [
 ]
 ```
 
-2. Update `src/Shelfr/config.py` to use `BaseSettings`:
+1. Update `src/Shelfr/config.py` to use `BaseSettings`:
 
 ```python
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -476,7 +480,7 @@ class QBittorrentSettings(BaseSettings):
     # Automatically loads from QB_HOST, QB_USERNAME, QB_PASSWORD env vars
 ```
 
-3. **Keep YAML loading**, overlay env vars:
+1. **Keep YAML loading**, overlay env vars:
 
 ```python
 def reload_settings(config_file: Path) -> Settings:
@@ -554,6 +558,7 @@ dev = [
 ## ✅ Implementation Checklist
 
 ### Phase 1 - P0 (✅ COMPLETE - 2025-12-20)
+
 - [x] Add `tenacity>=8.0` to dependencies
 - [x] Replace `utils/retry.py` with tenacity version
 - [x] Add test for retry behavior
@@ -566,6 +571,7 @@ dev = [
 - [x] Run integration tests
 
 ### Phase 2 - P1 (✅ sh library COMPLETE - 2025-12-20)
+
 - [x] Add `sh>=2.0` to dependencies
 - [x] Create `utils/cmd.py` wrapper
 - [x] Migrate `libation.py` to use `cmd.run()`
@@ -581,6 +587,7 @@ dev = [
 > metadata.py and abs/asin.py migrations deferred to P2 (low priority, single calls each).
 
 ### Phase 3 - P2 (Future)
+
 - [ ] Consider `typer` if CLI grows complex
 - [ ] Consider `hypothesis` for edge case testing (P4)
 
@@ -596,6 +603,7 @@ dev = [
 ---
 
 **Estimated Total Time**:
+
 - P0: 1.5 hours (high value, low effort)
 - P1: 5-6 hours (high value, medium effort)
 - P2: 10+ hours (medium value, high effort - consider later)

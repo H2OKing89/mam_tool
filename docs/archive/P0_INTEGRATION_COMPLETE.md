@@ -19,11 +19,13 @@ All P0 critical production-safety improvements have been successfully integrated
 **Files Modified**: `src/Shelfr/cli.py`
 
 **Changes**:
+
 - Added `--no-run-lock` flag to `Shelfr run` command
 - Wrapped `cmd_run()` with `run_lock()` context manager
 - Proper error handling for "another instance running" scenario
 
 **Usage**:
+
 ```bash
 # Normal (safe) - enforces run lock
 Shelfr run
@@ -33,6 +35,7 @@ Shelfr run --no-run-lock
 ```
 
 **Error Message on Conflict**:
+
 ```
 Another Shelfr instance is already running.
 Lock file: /path/to/data/Shelfr.lock
@@ -50,6 +53,7 @@ Or use --no-run-lock to bypass (DANGEROUS - can cause data corruption)
 **Files Modified**: `src/Shelfr/workflow.py`
 
 **Added Imports**:
+
 ```python
 from Shelfr.utils.state import (
     checkpoint_stage,      # NEW
@@ -62,6 +66,7 @@ from Shelfr.utils.state import (
 **Stage-by-Stage Integration**:
 
 #### Stage 1: Staging
+
 ```python
 if should_skip_stage(release, "staged"):
     logger.info("Skipping staging (already completed)")
@@ -73,6 +78,7 @@ else:
 ```
 
 #### Stage 2: Metadata
+
 ```python
 if should_skip_stage(release, "metadata"):
     logger.info("Skipping metadata (already completed)")
@@ -85,6 +91,7 @@ else:
 ```
 
 #### Stage 3: Torrent Creation
+
 ```python
 if should_skip_stage(release, "torrent"):
     logger.info("Skipping torrent creation (already completed)")
@@ -100,6 +107,7 @@ else:
 ```
 
 #### Stage 4: Upload (Idempotent)
+
 ```python
 success, infohash = _upload_torrent_with_retry(...)
 # Upload checks infohash existence internally (idempotent)
@@ -116,16 +124,20 @@ if success:
 **How It Works**:
 
 1. **Partial Failure** - Process crashes after staging:
+
    ```
    ✅ Stage 1: STAGED (checkpointed at 10:15:00)
    ❌ Stage 2: CRASHED
    ```
 
 2. **Resume** - Next run automatically resumes:
+
    ```bash
    Shelfr run
    ```
+
    Output:
+
    ```
    Skipping staging (already completed)
    ✅ Stage 2: Fetching metadata...
@@ -134,6 +146,7 @@ if success:
    ```
 
 3. **Artifact Validation** - Checks files still exist:
+
    ```python
    if stage == "staged" and not release.staging_dir.exists():
        logger.warning("Staged dir missing, will re-stage")
@@ -162,6 +175,7 @@ def upload_torrent(...) -> tuple[bool, str | None]:
 ```
 
 **Critical Safety Guarantee**:
+
 - Even if state save fails after upload, re-running won't create duplicates
 - Acts like a payment processor: check first, then transact
 
@@ -172,6 +186,7 @@ def upload_torrent(...) -> tuple[bool, str | None]:
 **Location**: `src/Shelfr/workflow.py:323`
 
 **Implementation**:
+
 ```python
 # Per-release output directory (eliminates race condition)
 release_output_dir = settings.paths.torrent_output / staging_dir.name
@@ -185,10 +200,12 @@ mkbrr_result = create_torrent(
 ```
 
 **Why This Fixes The Race**:
+
 - Before: All torrents in same directory → mtime-based selection → race condition
 - After: Each release in its own subdirectory → only ONE .torrent file → no race
 
 **Example Directory Structure**:
+
 ```
 /mnt/user/data/torrents/
 ├── He Who Fights with Monsters vol_01 [H2OKing]/
@@ -231,6 +248,7 @@ mkbrr_result = create_torrent(
 ```
 
 **Backward Compatibility**: ✅
+
 - Old state files work (checkpoints/infohash optional)
 - New fields ignored by old code (forward compatible)
 
@@ -241,6 +259,7 @@ mkbrr_result = create_torrent(
 **Test Results**: ✅ **1747 tests passing**
 
 **Coverage**:
+
 - State locking mechanism (fcntl.flock)
 - Checkpoint CRUD operations
 - Idempotent upload (infohash extraction + duplicate check)
@@ -249,6 +268,7 @@ mkbrr_result = create_torrent(
 - Run lock concurrency protection
 
 **Integration Tests Needed** (Manual):
+
 1. **Concurrent Instance Prevention**
    - Start `Shelfr run`
    - Try to start second instance → should fail with clear error
@@ -271,19 +291,23 @@ mkbrr_result = create_torrent(
 **No Breaking Changes** - Safe to upgrade directly:
 
 1. **Backup State File** (recommended):
+
    ```bash
    cp data/processed.json data/processed.json.backup
    ```
 
 2. **Pull Latest Code**:
+
    ```bash
    git pull origin main
    ```
 
 3. **Run** (automatic migration):
+
    ```bash
    Shelfr run
    ```
+
    - Existing state entries gain empty checkpoints on first update
    - Infohash tracked on next successful upload
 
@@ -292,6 +316,7 @@ mkbrr_result = create_torrent(
 **API Change**: `upload_torrent()` return type changed
 
 **Before**:
+
 ```python
 success = upload_torrent(torrent_path)
 if success:
@@ -299,6 +324,7 @@ if success:
 ```
 
 **After**:
+
 ```python
 success, infohash = upload_torrent(torrent_path)
 if success:
@@ -312,6 +338,7 @@ if success:
 ## Performance Impact
 
 **Benchmarks**:
+
 - State locking overhead: <1ms per operation (fcntl.flock is fast)
 - Checkpoint saves: 2-3ms (atomic JSON write)
 - Infohash extraction: ~1ms (simple SHA1 hash)
@@ -386,16 +413,19 @@ update_state(clear_checkpoint)
 ## Next Steps (Optional Enhancements)
 
 ### P1 - High Priority
+
 1. **Exception Hierarchy** - Typed exceptions for better error handling
 2. **Configuration DI** - Remove `get_settings()` singleton
 3. **Connection Pooling** - Reuse qBittorrent client
 
 ### P2 - Medium Priority
+
 1. **SQLite Migration** - Replace JSON with SQLite for better concurrency
 2. **Circuit Breaker** - Fail-fast if Audnex API down
 3. **Metrics/Telemetry** - Track success rates, error counts
 
 ### P3 - Nice-to-Have
+
 1. **Parallel Processing** - Process multiple releases concurrently
 2. **Web Dashboard** - Real-time progress monitoring
 3. **Auto-Cleanup** - Remove orphaned staging directories
@@ -405,9 +435,11 @@ update_state(clear_checkpoint)
 ## Files Changed
 
 ### New Files
+
 1. `src/Shelfr/utils/torrent.py` - Bencode parser + infohash extraction
 
 ### Modified Files
+
 1. `src/Shelfr/utils/state.py` - Run lock, state locking, checkpoints
 2. `src/Shelfr/qbittorrent.py` - Idempotent upload, retry logic, infohash
 3. `src/Shelfr/mkbrr.py` - Timeouts on Docker operations
@@ -416,6 +448,7 @@ update_state(clear_checkpoint)
 6. `tests/test_*.py` - Updated for new return types
 
 ### Documentation
+
 1. `PRODUCTION_SAFETY_IMPROVEMENTS.md` - Detailed technical guide
 2. `P0_INTEGRATION_COMPLETE.md` - This summary document
 
@@ -424,6 +457,7 @@ update_state(clear_checkpoint)
 ## Success Metrics
 
 **Before Integration**:
+
 - ❌ State corruption risk on concurrent runs
 - ❌ Duplicate torrents on retry
 - ❌ Hung processes (no timeouts)
@@ -431,6 +465,7 @@ update_state(clear_checkpoint)
 - ❌ Production Grade: **B+**
 
 **After Integration**:
+
 - ✅ Concurrency-safe (run lock + state locking)
 - ✅ Idempotent uploads (no duplicates)
 - ✅ Timeout protection (no hangs)
@@ -438,6 +473,7 @@ update_state(clear_checkpoint)
 - ✅ Production Grade: **A**
 
 **Risk Reduction**:
+
 | Risk | Before | After | Mitigation |
 |------|--------|-------|------------|
 | Data corruption | High | **None** | Run lock + state file locking |
@@ -451,6 +487,7 @@ update_state(clear_checkpoint)
 ## Conclusion
 
 Shelfr is now **production-safe** with:
+
 - ✅ Full concurrency protection
 - ✅ Idempotent operations (no duplicates)
 - ✅ Automatic resume on failure
