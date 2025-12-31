@@ -36,7 +36,7 @@ except ImportError:
 # Check if pygments is available for syntax highlighting
 try:
     from prompt_toolkit.lexers import PygmentsLexer
-    from pygments.lexers import (  # type: ignore[import-untyped]
+    from pygments.lexers import (
         JsonLexer,
         MarkdownLexer,
         YamlLexer,
@@ -45,7 +45,7 @@ try:
     PYGMENTS_AVAILABLE = True
 except ImportError:
     PYGMENTS_AVAILABLE = False
-    PygmentsLexer = None  # type: ignore[assignment, misc]
+    PygmentsLexer = None  # type: ignore[misc, assignment]
     YamlLexer = None
     JsonLexer = None
     MarkdownLexer = None
@@ -197,7 +197,7 @@ def mini_edit(
     )
 
     try:
-        result = session.prompt(default=initial_content)
+        result: str | None = session.prompt(default=initial_content)
         return result
     except (EOFError, KeyboardInterrupt):
         return None
