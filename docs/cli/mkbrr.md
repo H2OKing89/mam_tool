@@ -255,22 +255,22 @@ mkbrr settings are configured in `config/config.yaml`:
 mkbrr:
   # Docker image
   image: "ghcr.io/autobrr/mkbrr:latest"
-  
+
   # Default preset for torrent creation
   preset: "mam"
-  
+
   # Host path mappings (for Docker volume mounts)
   host_data_root: "/mnt/user/data"
   container_data_root: "/data"
-  
+
   # Config directory (contains presets.yaml)
   host_config_dir: "/mnt/cache/appdata/mkbrr"
   container_config_dir: "/root/.config/mkbrr"
-  
+
   # Output directory for torrents
   host_output_dir: "/mnt/cache/appdata/mkbrr/torrents"
   container_output_dir: "/torrentfiles"
-  
+
   # Docker command timeout (seconds)
   timeout_seconds: 300
 ```
