@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,20 +35,20 @@ except ImportError:
 
 # Check if pygments is available for syntax highlighting
 try:
-    from pygments.lexers import (
+    from prompt_toolkit.lexers import PygmentsLexer
+    from pygments.lexers import (  # type: ignore[import-untyped]
         JsonLexer,
         MarkdownLexer,
         YamlLexer,
     )
-    from prompt_toolkit.lexers import PygmentsLexer
 
     PYGMENTS_AVAILABLE = True
 except ImportError:
     PYGMENTS_AVAILABLE = False
-    PygmentsLexer = None  # type: ignore[misc, assignment]
-    YamlLexer = None  # type: ignore[misc, assignment]
-    JsonLexer = None  # type: ignore[misc, assignment]
-    MarkdownLexer = None  # type: ignore[misc, assignment]
+    PygmentsLexer = None  # type: ignore[assignment, misc]
+    YamlLexer = None
+    JsonLexer = None
+    MarkdownLexer = None
 
 
 class MiniEditorError(Exception):
@@ -57,7 +57,7 @@ class MiniEditorError(Exception):
     pass
 
 
-class MiniEditorNotAvailable(MiniEditorError):
+class MiniEditorNotAvailableError(MiniEditorError):
     """Raised when prompt_toolkit is not installed."""
 
     def __init__(self) -> None:
@@ -80,10 +80,10 @@ def _get_lexer_for_suffix(suffix: str) -> Any | None:
     Returns:
         PygmentsLexer instance or None if not available.
     """
-    if not PYGMENTS_AVAILABLE or not PygmentsLexer:
+    if not PYGMENTS_AVAILABLE or PygmentsLexer is None:
         return None
 
-    LEXER_MAP = {
+    lexer_map = {
         ".yaml": YamlLexer,
         ".yml": YamlLexer,
         ".json": JsonLexer,
@@ -91,7 +91,7 @@ def _get_lexer_for_suffix(suffix: str) -> Any | None:
         ".markdown": MarkdownLexer,
     }
 
-    lexer_class = LEXER_MAP.get(suffix.lower())
+    lexer_class = lexer_map.get(suffix.lower())
     if lexer_class:
         return PygmentsLexer(lexer_class)
     return None
@@ -141,7 +141,7 @@ def mini_edit(
         Edited content string, or None if cancelled (Ctrl+C).
 
     Raises:
-        MiniEditorNotAvailable: If prompt_toolkit is not installed.
+        MiniEditorNotAvailableError: If prompt_toolkit is not installed.
 
     Example:
         >>> content = mini_edit("key: value", suffix=".yaml")
@@ -151,7 +151,7 @@ def mini_edit(
         ...     print("Cancelled")
     """
     if not PROMPT_TOOLKIT_AVAILABLE:
-        raise MiniEditorNotAvailable()
+        raise MiniEditorNotAvailableError()
 
     from rich.console import Console
     from rich.panel import Panel
@@ -232,7 +232,7 @@ def edit_yaml_inline(
         ...     Path("output.yaml").write_text(result)
     """
     if not PROMPT_TOOLKIT_AVAILABLE:
-        raise MiniEditorNotAvailable()
+        raise MiniEditorNotAvailableError()
 
     import yaml
     from rich.console import Console
@@ -316,9 +316,10 @@ def edit_json_inline(
         >>> result = edit_json_inline(json_content, pretty=True)
     """
     if not PROMPT_TOOLKIT_AVAILABLE:
-        raise MiniEditorNotAvailable()
+        raise MiniEditorNotAvailableError()
 
     import json
+
     from rich.console import Console
     from rich.syntax import Syntax
 
@@ -396,7 +397,7 @@ def edit_text_inline(
         >>> result = edit_text_inline(markdown, suffix=".md")
     """
     if not PROMPT_TOOLKIT_AVAILABLE:
-        raise MiniEditorNotAvailable()
+        raise MiniEditorNotAvailableError()
 
     return mini_edit(
         content,
@@ -430,16 +431,17 @@ def edit_file_inline(
 
     Raises:
         FileNotFoundError: If file doesn't exist.
-        MiniEditorNotAvailable: If prompt_toolkit not installed.
+        MiniEditorNotAvailableError: If prompt_toolkit not installed.
 
     Example:
         >>> if edit_file_inline("config.yaml"):
         ...     print("Config updated!")
     """
     if not PROMPT_TOOLKIT_AVAILABLE:
-        raise MiniEditorNotAvailable()
+        raise MiniEditorNotAvailableError()
 
     import shutil
+
     from rich.console import Console
 
     console = Console()

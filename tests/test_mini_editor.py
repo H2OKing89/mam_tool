@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -13,7 +13,7 @@ from shelfr.utils.mini_editor import (
     PROMPT_TOOLKIT_AVAILABLE,
     PYGMENTS_AVAILABLE,
     MiniEditorError,
-    MiniEditorNotAvailable,
+    MiniEditorNotAvailableError,
     check_available,
 )
 
@@ -56,14 +56,14 @@ class TestErrors:
         assert issubclass(MiniEditorError, Exception)
 
     def test_mini_editor_not_available_message(self) -> None:
-        """MiniEditorNotAvailable should have helpful message."""
-        error = MiniEditorNotAvailable()
+        """MiniEditorNotAvailableError should have helpful message."""
+        error = MiniEditorNotAvailableError()
         assert "prompt_toolkit" in str(error)
         assert "pip install" in str(error)
 
     def test_mini_editor_not_available_inherits(self) -> None:
-        """MiniEditorNotAvailable should inherit from MiniEditorError."""
-        assert issubclass(MiniEditorNotAvailable, MiniEditorError)
+        """MiniEditorNotAvailableError should inherit from MiniEditorError."""
+        assert issubclass(MiniEditorNotAvailableError, MiniEditorError)
 
 
 # =============================================================================
@@ -142,7 +142,7 @@ class TestGetLexer:
         lexer1 = _get_lexer_for_suffix(".YAML")
         lexer2 = _get_lexer_for_suffix(".yaml")
         # Both should return same type (or None if pygments unavailable)
-        assert type(lexer1) == type(lexer2)
+        assert type(lexer1) is type(lexer2)
 
 
 # =============================================================================
@@ -154,7 +154,7 @@ class TestWithoutPromptToolkit:
     """Tests when prompt_toolkit is not available."""
 
     def test_mini_edit_raises_when_unavailable(self) -> None:
-        """mini_edit should raise MiniEditorNotAvailable when deps missing."""
+        """mini_edit should raise MiniEditorNotAvailableError when deps missing."""
         with patch("shelfr.utils.mini_editor.PROMPT_TOOLKIT_AVAILABLE", False):
             # Re-import to get the patched version behavior
             # Actually, we need to test the actual function
@@ -162,7 +162,7 @@ class TestWithoutPromptToolkit:
 
             # The function checks the flag at runtime
             if not PROMPT_TOOLKIT_AVAILABLE:
-                with pytest.raises(MiniEditorNotAvailable):
+                with pytest.raises(MiniEditorNotAvailableError):
                     mini_edit("test")
 
 

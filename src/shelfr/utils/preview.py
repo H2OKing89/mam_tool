@@ -200,6 +200,8 @@ def preview_side_by_side(
     from rich.columns import Columns
 
     # Create syntax-highlighted content if syntax specified
+    before_display: Syntax | Text
+    after_display: Syntax | Text
     if syntax:
         before_display = Syntax(before, syntax, theme="monokai", word_wrap=True)
         after_display = Syntax(after, syntax, theme="monokai", word_wrap=True)
@@ -254,7 +256,7 @@ def preview_file(
 
     # Detect syntax from extension
     suffix = file_path.suffix.lower()
-    SYNTAX_MAP = {
+    syntax_map = {
         ".yaml": "yaml",
         ".yml": "yaml",
         ".json": "json",
@@ -270,12 +272,13 @@ def preview_file(
         ".sh": "bash",
         ".bash": "bash",
     }
-    syntax_lang = SYNTAX_MAP.get(suffix, "text")
+    syntax_lang = syntax_map.get(suffix, "text")
 
     # Build title
     display_title = title or file_path.name
-    if truncated:
-        display_title += f" [dim](showing {max_lines}/{len(lines) + (len(content.splitlines()) - max_lines)} lines)[/]"
+    if truncated and max_lines is not None:
+        total_lines = len(lines) + (len(content.splitlines()) - max_lines)
+        display_title += f" [dim](showing {max_lines}/{total_lines} lines)[/]"
 
     syntax = Syntax(
         content,
@@ -337,7 +340,7 @@ def preview_yaml_structure(
                     tree.add(f"[cyan]{key}[/]: [green]{repr(value)}[/]")
         elif isinstance(obj, list):
             for i, item in enumerate(obj[:5]):  # Show first 5
-                if isinstance(item, (dict, list)):
+                if isinstance(item, dict | list):
                     branch = tree.add(f"[dim][{i}][/]")
                     add_to_tree(branch, item, depth + 1)
                 else:
@@ -372,6 +375,7 @@ def preview_validation_result(
         ...     print("Valid!")
     """
     import json
+
     import yaml
 
     if console is None:

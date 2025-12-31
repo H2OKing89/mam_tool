@@ -10,26 +10,6 @@ from shelfr.utils.editor import (
     edit_yaml_temp,
     get_editor,
 )
-from shelfr.utils.mini_editor import (
-    MiniEditorError,
-    MiniEditorNotAvailable,
-    check_available as is_tui_available,
-    edit_file_inline,
-    edit_json_inline,
-    edit_yaml_inline,
-    mini_edit,
-)
-from shelfr.utils.preview import (
-    preview_bbcode,
-    preview_diff,
-    preview_file,
-    preview_json,
-    preview_markdown,
-    preview_side_by_side,
-    preview_validation_result,
-    preview_yaml,
-    preview_yaml_structure,
-)
 from shelfr.utils.fuzzy import (
     ChangeAnalysis,
     DuplicatePair,
@@ -47,7 +27,29 @@ from shelfr.utils.fuzzy import (
     similarity_ratio,
     weighted_ratio,
 )
+from shelfr.utils.mini_editor import (
+    MiniEditorError,
+    MiniEditorNotAvailableError,
+    edit_file_inline,
+    edit_json_inline,
+    edit_yaml_inline,
+    mini_edit,
+)
+from shelfr.utils.mini_editor import (
+    check_available as is_tui_available,
+)
 from shelfr.utils.paths import safe_dirname, safe_filename, safe_filepath
+from shelfr.utils.preview import (
+    preview_bbcode,
+    preview_diff,
+    preview_file,
+    preview_json,
+    preview_markdown,
+    preview_side_by_side,
+    preview_validation_result,
+    preview_yaml,
+    preview_yaml_structure,
+)
 
 __all__ = [
     "safe_dirname",
@@ -80,7 +82,7 @@ __all__ = [
     "weighted_ratio",
     # Mini editor utilities (Tier 2)
     "MiniEditorError",
-    "MiniEditorNotAvailable",
+    "MiniEditorNotAvailableError",
     "edit_file_inline",
     "edit_json_inline",
     "edit_yaml_inline",

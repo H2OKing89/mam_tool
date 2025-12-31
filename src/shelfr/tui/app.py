@@ -13,23 +13,23 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterable
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
 # Lazy imports for optional textual dependency
 try:
-    from textual import on, work
+    from textual import on
     from textual.app import App, ComposeResult
     from textual.binding import Binding
-    from textual.containers import Container, Horizontal, Vertical
+    from textual.containers import Vertical
     from textual.reactive import reactive
     from textual.widgets import (
         DirectoryTree,
         Footer,
         Header,
-        Label,
         Static,
         TextArea,
     )
@@ -76,7 +76,7 @@ if TEXTUAL_AVAILABLE:
     class FilteredDirectoryTree(DirectoryTree):
         """Directory tree that only shows editable files."""
 
-        def filter_paths(self, paths: list[Path]) -> list[Path]:
+        def filter_paths(self, paths: Iterable[Path]) -> Iterable[Path]:
             """Filter to show only directories and editable files."""
             return [
                 path
@@ -90,7 +90,7 @@ if TEXTUAL_AVAILABLE:
     class PreviewPane(Static):
         """Preview pane showing validation results and file info."""
 
-        def __init__(self, *args, **kwargs) -> None:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             super().__init__(*args, **kwargs)
             self._content = "No file loaded"
 
@@ -115,7 +115,7 @@ if TEXTUAL_AVAILABLE:
             info += f"   Type: {path.suffix or 'unknown'}"
             self.update(info)
 
-    class ShelfrEditor(App):
+    class ShelfrEditor(App[None]):
         """Full-screen TUI editor for shelfr configuration files."""
 
         TITLE = "shelfr Editor"
@@ -187,7 +187,7 @@ if TEXTUAL_AVAILABLE:
         }
         """
 
-        BINDINGS: ClassVar[list[Binding]] = [
+        BINDINGS: ClassVar[list[Binding | tuple[str, str] | tuple[str, str, str]]] = [
             Binding("ctrl+s", "save", "Save", priority=True),
             Binding("ctrl+q", "quit", "Quit", priority=True),
             Binding("f1", "help", "Help"),
@@ -392,9 +392,7 @@ if TEXTUAL_AVAILABLE:
 
             try:
                 # Create backup
-                backup_path = self.current_file.with_suffix(
-                    self.current_file.suffix + ".bak"
-                )
+                backup_path = self.current_file.with_suffix(self.current_file.suffix + ".bak")
                 if self.current_file.exists():
                     backup_path.write_text(
                         self.current_file.read_text(encoding="utf-8"),
@@ -407,7 +405,6 @@ if TEXTUAL_AVAILABLE:
                 self.is_modified = False
 
                 # Re-validate
-                info = self.query_one("#info-pane", PreviewPane)
                 self._validate_content(content, self.current_file)
 
                 self.notify(f"Saved: {self.current_file.name}")
@@ -423,7 +420,6 @@ if TEXTUAL_AVAILABLE:
                 return
 
             editor = self.query_one("#editor", TextArea)
-            info = self.query_one("#info-pane", PreviewPane)
             self._validate_content(editor.text, self.current_file)
             self._update_status("Validated")
 
@@ -466,7 +462,7 @@ if TEXTUAL_AVAILABLE:
             """Remove focus from current widget."""
             self.screen.focus_next()
 
-        def action_quit(self) -> None:
+        async def action_quit(self) -> None:
             """Quit the application."""
             if self.is_modified:
                 self.notify(

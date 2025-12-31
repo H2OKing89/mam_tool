@@ -131,13 +131,9 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
 
         try:
             if suffix in (".yaml", ".yml"):
-                success = edit_yaml(
-                    path, validate=validate, backup=backup, editor=editor
-                )
+                success = edit_yaml(path, validate=validate, backup=backup, editor=editor)
             elif suffix == ".json":
-                success = edit_json(
-                    path, validate=validate, backup=backup, editor=editor
-                )
+                success = edit_json(path, validate=validate, backup=backup, editor=editor)
             else:
                 success = edit_file(path, editor=editor)
 
@@ -191,18 +187,13 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
 
         if not config_path:
             print_error("config.yaml not found")
-            console.print(
-                "[dim]Searched:[/]\n"
-                + "\n".join(f"  • {p}" for p in config_paths)
-            )
+            console.print("[dim]Searched:[/]\n" + "\n".join(f"  • {p}" for p in config_paths))
             raise typer.Exit(1)
 
         try:
             if edit_yaml(config_path, validate=True, backup=True, editor=editor):
                 print_success(f"Saved: {config_path}")
-                console.print(
-                    "[dim]💡 Restart shelfr for config changes to take effect.[/]"
-                )
+                console.print("[dim]💡 Restart shelfr for config changes to take effect.[/]")
             else:
                 print_warning("No changes made (or invalid YAML)")
                 raise typer.Exit(1)
@@ -229,16 +220,17 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
         [bold]Example:[/]
           shelfr edit presets
         """
-        from shelfr.config import config
+        from shelfr.config import get_settings
         from shelfr.utils.editor import EditorError, NoEditorError, edit_yaml
 
-        presets_path = Path(config.mkbrr.host_config_dir) / "presets.yaml"
+        settings = get_settings()
+        presets_path = Path(settings.mkbrr.host_config_dir) / "presets.yaml"
 
         if not presets_path.exists():
             print_error(f"presets.yaml not found: {presets_path}")
             console.print(
                 "\n[dim]Expected location from config.yaml mkbrr.host_config_dir:[/]\n"
-                f"  {config.mkbrr.host_config_dir}\n\n"
+                f"  {settings.mkbrr.host_config_dir}\n\n"
                 "[dim]Create the file or check your configuration.[/]"
             )
             raise typer.Exit(1)
@@ -333,9 +325,7 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
 
         if not sig_path:
             print_error("signature.j2 not found")
-            console.print(
-                "[dim]Expected: config/templates/signature.j2[/]"
-            )
+            console.print("[dim]Expected: config/templates/signature.j2[/]")
             raise typer.Exit(1)
 
         try:
@@ -444,7 +434,7 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
         """
         try:
             from shelfr.utils.mini_editor import (
-                MiniEditorNotAvailable,
+                MiniEditorNotAvailableError,
                 edit_file_inline,
             )
         except ImportError:
@@ -460,11 +450,10 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
             if not success:
                 raise typer.Exit(1)
 
-        except MiniEditorNotAvailable:
+        except MiniEditorNotAvailableError:
             print_error("Inline editor requires: pip install shelfr[tui]")
             console.print(
-                "\n[dim]Install the TUI extras:[/]\n"
-                "  [cyan]pip install shelfr[tui][/]"
+                "\n[dim]Install the TUI extras:[/]\n" "  [cyan]pip install shelfr[tui][/]"
             )
             raise typer.Exit(1) from None
         except FileNotFoundError as e:
@@ -634,9 +623,5 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
 
         except ImportError as e:
             print_error(f"TUI dependencies not installed: {e}")
-            console.print(
-                "\n[dim]Install with:[/]\n"
-                "  [cyan]pip install shelfr[tui][/]"
-            )
+            console.print("\n[dim]Install with:[/]\n" "  [cyan]pip install shelfr[tui][/]")
             raise typer.Exit(1) from None
-
