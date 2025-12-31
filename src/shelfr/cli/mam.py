@@ -80,7 +80,7 @@ def register_mam_commands(mam_app: typer.Typer) -> None:
             ),
         ],
     ) -> None:
-        """🖼️  Render BBCode visually in terminal.
+        """🎨 Render BBCode visually in terminal.
 
         Renders the MAM BBCode description using Rich formatting,
         showing approximately how it will appear on MAM.
@@ -94,7 +94,7 @@ def register_mam_commands(mam_app: typer.Typer) -> None:
           2. Fetches Audnex metadata
           3. Renders BBCode visually with colors and formatting
 
-        [dim]⚠️  Note: MAM's upload page renderer has a bug that shows ASCII art[/]
+        [dim]⚡ Note: MAM's upload page renderer has a bug that shows ASCII art[/]
         [dim]   crooked. The actual torrent page will render correctly.[/]
 
         [dim]💡 For raw BBCode to copy, use 'shelfr mam bbcode' instead.[/]

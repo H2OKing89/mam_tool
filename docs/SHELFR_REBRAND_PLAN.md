@@ -84,146 +84,57 @@ The project has evolved from a simple MAM upload script (`mam_tool`) into a comp
 
 ## Phase 2: Suite Restructure (In Progress)
 
+> **📄 Full details moved to [CLI_ARCHITECTURE.md](cli/CLI_ARCHITECTURE.md)**
+
 After the rebrand stabilizes, reorganize commands into a domain-focused suite.
 
-### Proposed Command Structure
+### Summary of Changes
 
-```bash
-shelfr
-├── status              # Quick status overview (top-level convenience)
-├── config              # Show loaded configuration
-│
-├── mam                 # 📤 MAM tracker workflows (✅ IMPLEMENTED)
-│   ├── bbcode          # Output raw BBCode (copyable)
-│   ├── render          # Preview BBCode visually
-│   ├── run             # Full upload pipeline (future)
-│   └── ff              # Generate MAM FastFill JSON (future)
-│
-├── lib                 # 📚 Libation integration
-│   ├── scan            # Check Audible for new purchases
-│   ├── liberate        # Download pending audiobooks
-│   ├── status          # Show Libation library status
-│   ├── books           # List books in library
-│   ├── search          # Search library
-│   ├── export          # Export library data
-│   ├── settings        # Show Libation settings
-│   ├── redownload      # Re-download specific books
-│   ├── set-status      # Change book download status
-│   ├── convert         # Convert audio formats
-│   └── guide           # Libation setup guide
-│
-├── abs                 # 📚 Audiobookshelf management
-│   ├── init            # Test ABS connection
-│   ├── import          # Import staged books to library
-│   ├── check-asin      # Check if ASIN exists in library
-│   ├── trump-preview   # Preview trumping decisions
-│   ├── restore         # Restore archived books
-│   ├── cleanup         # Clean up source files after import
-│   ├── rename          # Rename folders to MAM schema
-│   ├── orphans         # Find orphaned folders
-│   └── resolve-asins   # Resolve missing ASINs
-│
-├── mkbrr               # 🔧 Torrent tooling (mkbrr wrapper)
-│   ├── create          # Create torrent file
-│   └── verify          # Verify torrent (future)
-│
-├── meta                # 🏷️ Metadata operations (future)
-│   ├── preview         # Preview naming transformations
-│   ├── enrich          # Enrich metadata from Hardcover/Audnex
-│   └── audit           # Audit metadata quality
-│
-├── doctor              # 🩺 Health & diagnostics
-│   ├── check           # Run all health checks
-│   ├── validate        # Validate discovered releases
-│   ├── config          # Validate configuration files
-│   ├── dupes           # Find duplicate releases
-│   └── suspicious      # Check for naming issues
-│
-└── state               # 📋 State management
-    ├── list            # List state entries
-    ├── prune           # Remove stale entries
-    ├── retry           # Retry failed entries
-    ├── clear           # Clear specific entry
-    └── export          # Export state to file
-```
+| Current | Future | Status |
+|---------|--------|--------|
+| `shelfr tools bbcode` | `shelfr mam bbcode` | ✅ Done |
+| `shelfr tools mamff` | `shelfr mam ff` | 🔲 Planned |
+| `shelfr libation *` | `shelfr lib *` | 🔲 Planned |
+| `shelfr check` | `shelfr doctor check` | 🔲 Planned |
+| `shelfr validate` | `shelfr doctor validate` | 🔲 Planned |
+| (new) | `shelfr mkbrr create` | 🔲 Planned |
+| (new) | `shelfr edit tui` | 🔲 Planned |
 
-### Command Mapping (Current → Future)
+### New Sub-Apps
 
-| Current (`shelfr` after Phase 1) | Future (`shelfr` Phase 2) | Status |
-|----------------------------------|---------------------------|--------|
-| `shelfr run` | `shelfr mam run` | Planned |
-| `shelfr status` | `shelfr status` | Implemented (stays top-level) |
-| `shelfr config` | `shelfr config` | Implemented (stays top-level) |
-| `shelfr tools mamff` | `shelfr mam ff` | Planned |
-| `shelfr tools bbcode` | `shelfr mam bbcode` | ✅ Implemented |
-| — | `shelfr mam render` | ✅ Implemented (NEW) |
-| `shelfr libation *` | `shelfr lib *` | Implemented |
-| `shelfr abs *` | `shelfr abs *` | Implemented (no change) |
-| `shelfr check` | `shelfr doctor check` | Implemented |
-| `shelfr validate` | `shelfr doctor validate` | Implemented |
-| `shelfr validate-config` | `shelfr doctor config` | Implemented |
-| `shelfr check-duplicates` | `shelfr doctor dupes` | Implemented |
-| `shelfr check-suspicious` | `shelfr doctor suspicious` | Implemented |
-| `shelfr preview-naming` | `shelfr meta preview` | Implemented |
-| `shelfr state *` | `shelfr state *` | Implemented (no change) |
-| — | `shelfr mkbrr create` | Future |
-| — | `shelfr mkbrr verify` | Future |
-| — | `shelfr meta enrich` | Future |
-| — | `shelfr meta audit` | Future |
+| Sub-App | Purpose | Implementation |
+|---------|---------|----------------|
+| `mkbrr` | Torrent operations | [MKBRR_WRAPPER_PLAN.md](implementation/MKBRR_WRAPPER_PLAN.md) |
+| `edit` | Config editing & TUI | [TEXT_EDITOR_PLAN.md](implementation/TEXT_EDITOR_PLAN.md) |
+| `meta` | Metadata operations | Future |
+| `doctor` | Health & diagnostics | Future |
 
-### Sub-App Descriptions
-
-| Sub-App | Emoji | Help Text | Notes |
-|---------|-------|-----------|-------|
-| `mam` | 📤 | MAM tracker upload workflows | Core upload pipeline |
-| `lib` | 📚 | Libation audiobook manager | Short for "libation" |
-| `abs` | 📚 | Audiobookshelf library management | Keep existing |
-| `mkbrr` | 🔧 | Torrent creation and verification | Full mkbrr wrapper |
-| `meta` | 🏷️ | Metadata operations and enrichment | Future expansion |
-| `doctor` | 🩺 | Health checks and diagnostics | Library health |
-| `state` | 📋 | State and tracking management | Keep existing |
-
-### Top-Level Convenience Commands
-
-These stay at root level for quick access:
-
-```bash
-shelfr status    # Quick status overview
-shelfr config    # Show configuration
-```
-
-### Backward Compatibility (Phase 2)
-
-When restructuring, add hidden aliases with deprecation warnings:
-
-```python
-# Old command still works but warns
-@app.command("check", hidden=True)
-def check_deprecated(ctx: typer.Context) -> None:
-    print_warning("'shelfr check' is now 'shelfr doctor check'. Please update your scripts.")
-    return doctor_check(ctx)
-```
+See [CLI_ARCHITECTURE.md](cli/CLI_ARCHITECTURE.md) for:
+- Full current and planned command structure
+- Sub-app details and implementation status
+- Guidelines for adding new commands
+- Migration path for restructuring
 
 ---
 
 ## Implementation Timeline
 
-### Phase 1: Rebrand (Target: January 2025)
+### Phase 1: Rebrand (✅ Complete)
 
-1. **Week 1**: Package rename (`mamfast` → `shelfr`)
-2. **Week 2**: Update all imports and references
-3. **Week 3**: Documentation and README updates
-4. **Week 4**: Testing and release
+1. ✅ Package rename (`mamfast` → `shelfr`)
+2. ✅ Update all imports and references
+3. ✅ Documentation and README updates
+4. ✅ Testing and release
 
-### Phase 2: Restructure (Target: Q1 2025)
+### Phase 2: Restructure (In Progress)
 
-1. Create `mam` sub-app, move pipeline commands
-2. Rename `libation` → `lib` sub-app
-3. Create `doctor` sub-app, move diagnostics
-4. Create `mkbrr` sub-app (new functionality)
-5. Create `meta` sub-app (future features)
-6. Add backward-compat aliases
-7. Update documentation
+1. ✅ Create `mam` sub-app (bbcode, render)
+2. ✅ Create `edit` sub-app (all 3 tiers complete)
+3. 🔲 Create `mkbrr` sub-app
+4. 🔲 Rename `libation` → `lib` sub-app
+5. 🔲 Create `doctor` sub-app, move diagnostics
+6. 🔲 Create `meta` sub-app
+7. 🔲 Add backward-compat aliases
 
 ---
 

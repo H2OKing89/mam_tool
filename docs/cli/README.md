@@ -4,7 +4,8 @@ This folder contains documentation about the shelfr CLI architecture, refactorin
 
 ## Quick Start
 
-- **New to the CLI?** Start with [REFACTORING_PLAN.md](REFACTORING_PLAN.md) for architecture overview
+- **New to the CLI?** Start with [CLI_ARCHITECTURE.md](CLI_ARCHITECTURE.md) for current structure and future plans
+- **Refactoring history?** See [REFACTORING_PLAN.md](REFACTORING_PLAN.md) for the original 6-phase plan
 - **Want proof it works?** See [AUDIT_REPORT.md](AUDIT_REPORT.md) for test results + usage findings
 - **Detailed verification?** Check [AUDIT_VERIFICATION.md](AUDIT_VERIFICATION.md) for phase-by-phase evidence
 
@@ -12,9 +13,29 @@ This folder contains documentation about the shelfr CLI architecture, refactorin
 
 | File | Purpose |
 | --- | --- |
+| [CLI_ARCHITECTURE.md](CLI_ARCHITECTURE.md) | **Current CLI structure**, sub-apps, implementation status, and future plans |
 | [REFACTORING_PLAN.md](REFACTORING_PLAN.md) | 6-phase CLI architecture refactoring plan, acceptance criteria, and completion status |
 | [AUDIT_REPORT.md](AUDIT_REPORT.md) | Audit findings: usage patterns, deprecation status, test coverage (2,132 tests passing) |
 | [AUDIT_VERIFICATION.md](AUDIT_VERIFICATION.md) | Detailed verification of all 6 refactoring phases with code evidence and line counts |
+
+## Current Sub-Apps
+
+| Sub-App | Status | Commands |
+|---------|--------|----------|
+| `abs` | ✅ Complete | init, import, cleanup, rename, orphans, ... |
+| `libation` | ✅ Complete | scan, liberate, convert, status, books, ... |
+| `state` | ✅ Complete | list, prune, retry, clear, export |
+| `mam` | ✅ Complete | bbcode, render |
+| `edit` | ✅ Tier 1+2 | config, presets, file, inline, preview, diff, yaml-tree |
+| `mkbrr` | 🔲 Planned | create, inspect, check, modify |
+| `doctor` | 🔲 Planned | check, validate, config, dupes, suspicious |
+| `meta` | 🔲 Planned | preview, enrich, audit |
+
+## Related Documentation
+
+- [../SHELFR_REBRAND_PLAN.md](../SHELFR_REBRAND_PLAN.md) - Overall rebrand plan
+- [../implementation/MKBRR_WRAPPER_PLAN.md](../implementation/MKBRR_WRAPPER_PLAN.md) - mkbrr CLI details
+- [../implementation/TEXT_EDITOR_PLAN.md](../implementation/TEXT_EDITOR_PLAN.md) - Editor tiers (1-3)
 
 ## Key Accomplishments
 

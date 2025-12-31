@@ -27,7 +27,7 @@ from shelfr.console import console
 def _deprecation_warning(old_cmd: str, new_cmd: str) -> None:
     """Print deprecation warning for old command name."""
     console.print(
-        f"[yellow]⚠️  '{old_cmd}' is deprecated. Use '{new_cmd}' instead.[/yellow]",
+        f"[yellow]⚡ '{old_cmd}' is deprecated. Use '{new_cmd}' instead.[/yellow]",
         highlight=False,
     )
 
@@ -176,7 +176,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
             typer.Option("--detailed", help="Show detailed quality comparison tables."),
         ] = False,
     ) -> None:
-        """⚔️  Preview trumping decisions for staged folders.
+        """🔀 Preview trumping decisions for staged folders.
 
         Shows what would be replaced, kept, or rejected based on quality comparison.
         """
@@ -199,7 +199,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
             typer.Option("--list", help="List available archives without restoring."),
         ] = False,
     ) -> None:
-        """♻️  Restore archived books to library.
+        """🔄 Restore archived books to library.
 
         Restore books that were archived by trumping back to the library.
 
@@ -302,7 +302,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
             typer.Option(help="Output JSON report of changes to file."),
         ] = None,
     ) -> None:
-        """✏️  Rename folders to match MAM naming schema.
+        """📝 Rename folders to match MAM naming schema.
 
         Normalizes folder names in your Audiobookshelf library to follow
         the MAM naming convention for consistency.

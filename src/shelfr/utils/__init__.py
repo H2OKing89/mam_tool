@@ -1,5 +1,15 @@
 """Utility modules for MAMFast."""
 
+from shelfr.utils.editor import (
+    EditorError,
+    NoEditorError,
+    edit_file,
+    edit_json,
+    edit_temp,
+    edit_yaml,
+    edit_yaml_temp,
+    get_editor,
+)
 from shelfr.utils.fuzzy import (
     ChangeAnalysis,
     DuplicatePair,
@@ -17,12 +27,43 @@ from shelfr.utils.fuzzy import (
     similarity_ratio,
     weighted_ratio,
 )
+from shelfr.utils.mini_editor import (
+    MiniEditorError,
+    MiniEditorNotAvailableError,
+    edit_file_inline,
+    edit_json_inline,
+    edit_yaml_inline,
+    mini_edit,
+)
+from shelfr.utils.mini_editor import (
+    check_available as is_tui_available,
+)
 from shelfr.utils.paths import safe_dirname, safe_filename, safe_filepath
+from shelfr.utils.preview import (
+    preview_bbcode,
+    preview_diff,
+    preview_file,
+    preview_json,
+    preview_markdown,
+    preview_side_by_side,
+    preview_validation_result,
+    preview_yaml,
+    preview_yaml_structure,
+)
 
 __all__ = [
     "safe_dirname",
     "safe_filename",
     "safe_filepath",
+    # Editor utilities
+    "EditorError",
+    "NoEditorError",
+    "edit_file",
+    "edit_json",
+    "edit_temp",
+    "edit_yaml",
+    "edit_yaml_temp",
+    "get_editor",
     # Fuzzy matching utilities
     "ChangeAnalysis",
     "DuplicatePair",
@@ -39,4 +80,22 @@ __all__ = [
     "partial_ratio",
     "similarity_ratio",
     "weighted_ratio",
+    # Mini editor utilities (Tier 2)
+    "MiniEditorError",
+    "MiniEditorNotAvailableError",
+    "edit_file_inline",
+    "edit_json_inline",
+    "edit_yaml_inline",
+    "is_tui_available",
+    "mini_edit",
+    # Preview utilities (Tier 2)
+    "preview_bbcode",
+    "preview_diff",
+    "preview_file",
+    "preview_json",
+    "preview_markdown",
+    "preview_side_by_side",
+    "preview_validation_result",
+    "preview_yaml",
+    "preview_yaml_structure",
 ]

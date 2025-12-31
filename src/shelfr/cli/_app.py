@@ -248,7 +248,7 @@ MAM_EPILOG = """
   shelfr mam bbcode <path>   [dim]# Output raw BBCode (copyable)[/]
   shelfr mam render <path>   [dim]# Preview BBCode visually[/]
 
-[dim]⚠️  Note: MAM's upload page preview has a rendering bug for ASCII art.[/]
+[dim]⚡ Note: MAM's upload page preview has a rendering bug for ASCII art.[/]
 [dim]   The actual torrent page will display correctly.[/]
 """
 

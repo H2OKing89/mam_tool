@@ -66,9 +66,9 @@ def register_core_commands(app: typer.Typer) -> None:
         # Handle misplaced --dry-run flag
         if dry_run_hint:
             console.print(
-                "[yellow]⚠️  --dry-run must come BEFORE the subcommand:[/]\n\n"
-                "    [green]mamfast --dry-run run[/]  ✓\n"
-                "    [red]mamfast run --dry-run[/]  ✗\n"
+                "[yellow]⚡ --dry-run must come BEFORE the subcommand:[/]\n\n"
+                "    [green]mamfast --dry-run run[/]  ✅\n"
+                "    [red]mamfast run --dry-run[/]  ❌\n"
             )
             raise typer.Exit(2)
 
@@ -105,7 +105,7 @@ def register_core_commands(app: typer.Typer) -> None:
 
     @app.command(rich_help_panel=CORE_COMMANDS)
     def config(ctx: typer.Context) -> None:
-        """⚙️  Print loaded configuration.
+        """🔧 Print loaded configuration.
 
         Shows the current configuration values for debugging.
         Useful for verifying paths and settings are correct.
