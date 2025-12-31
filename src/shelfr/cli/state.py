@@ -61,7 +61,7 @@ def register_state_commands(state_app: typer.Typer) -> None:
 
     @state_app.command("prune")
     def state_prune(ctx: typer.Context) -> None:
-        """🧹 Remove stale entries with missing paths.
+        """Remove stale entries with missing paths.
 
         Cleans up state entries whose files no longer exist.
 

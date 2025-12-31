@@ -417,7 +417,7 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
             ),
         ] = False,
     ) -> None:
-        """💻 Edit file with inline terminal editor.
+        """Edit file with inline terminal editor.
 
         Opens an embedded editor that stays in the terminal.
         Supports syntax highlighting for YAML, JSON, Markdown.
@@ -479,7 +479,7 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
             ),
         ] = 50,
     ) -> None:
-        """👀 Preview file with syntax highlighting.
+        """Preview file with syntax highlighting.
 
         Shows file content with syntax highlighting based on extension.
 
@@ -532,7 +532,7 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
             typer.Option("--depth", "-d", help="Maximum tree depth."),
         ] = 3,
     ) -> None:
-        """🌳 Show YAML file as tree structure.
+        """Show YAML file as tree structure.
 
         Displays the structure of a YAML file as a tree,
         showing keys and value types.
@@ -560,7 +560,7 @@ def register_edit_commands(edit_app: typer.Typer) -> None:
             ),
         ] = None,
     ) -> None:
-        """💻 Launch full-screen TUI editor.
+        """Launch full-screen TUI editor.
 
         Opens a full-screen terminal interface with file browser,
         editor, and validation preview. Supports YAML, JSON, and

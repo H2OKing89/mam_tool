@@ -57,7 +57,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
 
     @abs_app.command("init")
     def abs_init(ctx: typer.Context) -> None:
-        """🔌 Initialize Audiobookshelf connection.
+        """Initialize Audiobookshelf connection.
 
         Tests ABS API connection and discovers available libraries.
         """
@@ -176,7 +176,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
             typer.Option("--detailed", help="Show detailed quality comparison tables."),
         ] = False,
     ) -> None:
-        """🔀 Preview trumping decisions for staged folders.
+        """Preview trumping decisions for staged folders.
 
         Shows what would be replaced, kept, or rejected based on quality comparison.
         """
@@ -247,7 +247,7 @@ def register_abs_commands(abs_app: typer.Typer) -> None:
             typer.Option(help="Only cleanup sources older than N days."),
         ] = None,
     ) -> None:
-        """🧹 Cleanup Libation source files after import.
+        """Cleanup Libation source files after import.
 
         Standalone cleanup of Libation source folders that have been imported.
         Supports strategies: hide (add marker), move, or delete.

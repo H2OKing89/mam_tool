@@ -46,7 +46,7 @@ def register_mam_commands(mam_app: typer.Typer) -> None:
             ),
         ],
     ) -> None:
-        """🔤 Output raw BBCode description for a release.
+        """Output raw BBCode description for a release.
 
         Outputs the MAM BBCode description as plain text for easy copying.
         Use this when you need the raw BBCode to paste into MAM.

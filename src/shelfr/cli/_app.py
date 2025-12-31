@@ -369,7 +369,7 @@ def create_main_callback(app: typer.Typer) -> None:
             ),
         ] = False,
     ) -> None:
-        """🎧 Fast MAM audiobook upload automation tool.
+        """Fast MAM audiobook upload automation tool.
 
         MAMFast automates the audiobook upload workflow:
         [cyan]Libation → Staging → Metadata → Torrent → Upload[/]

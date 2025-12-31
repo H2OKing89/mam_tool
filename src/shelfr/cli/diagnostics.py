@@ -32,7 +32,7 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
             typer.Option("--services-only", help="Run service connectivity checks only."),
         ] = False,
     ) -> None:
-        """🩺 Run health checks to verify environment setup.
+        """Run health checks to verify environment setup.
 
         Validates configuration, paths, and service connectivity.
         [bold cyan]Run this first[/] before using other commands!
@@ -119,7 +119,7 @@ def register_diagnostics_commands(app: typer.Typer) -> None:
             typer.Option("--json", "-j", help="Output results as JSON."),
         ] = False,
     ) -> None:
-        """👀 Preview naming transformations.
+        """Preview naming transformations.
 
         Shows before/after for title filtering and folder renaming
         without making any changes. Great for testing naming rules!
