@@ -1,4 +1,4 @@
-"""Utility and status commands for MAMFast CLI.
+"""Utility and status commands for shelfr CLI.
 
 These commands handle status display, health checks, validation,
 and configuration inspection.

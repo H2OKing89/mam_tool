@@ -81,10 +81,10 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
     abs_config = settings.audiobookshelf
 
     # Get managed library (for now, use first managed library)
-    managed_libs = [lib for lib in abs_config.libraries if lib.mamfast_managed]
+    managed_libs = [lib for lib in abs_config.libraries if lib.shelfr_managed]
     if not managed_libs:
-        fatal_error("No mamfast_managed libraries configured")
-        print_info("Set mamfast_managed: true on a library in config.yaml")
+        fatal_error("No shelfr_managed libraries configured")
+        print_info("Set shelfr_managed: true on a library in config.yaml")
         return 1
 
     # Use first managed library

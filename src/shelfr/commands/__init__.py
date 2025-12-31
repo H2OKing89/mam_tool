@@ -1,4 +1,4 @@
-"""Command implementations for MAMFast CLI.
+"""Command implementations for shelfr CLI.
 
 This package organizes CLI commands into logical modules:
 - core: Main workflow commands (run, prepare) - individual steps handled by workflow.py

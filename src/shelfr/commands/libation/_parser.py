@@ -457,7 +457,7 @@ Examples:
     guide_parser = libation_sub.add_parser(
         "guide",
         help="Show detailed tutorial and integration guide",
-        description="Comprehensive guide to using Libation with MAMFast.",
+        description="Comprehensive guide to using Libation with Shelfr.",
     )
     guide_parser.set_defaults(libation_func=cmd_libation_guide)
 

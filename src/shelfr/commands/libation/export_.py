@@ -56,7 +56,7 @@ def cmd_libation_export(args: argparse.Namespace) -> int:
     flag = format_flags.get(format_type, "-j")
 
     # Export to container temp path first (use PID for uniqueness)
-    container_path = f"/tmp/mamfast_export_{os.getpid()}.{format_type}"
+    container_path = f"/tmp/shelfr_export_{os.getpid()}.{format_type}"
     result = _run_libation_cmd(container, "export", "-p", container_path, flag)
 
     if not result.success:

@@ -92,11 +92,11 @@ def cmd_abs_init(args: argparse.Namespace) -> int:
         for lib in audiobook_libs:
             is_configured = lib.id in configured_ids
             configured_lib = next((cl for cl in abs_config.libraries if cl.id == lib.id), None)
-            managed = bool(configured_lib and configured_lib.mamfast_managed)
+            managed = bool(configured_lib and configured_lib.shelfr_managed)
 
             status = ""
             if is_configured and managed:
-                status = " [cyan](mamfast_managed)[/]"
+                status = " [cyan](shelfr_managed)[/]"
             elif is_configured:
                 status = " [dim](configured)[/]"
             else:
@@ -133,9 +133,9 @@ def cmd_abs_init(args: argparse.Namespace) -> int:
         print_success("Audiobookshelf connection verified")
 
         # Show hints for next steps
-        managed_libs = [lib for lib in abs_config.libraries if lib.mamfast_managed]
+        managed_libs = [lib for lib in abs_config.libraries if lib.shelfr_managed]
         if not managed_libs:
-            print_info("Next: Add library IDs to config with mamfast_managed: true")
+            print_info("Next: Add library IDs to config with shelfr_managed: true")
             print_info("Then run: shelfr abs-import")
         else:
             print_info(

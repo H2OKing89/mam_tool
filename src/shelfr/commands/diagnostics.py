@@ -1,4 +1,4 @@
-"""Diagnostic commands for MAMFast CLI.
+"""Diagnostic commands for shelfr CLI.
 
 These commands help analyze and troubleshoot releases,
 including duplicate detection and suspicious title changes.

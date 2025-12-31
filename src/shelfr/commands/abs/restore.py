@@ -107,10 +107,10 @@ def cmd_abs_restore(args: argparse.Namespace) -> int:
         fatal_error(f"Archive path does not exist: {archive_path}")
         return 1
 
-    sidecar = archive_path / ".mamfast_trump.json"
+    sidecar = archive_path / ".shelfr_trump.json"
     if not sidecar.exists():
         fatal_error(
-            f"Invalid archive - missing .mamfast_trump.json: {archive_path}",
+            f"Invalid archive - missing .shelfr_trump.json: {archive_path}",
             "Make sure the path points to an archived book folder",
         )
         return 1
