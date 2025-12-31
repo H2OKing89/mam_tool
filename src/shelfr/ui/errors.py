@@ -1,4 +1,4 @@
-"""Error formatting components for MAMFast UI.
+"""Error formatting components for shelfr UI.
 
 These components provide rich formatting for exceptions and error output.
 """

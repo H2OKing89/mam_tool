@@ -1,4 +1,4 @@
-"""Progress bar and spinner components for MAMFast UI.
+"""Progress bar and spinner components for shelfr UI.
 
 These components provide visual feedback for long-running operations.
 """

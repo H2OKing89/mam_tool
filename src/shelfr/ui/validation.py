@@ -1,4 +1,4 @@
-"""Validation output components for MAMFast UI.
+"""Validation output components for shelfr UI.
 
 These components display validation results and health check output.
 """

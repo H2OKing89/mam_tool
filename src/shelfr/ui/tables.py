@@ -1,4 +1,4 @@
-"""Table formatting components for MAMFast UI.
+"""Table formatting components for shelfr UI.
 
 These components provide Rich table displays for releases, status, and other data.
 """

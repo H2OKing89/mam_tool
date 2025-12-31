@@ -1,4 +1,4 @@
-"""Simple message printing helpers for MAMFast UI.
+"""Simple message printing helpers for shelfr UI.
 
 These are the most commonly used output functions for quick status messages.
 """
@@ -121,7 +121,7 @@ def fatal_error(message: str, hint: str | None = None) -> None:
         hint: Optional hint for resolution
 
     Example:
-        >>> fatal_error("Config not found", "Run 'mamfast check' for diagnostics")
+        >>> fatal_error("Config not found", "Run 'Shelfr check' for diagnostics")
     """
     err_console.print(f"\n[error]Error:[/] {message}")
     if hint:
