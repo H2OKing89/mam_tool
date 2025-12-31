@@ -180,7 +180,7 @@ def register_libation_commands(libation_app: typer.Typer) -> None:
             typer.Option("--raw", help="Show raw settings output."),
         ] = False,
     ) -> None:
-        """⚙️  View Libation configuration settings.
+        """🔧 View Libation configuration settings.
 
         Displays current Libation configuration.
         """

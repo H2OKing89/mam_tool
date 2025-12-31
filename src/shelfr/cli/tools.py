@@ -66,9 +66,9 @@ def register_tools_commands(tools_app: typer.Typer) -> None:
 
         if dry_run_hint:
             console.print(
-                "[yellow]⚠️  --dry-run must come BEFORE the subcommand:[/]\n\n"
-                "    [green]mamfast --dry-run tools prepare[/]  ✓\n"
-                "    [red]mamfast tools prepare --dry-run[/]  ✗\n"
+                "[yellow]⚡ --dry-run must come BEFORE the subcommand:[/]\n\n"
+                "    [green]mamfast --dry-run tools prepare[/]  ✅\n"
+                "    [red]mamfast tools prepare --dry-run[/]  ❌\n"
             )
             raise typer.Exit(2)
 

@@ -100,7 +100,7 @@ def register_state_commands(state_app: typer.Typer) -> None:
             str, typer.Argument(metavar="ASIN", help="ASIN to clear from processed state.")
         ],
     ) -> None:
-        """🗑️  Clear a processed entry to force re-run.
+        """❌ Clear a processed entry to force re-run.
 
         Removes the ASIN from processed state for full re-processing.
 
