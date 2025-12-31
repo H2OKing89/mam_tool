@@ -194,7 +194,7 @@ AUDIOBOOKSHELF_HOST=https://abs.example.com
 AUDIOBOOKSHELF_API_KEY=your-api-token-here
 
 # Optional runtime settings
-MAMFAST_ENV=production
+Shelfr_ENV=production
 LOG_LEVEL=INFO
 ```
 

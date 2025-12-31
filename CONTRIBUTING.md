@@ -1,11 +1,11 @@
-# Contributing to MAMFast
+# Contributing to Shelfr
 
-Thank you for your interest in contributing to MAMFast! This document provides guidelines and best practices.
+Thank you for your interest in contributing to Shelfr! This document provides guidelines and best practices.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/mamfast.git`
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/Shelfr.git`
 3. Create a virtual environment: `python -m venv .venv && source .venv/bin/activate`
 4. Install dev dependencies: `pip install -e ".[dev]"`
 5. Install pre-commit hooks: `pre-commit install`
@@ -43,7 +43,7 @@ rm -rf .mypy_cache .cache/mypy-precommit
 pytest
 
 # Run with coverage
-pytest --cov=src/mamfast --cov-branch --cov-report=term
+pytest --cov=src/Shelfr --cov-branch --cov-report=term
 
 # Run specific test file
 pytest tests/test_discovery.py

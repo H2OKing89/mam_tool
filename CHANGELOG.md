@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to MAMFast will be documented in this file.
+All notable changes to Shelfr will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -48,11 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Streamlined CLI** - Removed individual step commands from main CLI
-  - Removed: `mamfast scan`, `mamfast discover`, `mamfast torrent`, `mamfast upload`, `mamfast metadata`
-  - Use `mamfast run` for full pipeline (handles all steps internally)
-  - Use `mamfast libation scan/list` for Libation operations
-  - Use `mamfast tools prepare` for staging (moved from `mamfast prepare`)
-  - Use `mamfast tools mamff` for metadata JSON generation (replacement for `mamfast metadata`)
+  - Removed: `Shelfr scan`, `Shelfr discover`, `Shelfr torrent`, `Shelfr upload`, `Shelfr metadata`
+  - Use `Shelfr run` for full pipeline (handles all steps internally)
+  - Use `Shelfr libation scan/list` for Libation operations
+  - Use `Shelfr tools prepare` for staging (moved from `Shelfr prepare`)
+  - Use `Shelfr tools mamff` for metadata JSON generation (replacement for `Shelfr metadata`)
 
 - **Improved qBittorrent error handling** - Connection and authentication failures now provide specific troubleshooting steps
 - **Better torrent creation errors** - mkbrr failures include Docker image verification steps and path mapping diagnostics
