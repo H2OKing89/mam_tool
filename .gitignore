@@ -70,6 +70,7 @@ samples/
 # Note: API docs under docs/reference/* ARE tracked intentionally
 CHEATSHEET.md
 docs/reference/mam
+docs/reference/mkbrr
 
 # BBCode signature samples (user-specific, generated)
 samples/bbcode_sig*.json
