@@ -295,7 +295,7 @@ def _get_jinja_env() -> Environment:
 
     Loads templates from:
     1. config/templates/ (user overrides, gitignored)
-    2. mamfast/templates/ (package defaults)
+    2. Shelfr/templates/ (package defaults)
     """
     user_templates = config_dir() / "templates"
     loaders: list[BaseLoader] = []

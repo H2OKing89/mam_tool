@@ -1,4 +1,4 @@
-"""Validation framework for MAMFast health checks and runtime validation."""
+"""Validation framework for shelfr health checks and runtime validation."""
 
 from __future__ import annotations
 
@@ -518,7 +518,7 @@ class PreflightValidation:
         Initialize preflight validation.
 
         Args:
-            settings: MAMFast settings object
+            settings: shelfr settings object
         """
         self._settings = settings
 

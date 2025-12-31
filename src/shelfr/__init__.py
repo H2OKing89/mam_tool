@@ -1,4 +1,4 @@
-"""MAMFast - Fast MAM audiobook upload automation tool."""
+"""shelfr - Fast MAM audiobook upload automation tool."""
 
 from shelfr.exceptions import (
     AudiobookshelfError,
@@ -8,13 +8,13 @@ from shelfr.exceptions import (
     DockerError,
     ExternalToolError,
     LibationError,
-    MAMFastError,
     MetadataError,
     MkbrrError,
     NetworkError,
     PipelineError,
     PreUploadValidationError,
     QBittorrentError,
+    ShelfrError,
     StagingError,
     StateCorruptionError,
     StateError,
@@ -29,7 +29,8 @@ __version__ = "0.2.0"
 __all__ = [
     "__version__",
     # Base exception
-    "MAMFastError",
+    "ShelfrError",
+    "ShelfrError",  # Deprecated alias for backward compatibility
     # Configuration
     "ConfigurationError",
     # Validation

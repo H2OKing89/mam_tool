@@ -106,7 +106,7 @@ def get_libation_status() -> LibationStatus:
     settings = get_settings()
 
     # Use a temp file inside the container for the export
-    container_export_path = "/tmp/mamfast_libation_export.json"
+    container_export_path = "/tmp/shelfr_libation_export.json"
 
     logger.debug(f"Running Libation export to {container_export_path}")
 

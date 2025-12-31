@@ -1,4 +1,4 @@
-"""Data models for MAMFast."""
+"""Data models for shelfr."""
 
 from __future__ import annotations
 
