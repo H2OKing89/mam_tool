@@ -63,7 +63,7 @@ app = make_app()
 # Sub-apps for command groups
 state_app = typer.Typer(
     name="state",
-    help="📋 Manage processed.json state",
+    help="Manage processed.json state",
     rich_markup_mode="rich",
     no_args_is_help=True,
 )
@@ -71,7 +71,7 @@ app.add_typer(state_app, name="state", rich_help_panel=STATE_COMMANDS)
 
 libation_app = typer.Typer(
     name="libation",
-    help="📚 Libation audiobook manager integration",
+    help="Libation audiobook manager integration",
     rich_markup_mode="rich",
     no_args_is_help=False,  # Default to status
 )
@@ -79,7 +79,7 @@ app.add_typer(libation_app, name="libation")
 
 tools_app = typer.Typer(
     name="tools",
-    help="🔧 Troubleshooting and utility tools",
+    help="Troubleshooting and utility tools",
     rich_markup_mode="rich",
     no_args_is_help=True,
 )
@@ -278,7 +278,7 @@ def run(
     # Handle misplaced --dry-run flag
     if dry_run_hint:
         console.print(
-            "[yellow]⚠️  --dry-run must come BEFORE the subcommand:[/]\n\n"
+            "[yellow]⚠  --dry-run must come BEFORE the subcommand:[/]\n\n"
             "    [green]mamfast --dry-run run[/]  ✓\n"
             "    [red]mamfast run --dry-run[/]  ✗\n"
         )
@@ -299,7 +299,7 @@ def run(
 
 @app.command(rich_help_panel=CORE_COMMANDS)
 def status(ctx: typer.Context) -> None:
-    """📊 Show processing status of all releases.
+    """Show processing status of all releases.
 
     Displays a summary of discovered, staged, and processed releases.
     """
@@ -375,7 +375,7 @@ def validate(
         typer.Option("--json", "-j", help="Output validation report as JSON."),
     ] = False,
 ) -> None:
-    """✅ Validate discovered releases.
+    """Validate discovered releases.
 
     Runs validation checks on all discovered releases without processing.
 
@@ -393,7 +393,7 @@ def validate(
 
 @app.command("validate-config", rich_help_panel=DIAG_COMMANDS)
 def validate_config(ctx: typer.Context) -> None:
-    """📝 Validate configuration files.
+    """Validate configuration files.
 
     Checks naming.json, config.yaml, and other config files for errors.
     """
@@ -455,7 +455,7 @@ def check_duplicates(
         typer.Option("--json", "-j", help="Output results as JSON."),
     ] = False,
 ) -> None:
-    """🔎 Find potential duplicate releases.
+    """Find potential duplicate releases.
 
     Uses fuzzy matching to find near-duplicate titles in your library.
 
@@ -495,7 +495,7 @@ def check_suspicious(
         typer.Option("--json", "-j", help="Output results as JSON."),
     ] = False,
 ) -> None:
-    """🔍 Check for over-aggressive title cleaning.
+    """Check for over-aggressive title cleaning.
 
     Compares original titles to cleaned versions and flags significant changes.
 
@@ -542,7 +542,7 @@ def state_list(
         typer.Option("--json", "-j", help="Output as JSON."),
     ] = False,
 ) -> None:
-    """📋 List state entries.
+    """List state entries.
 
     Shows processed and/or failed entries from the state file.
 
@@ -586,7 +586,7 @@ def state_retry(
     ctx: typer.Context,
     asin: Annotated[str, typer.Argument(metavar="ASIN", help="ASIN to clear from failed state.")],
 ) -> None:
-    """🔄 Clear a failed entry to allow re-processing.
+    """Clear a failed entry to allow re-processing.
 
     Removes the ASIN from failed state so it can be processed again.
 
@@ -629,7 +629,7 @@ def state_export(
         typer.Option("--output", "-o", help="Output file path (default: stdout)."),
     ] = None,
 ) -> None:
-    """💾 Export state to JSON file.
+    """Export state to JSON file.
 
     Exports the current state to a JSON file for backup or analysis.
 
@@ -735,7 +735,7 @@ def abs_import(
         typer.Option("--no-metadata", help="Disable metadata.json generation."),
     ] = False,
 ) -> None:
-    """📥 Import staged audiobooks to Audiobookshelf.
+    """Import staged audiobooks to Audiobookshelf.
 
     Moves staged books to ABS library structure with duplicate detection.
 
@@ -770,7 +770,7 @@ def abs_check_duplicate(
     ctx: typer.Context,
     asin: Annotated[str, typer.Argument(metavar="ASIN", help="ASIN to check (e.g., B0DK27WWT8).")],
 ) -> None:
-    """🔍 Check if ASIN exists in library.
+    """Check if ASIN exists in library.
 
     Quick lookup to check for duplicates before importing.
 
@@ -972,7 +972,7 @@ def abs_orphans(
         typer.Option(help="Output JSON report of orphaned folders."),
     ] = None,
 ) -> None:
-    """🔎 Find and clean up orphaned folders.
+    """Find and clean up orphaned folders.
 
     Finds orphaned folders that have metadata.json but no audio files.
     These are often created by ABS when it creates duplicate library entries.
@@ -1008,7 +1008,7 @@ def abs_resolve_asins(
         typer.Option("--write-sidecar", help="Write resolved ASINs to sidecar JSON files."),
     ] = False,
 ) -> None:
-    """🔍 Resolve ASINs for Unknown/ books via ABS search.
+    """Resolve ASINs for Unknown/ books via ABS search.
 
     Searches Audible via ABS to find ASINs for books in Unknown/.
     """
@@ -1032,7 +1032,7 @@ def abs_resolve_asins(
 
 @libation_app.callback(invoke_without_command=True)
 def libation_callback(ctx: typer.Context) -> None:
-    """📚 Libation audiobook manager integration.
+    """Libation audiobook manager integration.
 
     Manage your Audible audiobook library through Libation.
 
@@ -1062,7 +1062,7 @@ def libation_scan(
         typer.Option("--liberate", help="Also download new books after scanning."),
     ] = False,
 ) -> None:
-    """🔍 Scan Audible library for new purchases.
+    """Scan Audible library for new purchases.
 
     Checks your Audible account for new audiobook purchases.
 
@@ -1093,7 +1093,7 @@ def libation_liberate(
         typer.Option("--yes", "-y", help="Skip confirmation prompts."),
     ] = False,
 ) -> None:
-    """📥 Download and decrypt pending audiobooks.
+    """Download and decrypt pending audiobooks.
 
     Downloads all books with 'NotDownloaded' status from your library.
 
@@ -1116,7 +1116,7 @@ def libation_status(
         typer.Option("--refresh", help="Force refresh library data."),
     ] = False,
 ) -> None:
-    """📊 Show library status and statistics.
+    """Show library status and statistics.
 
     Displays a summary of your audiobook library status.
     """
@@ -1148,7 +1148,7 @@ def libation_search(
         typer.Option("--format", "-f", help="Output format."),
     ] = SearchFormat.table,
 ) -> None:
-    """🔎 Search your audiobook library.
+    """Search your audiobook library.
 
     Search for books by title, author, or ASIN.
 
@@ -1182,7 +1182,7 @@ def libation_export(
         typer.Option("--format", "-f", help="Export format."),
     ] = ExportFormat.json,
 ) -> None:
-    """💾 Export library data to file.
+    """Export library data to file.
 
     Export your library data to JSON or CSV format.
 
@@ -1249,7 +1249,7 @@ def libation_books(
         typer.Option("--limit", "-n", help="Maximum books to show."),
     ] = 50,
 ) -> None:
-    """📚 List audiobooks in your library.
+    """List audiobooks in your library.
 
     Shows books with optional status filtering.
 
@@ -1287,7 +1287,7 @@ def libation_redownload(
         typer.Option("--yes", "-y", help="Skip confirmation prompt."),
     ] = False,
 ) -> None:
-    """🔄 Re-download specific audiobook(s).
+    """Re-download specific audiobook(s).
 
     Forces re-download of a specific audiobook by ASIN.
 
@@ -1322,7 +1322,7 @@ def libation_set_status(
         typer.Option("--yes", "-y", help="Skip confirmation prompt."),
     ] = False,
 ) -> None:
-    """📝 Set download status for books.
+    """Set download status for books.
 
     Change the download status of a specific audiobook.
 
@@ -1362,7 +1362,7 @@ def libation_convert(
         typer.Option("--yes", "-y", help="Skip confirmation prompt."),
     ] = False,
 ) -> None:
-    """🔄 Convert M4B audiobooks to MP3.
+    """Convert M4B audiobooks to MP3.
 
     Converts audiobooks from M4B to MP3 format.
 
@@ -1387,7 +1387,7 @@ def libation_guide(
         typer.Option("--section", "-s", help="Show specific section only."),
     ] = None,
 ) -> None:
-    """📖 Show detailed integration guide.
+    """Show detailed integration guide.
 
     Comprehensive tutorial on using Libation with MAMFast.
 
@@ -1425,7 +1425,7 @@ def tools_mamff(
         ),
     ] = None,
 ) -> None:
-    """📝 Generate MAM fast-fill JSON for a release folder.
+    """Generate MAM fast-fill JSON for a release folder.
 
     Creates the JSON file used by MAM's fast-fill upload feature.
     Fetches metadata from Audnex and extracts info from MediaInfo.
