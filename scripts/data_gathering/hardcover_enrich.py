@@ -20,8 +20,6 @@ import re
 import ssl
 import sys
 import uuid
-
-import sh
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+import sh
 import typer
 from dotenv import load_dotenv
 from rapidfuzz import fuzz
@@ -1332,6 +1331,7 @@ class HardcoverEnricher:
 
         # Atomic write to prevent corruption
         import tempfile
+
         Settings.SEARCH_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
         with console.status(f"[bold {COLORS['secondary']}]💾 Saving cache...[/]", spinner="dots"):
             with tempfile.NamedTemporaryFile(
@@ -1716,9 +1716,8 @@ class HardcoverEnricher:
                         elif isinstance(result, Exception):
                             # Log exception with context
                             book_ctx = batch[idx] if idx < len(batch) else {"title": "unknown"}
-                            logger.error(
-                                f"Failed to enrich book '{book_ctx.get('abs', {}).get('title', 'unknown')}': {result}"
-                            )
+                            book_title = book_ctx.get("abs", {}).get("title", "unknown")
+                            logger.error(f"Failed to enrich book '{book_title}': {result}")
                             self.stats.api_errors += 1
                         live.update(self.dashboard.generate_layout())
 
@@ -1909,6 +1908,7 @@ class HardcoverEnricher:
 
         # Atomic writes to prevent corruption
         import tempfile
+
         with console.status(
             f"[bold {COLORS['gold']}]💾 Writing enriched data...[/]", spinner="dots12"
         ):

@@ -1,14 +1,20 @@
 <div align="center">
 
-# 🎧 MAMFast
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner-light.svg">
+  <img alt="shelfr" src="docs/assets/banner-dark.svg" width="520">
+</picture>
 
-**Fast MAM audiobook upload automation tool**
+<br>
+
+**Audiobook library automation — staging, metadata, uploads, and collection management**
 
 <p>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/badge/code%20style-ruff-000000.svg" alt="Code style: ruff"></a>
-  <a href="https://coderabbit.ai"><img src="https://img.shields.io/coderabbit/prs/github/H2OKing89/mam_tool?utm_source=oss&utm_medium=github&utm_campaign=H2OKing89%2Fmam_tool&labelColor=171717&color=FF570A&label=CodeRabbit+Reviews" alt="CodeRabbit Pull Request Reviews"></a>
+  <a href="https://coderabbit.ai"><img src="https://img.shields.io/coderabbit/prs/github/H2OKing89/shelfr?utm_source=oss&utm_medium=github&utm_campaign=H2OKing89%2Fshelfr&labelColor=171717&color=FF570A&label=CodeRabbit+Reviews" alt="CodeRabbit Pull Request Reviews"></a>
 </p>
 
 <p>
@@ -28,56 +34,46 @@
 
 ---
 
-## ✨ Features
+## Features
 
 <table>
 <tr>
-<td width="50">🔍</td>
 <td width="200"><strong>Libation Integration</strong></td>
 <td>Trigger scans via <code>libationcli</code> in Docker with automatic book discovery</td>
 </tr>
 <tr>
-<td>📦</td>
 <td><strong>Smart Staging</strong></td>
 <td>Hardlink files to upload workspace with MAM-compliant naming (≤225 chars, automatic truncation with hash suffix)</td>
 </tr>
 <tr>
-<td>🌏</td>
 <td><strong>Japanese Transliteration</strong></td>
 <td>Auto-converts Japanese author names using pykakasi with intelligent romanization</td>
 </tr>
 <tr>
-<td>📋</td>
 <td><strong>Metadata Enrichment</strong></td>
 <td>Fetch from <a href="https://api.audnex.us">Audnex API</a> + MediaInfo with series/volume detection</td>
 </tr>
 <tr>
-<td>🧲</td>
 <td><strong>Torrent Creation</strong></td>
 <td>Uses mkbrr in Docker with configurable presets and piece sizes</td>
 </tr>
 <tr>
-<td>⬆️</td>
 <td><strong>qBittorrent Upload</strong></td>
 <td>Auto-add torrents with category/tags, ready for cross-seeding</td>
 </tr>
 <tr>
-<td>🔄</td>
 <td><strong>Production-Grade Retry</strong></td>
 <td>Powered by <a href="https://github.com/jd/tenacity">tenacity</a> with exponential backoff and jitter</td>
 </tr>
 <tr>
-<td>📊</td>
 <td><strong>Robust State Tracking</strong></td>
 <td>Atomic writes, automatic backups, stale detection, and checkpoint recovery</td>
 </tr>
 <tr>
-<td>📚</td>
 <td><strong>Audiobookshelf Import</strong></td>
 <td>Direct library import with duplicate detection and quality-based trumping</td>
 </tr>
 <tr>
-<td>🛡️</td>
 <td><strong>Type-Safe Architecture</strong></td>
 <td>Strict typing with Pydantic v2 models and mypy verification</td>
 </tr>
@@ -104,13 +100,12 @@ graph LR
 
 | Stage | Description | Command |
 |-------|-------------|---------|
-| **Scan** | Trigger Libation to check for new Audible books | `mamfast scan` |
-| **Discover** | Find new audiobooks not yet processed | `mamfast discover` |
-| **Stage** | Hardlink files with MAM-compliant naming | `mamfast prepare` |
-| **Metadata** | Fetch Audnex data + extract MediaInfo | `mamfast metadata` |
-| **Torrent** | Create .torrent files via mkbrr | `mamfast torrent` |
-| **Upload** | Add to qBittorrent with tags | `mamfast upload` |
-| **Import** | Import to Audiobookshelf (optional) | `mamfast abs import` |
+| **Scan** | Check Audible for new purchases | `shelfr libation scan` |
+| **Discover** | Find new audiobooks not yet processed | `shelfr libation list` |
+| **Stage** | Hardlink files with MAM-compliant naming | `shelfr tools prepare` |
+| **Metadata** | Generate MAM JSON (standalone) | `shelfr tools mamff <path>` |
+| **Full Pipeline** | Run all steps end-to-end | `shelfr run` |
+| **Import** | Import to Audiobookshelf (optional) | `shelfr abs import` |
 
 </details>
 
@@ -118,12 +113,12 @@ graph LR
 
 ## 📥 Installation
 
-> Repo name is `mam_tool`; the app name/CLI is `mamfast`.
+> Repo name is `shelfr`; the app name/CLI is `shelfr`.
 
 ```bash
 # Clone the repo
-git clone https://github.com/H2OKing89/mam_tool.git mamfast
-cd mamfast
+git clone https://github.com/H2OKing89/shelfr.git shelfr
+cd shelfr
 
 # Create virtual environment
 python -m venv .venv
@@ -180,7 +175,7 @@ $EDITOR config/.env config/config.yaml
 
 ## ⚙️ Configuration
 
-MAMFast uses layered configuration with automatic validation:
+shelfr uses layered configuration with automatic validation:
 
 > **Precedence**: `config.yaml` > `.env` > defaults
 > Put secrets in `.env`, everything else in `config.yaml`.
@@ -225,7 +220,7 @@ paths:
   torrent_output: "/mnt/user/data/downloads/torrents/torrentfiles"
   # Optional: override the default XDG locations (platformdirs)
   # state_file: "./data/processed.json"
-  # log_file: "./logs/mamfast.log"
+  # log_file: "./logs/shelfr.log"
 
 mam:
   max_filename_length: 225
@@ -248,7 +243,7 @@ mkbrr:
 
 qbittorrent:
   category: "mam-audiobooks"
-  tags: ["mamfast"]
+  tags: ["shelfr"]
   auto_start: true
   auto_tmm: false
   save_path: ""
@@ -291,20 +286,20 @@ Maps audiobook genres to MAM category IDs:
 <details>
 <summary><strong>4. 🌍 Environment Variables - XDG Path Overrides</strong></summary>
 
-MAMFast uses XDG-compliant paths by default (via [platformdirs](https://github.com/platformdirs/platformdirs)):
+shelfr uses XDG-compliant paths by default (via [platformdirs](https://github.com/platformdirs/platformdirs)):
 
 ```bash
 # Override default data directory (for state files)
-# Default: ~/.local/share/mamfast (Linux), ~/Library/Application Support/mamfast (macOS)
-export MAMFAST_DATA_DIR="/mnt/cache/appdata/mamfast/data"
+# Default: ~/.local/share/shelfr (Linux), ~/Library/Application Support/shelfr (macOS)
+export SHELFR_DATA_DIR="/mnt/cache/appdata/shelfr/data"
 
 # Override default cache directory
-# Default: ~/.cache/mamfast (Linux), ~/Library/Caches/mamfast (macOS)
-export MAMFAST_CACHE_DIR="/mnt/cache/appdata/mamfast/cache"
+# Default: ~/.cache/shelfr (Linux), ~/Library/Caches/shelfr (macOS)
+export SHELFR_CACHE_DIR="/mnt/cache/appdata/shelfr/cache"
 
 # Override default log directory
-# Default: ~/.local/state/mamfast (Linux), ~/Library/Logs/mamfast (macOS)
-export MAMFAST_LOG_DIR="/mnt/cache/appdata/mamfast/logs"
+# Default: ~/.local/state/shelfr (Linux), ~/Library/Logs/shelfr (macOS)
+export SHELFR_LOG_DIR="/mnt/cache/appdata/shelfr/logs"
 ```
 
 > **Note**: Explicitly configured paths in `config.yaml` always take precedence over environment variables.
@@ -318,42 +313,46 @@ export MAMFAST_LOG_DIR="/mnt/cache/appdata/mamfast/logs"
 ### Full Pipeline
 
 ```bash
-mamfast run                   # Run everything
-mamfast run --skip-scan       # Skip Libation scan
-mamfast run --skip-metadata   # Skip metadata fetching
-mamfast --dry-run run         # Preview without changes
+shelfr run                   # Run everything
+shelfr run --skip-scan       # Skip Libation scan
+shelfr run --skip-metadata   # Skip metadata fetching
+shelfr --dry-run run         # Preview without changes
 ```
 
 ### Step by Step
 
 ```bash
-mamfast scan              # Trigger Libation download
-mamfast scan --liberate   # Scan and download new books
-mamfast discover          # List new audiobooks
-mamfast discover --all    # List all audiobooks
-mamfast prepare           # Stage files (hardlink + rename)
-mamfast metadata          # Fetch Audnex + MediaInfo
-mamfast torrent           # Create .torrent files
-mamfast upload            # Add to qBittorrent
+# Libation commands
+shelfr libation scan          # Check for new Audible purchases
+shelfr libation scan --liberate   # Scan and download new books
+shelfr libation list          # List audiobooks in library
+shelfr libation list --pending    # List pending downloads
+
+# Staging and tools
+shelfr tools prepare          # Stage files (hardlink + rename)
+shelfr tools mamff /path/to/release   # Generate MAM JSON
+
+# Full pipeline runs everything: scan → prepare → metadata → torrent → upload
+shelfr run
 ```
 
 ### State Management
 
 ```bash
-mamfast state list            # View all processed entries
-mamfast state list --failed   # Show only failed entries
-mamfast state prune           # Remove stale entries (missing files)
-mamfast state retry <asin-or-id>  # Clear failed status for retry
-mamfast state clear <asin-or-id>  # Remove entry completely
+shelfr state list            # View all processed entries
+shelfr state list --failed   # Show only failed entries
+shelfr state prune           # Remove stale entries (missing files)
+shelfr state retry <asin-or-id>  # Clear failed status for retry
+shelfr state clear <asin-or-id>  # Remove entry completely
 ```
 
 ### Utilities
 
 ```bash
-mamfast status            # Show processing statistics
-mamfast config            # Debug: print loaded config
-mamfast validate          # Validate configuration
-mamfast check-duplicates  # Find potential duplicate releases
+shelfr status            # Show processing statistics
+shelfr config            # Debug: print loaded config
+shelfr validate          # Validate configuration
+shelfr check-duplicates  # Find potential duplicate releases
 ```
 
 ### Global Options
@@ -368,25 +367,25 @@ mamfast check-duplicates  # Find potential duplicate releases
 > ⚠️ **Important**: Global options like `--dry-run` must come **before** the subcommand:
 >
 > ```bash
-> mamfast --dry-run abs import  # ✅ Correct
-> mamfast abs import --dry-run  # ❌ Won't work
+> shelfr --dry-run abs import  # ✅ Correct
+> shelfr abs import --dry-run  # ❌ Won't work
 > ```
 
 ---
 
 ## 📚 Audiobookshelf Integration
 
-MAMFast supports importing audiobooks directly to Audiobookshelf libraries with duplicate detection and quality-based replacement (trumping).
+shelfr supports importing audiobooks directly to Audiobookshelf libraries with duplicate detection and quality-based replacement (trumping).
 
 ### Basic Commands
 
 ```bash
-mamfast abs init              # Initialize ABS connection
-mamfast abs import            # Import staged books to ABS library
-mamfast abs check-asin B0ASIN123  # Check if ASIN exists
-mamfast abs trump-preview     # Preview trumping decisions
-mamfast abs cleanup           # Clean orphaned files
-mamfast abs restore           # List/restore archived books
+shelfr abs init              # Initialize ABS connection
+shelfr abs import            # Import staged books to ABS library
+shelfr abs check-asin B0ASIN123  # Check if ASIN exists
+shelfr abs trump-preview     # Preview trumping decisions
+shelfr abs cleanup           # Clean orphaned files
+shelfr abs restore           # List/restore archived books
 ```
 
 ### Trumping (Quality-Based Replacement)
@@ -429,11 +428,11 @@ audiobookshelf:
 
 ## 📁 Project Structure
 
-MAMFast uses a modular architecture with clean separation of concerns:
+shelfr uses a modular architecture with clean separation of concerns:
 
 ```text
-mamfast/
-├── src/mamfast/
+shelfr/
+├── src/shelfr/
 │   ├── cli.py                  # CLI parser + main entry point
 │   ├── config.py               # Configuration loading
 │   ├── models.py               # Pydantic data models
@@ -501,7 +500,7 @@ pip install -e ".[dev]"
 pytest
 
 # Run tests with coverage
-pytest --cov=src/mamfast --cov-branch --cov-report=term
+pytest --cov=src/shelfr --cov-branch --cov-report=term
 
 # Lint
 ruff check src/
@@ -518,7 +517,7 @@ pre-commit run --all-files
 
 ### Pre-commit Hooks
 
-MAMFast uses pre-commit for automated code quality:
+shelfr uses pre-commit for automated code quality:
 
 ```yaml
 # .pre-commit-config.yaml (excerpt)

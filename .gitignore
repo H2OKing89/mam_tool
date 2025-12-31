@@ -56,6 +56,7 @@ data/
 logs/
 config/config.yaml
 config/.env
+config/templates/
 
 # Backup files
 *.bak
@@ -67,3 +68,8 @@ samples/
 
 # Documentation - track all docs/ (including reference materials)
 # Note: API docs under docs/reference/* ARE tracked intentionally
+CHEATSHEET.md
+docs/reference/mam
+
+# BBCode signature samples (user-specific, generated)
+samples/bbcode_sig*.json

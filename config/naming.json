@@ -1,5 +1,5 @@
 {
-  "_comment": "Naming rules for MAMFast. See docs/NAMING_PLAN.md for details.",
+  "_comment": "Naming rules for shelfr. See docs/NAMING_PLAN.md for details.",
   "_version": "1.7.0",
 
   "title_subtitle_normalization": {
