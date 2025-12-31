@@ -8,7 +8,7 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in MAMFast, please report it responsibly:
+If you discover a security vulnerability in shelfr, please report it responsibly:
 
 1. **Do NOT** open a public GitHub issue for security vulnerabilities
 2. Email the maintainers directly or use GitHub's private vulnerability reporting feature
@@ -24,7 +24,7 @@ We will acknowledge receipt within 48 hours and provide a more detailed response
 
 ### Sensitive Data
 
-MAMFast handles sensitive information that should **never** be committed to version control:
+shelfr handles sensitive information that should **never** be committed to version control:
 
 | Data | Location | Risk |
 |------|----------|------|
@@ -37,7 +37,7 @@ MAMFast handles sensitive information that should **never** be committed to vers
 2. **Use environment variables** in production/containerized deployments
 3. **Restrict file permissions** on config files: `chmod 600 config/.env`
 4. **Review `config.yaml`** before committing - ensure no secrets are embedded
-5. **Use separate credentials** for MAMFast vs your main accounts when possible
+5. **Use separate credentials** for shelfr vs your main accounts when possible
 
 ### File Permissions
 
