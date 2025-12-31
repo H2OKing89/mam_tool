@@ -52,11 +52,15 @@ class TestMkbrrHelp:
         """Test mkbrr create --help shows options."""
         result = runner.invoke(app, ["mkbrr", "create", "--help"])
         assert result.exit_code == 0
-        assert "--preset" in result.output
-        assert "--tracker" in result.output
-        assert "--source" in result.output
-        assert "--output" in result.output
-        assert "--piece-length" in result.output
+        # Strip ANSI codes for reliable matching in CI
+        import re
+
+        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--preset" in clean_output
+        assert "--tracker" in clean_output
+        assert "--source" in clean_output
+        assert "--output" in clean_output
+        assert "--piece-length" in clean_output
 
     def test_mkbrr_inspect_help(self, runner: CliRunner) -> None:
         """Test mkbrr inspect --help shows options."""
@@ -76,9 +80,13 @@ class TestMkbrrHelp:
         """Test mkbrr modify --help shows options."""
         result = runner.invoke(app, ["mkbrr", "modify", "--help"])
         assert result.exit_code == 0
-        assert "--tracker" in result.output
-        assert "--source" in result.output
-        assert "--dry-run" in result.output
+        # Strip ANSI codes for reliable matching in CI
+        import re
+
+        clean_output = re.sub(r"\x1b\[[0-9;]*m", "", result.output)
+        assert "--tracker" in clean_output
+        assert "--source" in clean_output
+        assert "--dry-run" in clean_output
 
     def test_mkbrr_presets_help(self, runner: CliRunner) -> None:
         """Test mkbrr presets --help."""
@@ -357,7 +365,10 @@ class TestMkbrrVersion:
 
     def test_version_success(self, runner: CliRunner) -> None:
         """Test version command shows mkbrr version."""
-        with patch(f"{MKBRR_MODULE}.get_mkbrr_version", return_value="1.5.0"):
+        with (
+            patch(f"{MKBRR_MODULE}.check_docker_available", return_value=True),
+            patch(f"{MKBRR_MODULE}.get_mkbrr_version", return_value="1.5.0"),
+        ):
             result = runner.invoke(app, ["mkbrr", "version"])
             assert result.exit_code == 0
             assert "1.5.0" in result.output
