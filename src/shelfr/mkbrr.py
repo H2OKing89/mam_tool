@@ -460,6 +460,174 @@ def check_torrent(
         )
 
 
+def modify_torrent(
+    torrent_paths: Path | str | list[Path | str],
+    output_path: Path | str | None = None,
+    output_dir: Path | str | None = None,
+    tracker: str | None = None,
+    source: str | None = None,
+    comment: str | None = None,
+    private: bool | None = None,
+    preset: str | None = None,
+    entropy: bool = False,
+    dry_run: bool = False,
+) -> MkbrrResult:
+    """
+    Modify one or more existing torrent files.
+
+    Changes torrent metadata without rehashing content. All non-standard
+    metadata is stripped during modification.
+
+    Args:
+        torrent_paths: Path(s) to .torrent file(s) to modify.
+        output_path: Output filename without extension (for single file).
+            Default: prefixed filename based on tracker.
+        output_dir: Output directory for batch modifications.
+            Use this instead of output_path when modifying multiple files.
+        tracker: New tracker announce URL (-t).
+        source: New source tag (-s).
+        comment: New comment (-c).
+        private: Set private flag (True/False/None to keep existing).
+        preset: Apply preset settings from presets.yaml (-P).
+        entropy: Add random entropy to randomize info hash (-e).
+        dry_run: Preview changes without saving (--dry-run).
+
+    Returns:
+        MkbrrResult with success status and output info.
+
+    Note:
+        - All non-standard metadata is stripped during modification.
+        - When modifying multiple files, use output_dir not output_path.
+        - Using --output with multiple files will overwrite to single file!
+
+    Example:
+        >>> # Change tracker for re-upload
+        >>> result = modify_torrent("book.torrent", tracker="https://new.tracker/announce")
+        >>> # Strip metadata and add source tag
+        >>> result = modify_torrent("book.torrent", source="MAM")
+        >>> # Preview changes without writing
+        >>> result = modify_torrent("book.torrent", source="TEST", dry_run=True)
+    """
+    # Normalize to list
+    if isinstance(torrent_paths, str | Path):
+        paths_list = [Path(torrent_paths)]
+    else:
+        paths_list = [Path(p) for p in torrent_paths]
+
+    # Validate: don't use output_path with multiple files (would overwrite)
+    if len(paths_list) > 1 and output_path is not None:
+        return MkbrrResult(
+            success=False,
+            return_code=-1,
+            error="Cannot use output_path with multiple files. Use output_dir instead.",
+        )
+
+    # Convert paths to container paths
+    container_paths = [host_to_container_torrent_path(p) for p in paths_list]
+
+    # Build command
+    cmd = _docker_base_command() + ["mkbrr", "modify"]
+
+    # Add torrent paths
+    cmd.extend(container_paths)
+
+    # Add optional flags
+    if output_path is not None:
+        # mkbrr modify uses -o for filename without extension
+        cmd.extend(["-o", str(output_path)])
+
+    if output_dir is not None:
+        container_output_dir = host_to_container_torrent_path(output_dir)
+        cmd.extend(["--output-dir", container_output_dir])
+
+    if tracker is not None:
+        cmd.extend(["-t", tracker])
+
+    if source is not None:
+        cmd.extend(["-s", source])
+
+    if comment is not None:
+        cmd.extend(["-c", comment])
+
+    if private is not None:
+        # mkbrr uses --private (flag) or --private=false
+        if private:
+            cmd.append("--private")
+        else:
+            cmd.append("--private=false")
+
+    if preset is not None:
+        cmd.extend(["-P", preset])
+
+    if entropy:
+        cmd.append("-e")
+
+    if dry_run:
+        cmd.append("--dry-run")
+
+    # Log what we're doing
+    paths_str = ", ".join(str(p) for p in paths_list)
+    if dry_run:
+        logger.info(f"Dry-run modifying torrent(s): {paths_str}")
+    else:
+        logger.info(f"Modifying torrent(s): {paths_str}")
+    logger.debug(f"Command: {' '.join(cmd)}")
+
+    try:
+        # Capture output to show modification results
+        result = _run_docker_command(cmd, timeout=60, capture_output=True)
+
+        if result.exit_code == 0:
+            # Fix permissions on output directory if we wrote files
+            if not dry_run:
+                if output_dir is not None:
+                    fix_torrent_permissions(output_dir)
+                else:
+                    # Modified files go to same location with prefix
+                    for p in paths_list:
+                        fix_torrent_permissions(p.parent)
+
+            return MkbrrResult(
+                success=True,
+                return_code=0,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
+        else:
+            logger.error(f"mkbrr modify failed with code {result.exit_code}")
+            return MkbrrResult(
+                success=False,
+                return_code=result.exit_code,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                error=result.stderr or f"mkbrr exited with code {result.exit_code}",
+            )
+
+    except CmdError as e:
+        if e.timed_out:
+            logger.error("mkbrr modify timed out")
+            return MkbrrResult(
+                success=False,
+                return_code=e.exit_code,
+                error="mkbrr modify timed out after 60s",
+            )
+        else:
+            logger.error(f"mkbrr modify failed: {e}")
+            return MkbrrResult(
+                success=False,
+                return_code=e.exit_code,
+                error=str(e),
+            )
+
+    except Exception as e:
+        logger.exception(f"Exception running mkbrr modify: {e}")
+        return MkbrrResult(
+            success=False,
+            return_code=-1,
+            error=str(e),
+        )
+
+
 def check_docker_available() -> bool:
     """Check if Docker is available on the system."""
     settings = get_settings()
@@ -475,3 +643,49 @@ def check_docker_available() -> bool:
     except Exception as e:
         logger.warning(f"Docker version check failed: {e}")
         return False
+
+
+def get_mkbrr_version() -> str | None:
+    """
+    Get the mkbrr version from Docker container.
+
+    Returns:
+        Version string (e.g., "1.5.0") or None if unavailable.
+
+    Example:
+        >>> version = get_mkbrr_version()
+        >>> print(version)  # "1.5.0" or None
+    """
+    cmd = _docker_base_command() + ["mkbrr", "version"]
+
+    try:
+        result = _run_docker_command(cmd, timeout=30, capture_output=True)
+
+        if result.exit_code != 0:
+            logger.warning(f"mkbrr version check failed: exit code {result.exit_code}")
+            return None
+
+        # mkbrr version outputs something like "mkbrr version 1.5.0"
+        # Extract just the version number
+        stdout = result.stdout.strip()
+        if not stdout:
+            return None
+
+        # Handle formats like "mkbrr version 1.5.0" or just "1.5.0"
+        parts = stdout.split()
+        if len(parts) >= 3 and parts[0].lower() == "mkbrr" and parts[1].lower() == "version":
+            return parts[2]
+        elif len(parts) == 1:
+            # Just the version string
+            return parts[0]
+        else:
+            # Return the whole thing if we can't parse it
+            logger.debug(f"Unexpected version format: {stdout}")
+            return stdout
+
+    except CmdError as e:
+        logger.warning(f"mkbrr version command failed: {e}")
+        return None
+    except Exception as e:
+        logger.warning(f"Exception getting mkbrr version: {e}")
+        return None

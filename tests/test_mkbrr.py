@@ -15,8 +15,10 @@ from shelfr.mkbrr import (
     check_torrent,
     create_torrent,
     fix_torrent_permissions,
+    get_mkbrr_version,
     inspect_torrent,
     load_presets,
+    modify_torrent,
 )
 from shelfr.utils.cmd import CmdError
 from tests.conftest import make_cmd_result
@@ -84,6 +86,441 @@ class TestCheckDockerAvailable:
             patch("shelfr.mkbrr.get_settings", return_value=mock_settings),
         ):
             assert check_docker_available() is False
+
+
+class TestGetMkbrrVersion:
+    """Tests for get_mkbrr_version function."""
+
+    def test_version_standard_format(self):
+        """Test parsing standard 'mkbrr version X.Y.Z' format."""
+        mock_result = make_cmd_result(
+            exit_code=0,
+            stdout="mkbrr version 1.5.0\n",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+        ):
+            version = get_mkbrr_version()
+
+        assert version == "1.5.0"
+
+    def test_version_just_number(self):
+        """Test parsing bare version number output."""
+        mock_result = make_cmd_result(
+            exit_code=0,
+            stdout="2.0.1\n",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+        ):
+            version = get_mkbrr_version()
+
+        assert version == "2.0.1"
+
+    def test_version_empty_output(self):
+        """Test handling empty output."""
+        mock_result = make_cmd_result(
+            exit_code=0,
+            stdout="",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+        ):
+            version = get_mkbrr_version()
+
+        assert version is None
+
+    def test_version_command_fails(self):
+        """Test when mkbrr version command returns non-zero exit code."""
+        mock_result = make_cmd_result(
+            exit_code=1,
+            stderr="Error: unknown command",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+        ):
+            version = get_mkbrr_version()
+
+        assert version is None
+
+    def test_version_docker_error(self):
+        """Test when Docker command raises CmdError."""
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch(
+                "shelfr.mkbrr._run_docker_command",
+                side_effect=CmdError(
+                    argv=["docker", "run", "mkbrr", "version"],
+                    exit_code=125,
+                    stdout="",
+                    stderr="Docker daemon not running",
+                ),
+            ),
+        ):
+            version = get_mkbrr_version()
+
+        assert version is None
+
+    def test_version_unexpected_exception(self):
+        """Test handling unexpected exceptions gracefully."""
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch(
+                "shelfr.mkbrr._run_docker_command",
+                side_effect=RuntimeError("Unexpected error"),
+            ),
+        ):
+            version = get_mkbrr_version()
+
+        assert version is None
+
+    def test_version_unusual_format_returned_as_is(self):
+        """Test that unusual version formats are returned as-is."""
+        mock_result = make_cmd_result(
+            exit_code=0,
+            stdout="mkbrr 1.5.0-beta+build.123\n",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+        ):
+            version = get_mkbrr_version()
+
+        # Should return the whole string when format doesn't match expected patterns
+        assert version == "mkbrr 1.5.0-beta+build.123"
+
+
+class TestModifyTorrent:
+    """Tests for modify_torrent function."""
+
+    def test_modify_single_torrent_with_source(self, tmp_path: Path):
+        """Test modifying a single torrent with new source tag."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(
+            exit_code=0,
+            stdout="Modified: test.torrent -> modified_test.torrent\n",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, source="MAM")
+
+        assert result.success is True
+        assert result.return_code == 0
+        # Verify command includes source flag
+        call_args = mock_run.call_args[0][0]
+        assert "-s" in call_args
+        assert "MAM" in call_args
+
+    def test_modify_with_tracker(self, tmp_path: Path):
+        """Test modifying torrent with new tracker URL."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified successfully\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, tracker="https://new.tracker/announce")
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "-t" in call_args
+        assert "https://new.tracker/announce" in call_args
+
+    def test_modify_with_comment(self, tmp_path: Path):
+        """Test modifying torrent with new comment."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, comment="Uploaded via shelfr")
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "-c" in call_args
+        assert "Uploaded via shelfr" in call_args
+
+    def test_modify_with_preset(self, tmp_path: Path):
+        """Test modifying torrent with preset."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, preset="mam")
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "-P" in call_args
+        assert "mam" in call_args
+
+    def test_modify_private_true(self, tmp_path: Path):
+        """Test setting private flag to true."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, private=True)
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "--private" in call_args
+        assert "--private=false" not in call_args
+
+    def test_modify_private_false(self, tmp_path: Path):
+        """Test setting private flag to false."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, private=False)
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "--private=false" in call_args
+
+    def test_modify_with_entropy(self, tmp_path: Path):
+        """Test adding entropy to randomize info hash."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, entropy=True)
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "-e" in call_args
+
+    def test_modify_dry_run(self, tmp_path: Path):
+        """Test dry run mode previews changes without writing."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Would modify: test.torrent\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions") as mock_fix,
+        ):
+            result = modify_torrent(torrent_file, source="TEST", dry_run=True)
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "--dry-run" in call_args
+        # Should NOT fix permissions in dry run mode
+        mock_fix.assert_not_called()
+
+    def test_modify_with_output_dir(self, tmp_path: Path):
+        """Test modifying with output directory for batch operations."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+        output_dir = tmp_path / "output"
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent(torrent_file, output_dir=output_dir)
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        assert "--output-dir" in call_args
+
+    def test_modify_multiple_files_rejects_output_path(self, tmp_path: Path):
+        """Test that using output_path with multiple files returns error."""
+        torrent1 = tmp_path / "test1.torrent"
+        torrent2 = tmp_path / "test2.torrent"
+        torrent1.touch()
+        torrent2.touch()
+
+        result = modify_torrent([torrent1, torrent2], output_path="output")
+
+        assert result.success is False
+        assert "Cannot use output_path with multiple files" in result.error
+
+    def test_modify_multiple_files_with_output_dir(self, tmp_path: Path):
+        """Test modifying multiple files with output directory."""
+        torrent1 = tmp_path / "test1.torrent"
+        torrent2 = tmp_path / "test2.torrent"
+        torrent1.touch()
+        torrent2.touch()
+        output_dir = tmp_path / "output"
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified 2 files\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result) as mock_run,
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            result = modify_torrent([torrent1, torrent2], output_dir=output_dir, source="MAM")
+
+        assert result.success is True
+        call_args = mock_run.call_args[0][0]
+        # Should have both torrent paths in command
+        assert "/torrentfiles/test1.torrent" in call_args
+        assert "/torrentfiles/test2.torrent" in call_args
+
+    def test_modify_command_failure(self, tmp_path: Path):
+        """Test handling mkbrr command failure."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(
+            exit_code=1,
+            stderr="Error: invalid torrent file",
+        )
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+        ):
+            result = modify_torrent(torrent_file, source="MAM")
+
+        assert result.success is False
+        assert result.return_code == 1
+        assert "invalid torrent file" in result.error
+
+    def test_modify_docker_error(self, tmp_path: Path):
+        """Test handling Docker command errors."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch(
+                "shelfr.mkbrr._run_docker_command",
+                side_effect=CmdError(
+                    argv=["docker", "run", "mkbrr", "modify"],
+                    exit_code=125,
+                    stdout="",
+                    stderr="Docker daemon not running",
+                ),
+            ),
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+        ):
+            result = modify_torrent(torrent_file, source="MAM")
+
+        assert result.success is False
+
+    def test_modify_accepts_string_path(self, tmp_path: Path):
+        """Test that string paths are accepted."""
+        torrent_file = tmp_path / "test.torrent"
+        torrent_file.touch()
+
+        mock_result = make_cmd_result(exit_code=0, stdout="Modified\n")
+
+        with (
+            patch("shelfr.mkbrr._docker_base_command", return_value=["docker", "run", "mkbrr"]),
+            patch("shelfr.mkbrr._run_docker_command", return_value=mock_result),
+            patch(
+                "shelfr.mkbrr.host_to_container_torrent_path",
+                side_effect=lambda p: f"/torrentfiles/{Path(p).name}",
+            ),
+            patch("shelfr.mkbrr.fix_torrent_permissions"),
+        ):
+            # Pass string instead of Path
+            result = modify_torrent(str(torrent_file), source="MAM")
+
+        assert result.success is True
 
 
 class TestLoadPresets:
