@@ -543,6 +543,27 @@ def cmd_abs_import(args: argparse.Namespace) -> int:
                                 except ValueError:
                                     pass  # Can't make relative path; skip adding file to tree
 
+                        # Show OPF sidecar preview (dry-run only, when enabled)
+                        if args.dry_run and import_settings.generate_opf_sidecar:
+                            console.print(
+                                "    [green]+ metadata.opf[/green] [dim](would be generated)[/dim]"
+                            )
+                            # Add to tree data
+                            if r.target_path:
+                                try:
+                                    rel_path = r.target_path.relative_to(abs_library_root)
+                                    parts = rel_path.parts
+                                    if len(parts) >= 2:
+                                        author = parts[0]
+                                        series = parts[1] if len(parts) >= 3 else ""
+                                        folder_name = parts[-1]
+                                        if folder_name in tree_data.get(author, {}).get(series, {}):
+                                            tree_data[author][series][folder_name].append(
+                                                "metadata.opf"
+                                            )
+                                except ValueError:
+                                    pass
+
             elif r.status == "trump_replaced":
                 # Trumping: replaced existing with new (better quality)
                 icons = get_icons()
