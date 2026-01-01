@@ -57,6 +57,7 @@ Audnex API Response
 ```
 
 Both models solve the same problem (Audible's inconsistent metadata) but for different outputs:
+
 - **NormalizedBook**: Minimal fields for path building
 - **CanonicalMetadata**: Full fields for rich metadata sidecars
 
@@ -89,6 +90,7 @@ See [naming/NAMING_RULES.md](naming/NAMING_RULES.md) for the full rule set.
 ## Quick Links
 
 ### Naming System
+
 - [Overview](naming/NAMING.md) - Architecture diagram, key concepts
 - [Pipeline](naming/NAMING_PIPELINE.md) - 5-stage processing flow
 - [Rules](naming/NAMING_RULES.md) - `naming.json` configuration
@@ -97,6 +99,7 @@ See [naming/NAMING_RULES.md](naming/NAMING_RULES.md) for the full rule set.
 - [Implementation](naming/NAMING_IMPLEMENTATION.md) - Phases, testing, changelog
 
 ### Architecture
+
 - [Current State Audit](architecture/01-current-state-audit.md) - What exists today
 - [Recommendations](architecture/02-recommendations.md) - Phased refactoring plan
 - [Plugin Architecture](architecture/03-plugin-architecture.md) - Provider/exporter design

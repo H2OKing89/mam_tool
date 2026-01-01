@@ -26,7 +26,10 @@
 
 > MediaInfo is the cleanest extraction: no network, no state, pure functions.
 
-- [ ] Create `metadata/models.py` with shared `Chapter` dataclass (avoids collision with `providers/types.py`)
+- [ ] Create `metadata/models.py` with shared `Chapter` dataclass
+  - **Note:** Distinct from root-level `shelfr.models` (which holds `AudiobookRelease`, `NormalizedBook`, etc.)
+  - Import as `from shelfr.metadata.models import Chapter` to avoid ambiguity
+  - Verify after creation: `python -c "from shelfr.metadata.models import Chapter; from shelfr.models import AudiobookRelease"`
 - [ ] Create `metadata/mediainfo/__init__.py` + `extractor.py` with:
   - `AudioFormat` dataclass (MediaInfo-specific, stays here)
   - `detect_audio_format()`, `detect_audio_format_from_file()`
