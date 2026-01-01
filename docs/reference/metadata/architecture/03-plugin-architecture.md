@@ -8,6 +8,13 @@
 
 To support future metadata sources (Hardcover, Goodreads, OpenLibrary, private databases), we should design a **pluggable provider system** from the start.
 
+**Core principles:**
+
+- Providers emit partial canonical fields → Aggregator merges deterministically
+- Per-field provenance tracking (`sources[field] = provider`) for debugging
+- Config-driven enable/priority + aggregation strategy
+- Private DB can override any field (killer feature for power users)
+
 ---
 
 ## 1. Current Sources
@@ -15,8 +22,8 @@ To support future metadata sources (Hardcover, Goodreads, OpenLibrary, private d
 | Source | Type | Strengths | Weaknesses |
 |--------|------|-----------|------------|
 | **Audnex** | API | ASIN, chapters, accurate narrator/author | US-centric, no reviews |
-| **MediaInfo** | Local | Bitrate, codec, duration, embedded tags | No book metadata |
-| **Libation** | Local | Folder structure, basic metadata | Limited fields |
+| **MediaInfo** | Local (sync) | Bitrate, codec, duration, embedded tags | No book metadata |
+| **Libation** | Local | Folder structure, series heuristics | Limited fields |
 | **ABS metadata.json** | Local | User-corrected data | May be stale |
 
 ---
