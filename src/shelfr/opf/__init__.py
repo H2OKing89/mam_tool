@@ -47,6 +47,13 @@ Custom fields (ABS ignores, kept for future use):
 from __future__ import annotations
 
 from shelfr.opf.generator import OPFGenerator, generate_opf, write_opf
+from shelfr.opf.helpers import (
+    clean_role_from_name,
+    clear_naming_config_cache,
+    detect_role_from_name,
+    get_naming_config,
+    name_to_file_as,
+)
 from shelfr.opf.mappings import (
     LANGUAGE_TO_ISO,
     MARC_RELATOR_CODES,
@@ -79,6 +86,12 @@ __all__ = [
     "OPFGenerator",
     "generate_opf",
     "write_opf",
+    # Helpers
+    "get_naming_config",
+    "clear_naming_config_cache",
+    "clean_role_from_name",
+    "detect_role_from_name",
+    "name_to_file_as",
     # Mappings
     "to_iso_language",
     "is_valid_iso_language",

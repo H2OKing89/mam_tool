@@ -132,10 +132,10 @@ class CanonicalMetadata(BaseModel):
 
 
 class OPFCreator(BaseModel):
-    """Creator element for OPF (author/narrator)."""
+    """Creator element for OPF (author/narrator/translator/etc.)."""
 
     name: str
-    role: Literal["aut", "nrt"]  # MARC relator codes
+    role: str = "aut"  # MARC relator codes: aut, nrt, trl, ill, edt, ctb
     file_as: str | None = None  # "Last, First" sorting form
 
 
@@ -202,28 +202,24 @@ class OPFMetadata(BaseModel):
 
         This applies the Audnexus → OPF mapping rules:
         - Title is cleaned using filter_title (removes format indicators like "Light Novel")
+        - Authors are filtered (removes translators/illustrators from author list)
+        - Translators/illustrators extracted and credited with proper MARC roles
         - Authors get role="aut", narrators get role="nrt"
         - Language is converted to ISO 639-2/B (e.g., "english" → "eng")
         - Series uses Calibre meta format with filter_series applied
         - Custom fields preserved in custom_meta
         """
-        from pathlib import Path
-
-        from shelfr.config import _load_naming_config
+        from shelfr.opf.helpers import get_naming_config
         from shelfr.opf.mappings import to_iso_language
-        from shelfr.utils.naming import filter_series, filter_title
+        from shelfr.utils.naming import (
+            filter_authors,
+            filter_series,
+            filter_title,
+            is_author_role,
+        )
 
         # Load naming config for filter functions
-        # Load directly from naming.json to avoid settings cache issues
-        naming_config = None
-        try:
-            # Try common config locations
-            for config_dir in [Path.cwd(), Path(__file__).parent.parent.parent.parent]:
-                if (config_dir / "config" / "naming.json").exists():
-                    naming_config = _load_naming_config(config_dir)
-                    break
-        except Exception:
-            pass  # Fall back to no config (basic cleaning only)
+        naming_config = get_naming_config()
 
         # Clean title using filter_title (removes "Light Novel", etc.)
         # keep_volume=True to preserve "Vol. X" for ABS
@@ -236,10 +232,52 @@ class OPFMetadata(BaseModel):
                 meta.subtitle, naming_config=naming_config, keep_volume=True
             )
 
-        # Build creators list (authors first, then narrators)
+        # Build creators list with proper role filtering
         creators: list[OPFCreator] = []
+
+        # Convert Person list to dict format for filter_authors
+        authors_dicts = [{"name": a.name} for a in meta.authors]
+
+        # Filter authors - removes translators/illustrators/etc.
+        filtered_authors = filter_authors(authors_dicts)
+        for author_dict in filtered_authors:
+            name = author_dict.get("name", "")
+            creators.append(OPFCreator(name=name, role="aut"))
+
+        # Add translators/illustrators with proper MARC roles
         for author in meta.authors:
-            creators.append(OPFCreator(name=author.name, role="aut"))
+            if is_author_role(author.name):
+                name = author.name
+                # Determine role from name suffix
+                name_lower = name.lower()
+                if "translator" in name_lower:
+                    role = "trl"
+                    # Clean the name
+                    import re
+
+                    clean_name = re.sub(
+                        r"\s*-?\s*translator[s]?\s*$", "", name, flags=re.IGNORECASE
+                    ).strip()
+                elif "illustrator" in name_lower:
+                    role = "ill"
+                    import re
+
+                    clean_name = re.sub(
+                        r"\s*-?\s*illustrator[s]?\s*$", "", name, flags=re.IGNORECASE
+                    ).strip()
+                elif "editor" in name_lower:
+                    role = "edt"
+                    import re
+
+                    clean_name = re.sub(
+                        r"\s*-?\s*editor[s]?\s*$", "", name, flags=re.IGNORECASE
+                    ).strip()
+                else:
+                    role = "ctb"  # Contributor
+                    clean_name = name
+                creators.append(OPFCreator(name=clean_name, role=role))
+
+        # Add narrators
         for narrator in meta.narrators:
             creators.append(OPFCreator(name=narrator.name, role="nrt"))
 

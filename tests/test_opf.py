@@ -534,3 +534,127 @@ class TestEndToEnd:
 
         assert "<dc:title>Unknown Book</dc:title>" in content
         assert "<dc:language>eng</dc:language>" in content
+
+
+# =============================================================================
+# Helper Function Tests
+# =============================================================================
+
+
+class TestHelperFunctions:
+    """Tests for OPF helper functions."""
+
+    def test_clean_role_from_name(self) -> None:
+        """Remove role suffix from name."""
+        from shelfr.opf import clean_role_from_name
+
+        assert clean_role_from_name("John Smith - translator", "translator") == "John Smith"
+        assert clean_role_from_name("John Smith-translator", "translator") == "John Smith"
+        assert clean_role_from_name("John Smith translator", "translator") == "John Smith"
+        assert clean_role_from_name("John Smith - Translator", "translator") == "John Smith"
+        assert clean_role_from_name("Jane Doe", "translator") == "Jane Doe"
+
+    def test_detect_role_from_name(self) -> None:
+        """Detect MARC role from name suffix."""
+        from shelfr.opf import detect_role_from_name
+
+        assert detect_role_from_name("John Smith - translator") == ("John Smith", "trl")
+        assert detect_role_from_name("Jane Doe - illustrator") == ("Jane Doe", "ill")
+        assert detect_role_from_name("Bob Editor - editor") == ("Bob Editor", "edt")
+        assert detect_role_from_name("Normal Author") == ("Normal Author", "ctb")
+
+    def test_name_to_file_as(self) -> None:
+        """Convert name to filing format."""
+        from shelfr.opf import name_to_file_as
+
+        assert name_to_file_as("Brandon Sanderson") == "Sanderson, Brandon"
+        assert name_to_file_as("J.R.R. Tolkien") == "Tolkien, J.R.R."
+        assert name_to_file_as("Shirtaloon") is None  # Single name
+        assert name_to_file_as("Sanderson, Brandon") is None  # Already formatted
+
+
+class TestAuthorFiltering:
+    """Tests for author/translator filtering in OPF generation."""
+
+    def test_translators_filtered_from_authors(self) -> None:
+        """Translators are removed from author list and credited separately."""
+        data = {
+            "asin": "TEST123",
+            "title": "Test Book",
+            "authors": [
+                {"name": "Main Author"},
+                {"name": "John Smith - translator"},
+            ],
+            "narrators": [],
+            "language": "english",
+        }
+        canonical = CanonicalMetadata.from_audnex(data)
+        opf = OPFMetadata.from_canonical(canonical)
+
+        # Should have 2 creators: author + translator
+        assert len(opf.creators) == 2
+
+        # First should be the main author
+        author = opf.creators[0]
+        assert author.name == "Main Author"
+        assert author.role == "aut"
+
+        # Second should be translator with proper role
+        translator = opf.creators[1]
+        assert translator.name == "John Smith"
+        assert translator.role == "trl"
+
+    def test_illustrators_credited_properly(self) -> None:
+        """Illustrators get ill role code."""
+        data = {
+            "asin": "TEST123",
+            "title": "Test Book",
+            "authors": [
+                {"name": "Main Author"},
+                {"name": "Art Person - illustrator"},
+            ],
+            "narrators": [],
+            "language": "english",
+        }
+        canonical = CanonicalMetadata.from_audnex(data)
+        opf = OPFMetadata.from_canonical(canonical)
+
+        illustrator = [c for c in opf.creators if c.role == "ill"]
+        assert len(illustrator) == 1
+        assert illustrator[0].name == "Art Person"
+
+    def test_narrators_still_included(self) -> None:
+        """Narrators are included with nrt role."""
+        data = {
+            "asin": "TEST123",
+            "title": "Test Book",
+            "authors": [{"name": "Main Author"}],
+            "narrators": [{"name": "Voice Actor"}],
+            "language": "english",
+        }
+        canonical = CanonicalMetadata.from_audnex(data)
+        opf = OPFMetadata.from_canonical(canonical)
+
+        narrators = [c for c in opf.creators if c.role == "nrt"]
+        assert len(narrators) == 1
+        assert narrators[0].name == "Voice Actor"
+
+    def test_multiple_authors_preserved(self) -> None:
+        """Multiple authors without role suffixes are all preserved."""
+        data = {
+            "asin": "TEST123",
+            "title": "Collaborative Book",
+            "authors": [
+                {"name": "Author One"},
+                {"name": "Author Two"},
+                {"name": "Author Three"},
+            ],
+            "narrators": [],
+            "language": "english",
+        }
+        canonical = CanonicalMetadata.from_audnex(data)
+        opf = OPFMetadata.from_canonical(canonical)
+
+        authors = [c for c in opf.creators if c.role == "aut"]
+        assert len(authors) == 3
+        assert {a.name for a in authors} == {"Author One", "Author Two", "Author Three"}
