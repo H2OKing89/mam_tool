@@ -164,6 +164,11 @@ class MetadataProvider(Protocol):
     All providers implement async fetch(). Sync providers (MediaInfo)
     wrap their subprocess work with asyncio.to_thread() internally.
     This keeps the aggregator simple — it doesn't care who's sync vs async.
+    
+    Conventional defaults (Protocol can't enforce, but providers should follow):
+    - kind = "network"  (most providers are network-based)
+    - is_override = False  (only abs_sidecar/private_db can clear fields)
+    Consider creating a ProviderBase mixin if you want to avoid repeating these.
     """
     
     name: str              # "audnex", "hardcover", "mediainfo"
@@ -625,48 +630,46 @@ async def fetch(self, ctx, id_type):
 
 ## 9. Configuration
 
+> **Source of truth:** Provider classes define their own `kind`, `is_override`, and default `priority` as class attributes. Config **overrides** these defaults at runtime, allowing priority tuning without code changes. If a provider attribute isn't in config, the class default is used.
+
 ```yaml
 # config/config.yaml
 metadata:
   providers:
     audnex:
       enabled: true
-      priority: 0
-      kind: network
+      priority: 0       # Override class default if needed
+      # kind: network   # Omit to use class default
       regions: ["us", "uk", "au"]
     
     mediainfo:
       enabled: true
       priority: 5
-      kind: local
     
     libation:
       enabled: true
       priority: 20
-      kind: local
     
     abs_sidecar:
       enabled: true
       priority: 2  # High priority (user corrections)
-      kind: local
-      is_override: true  # Can intentionally clear fields
+      # is_override: true is the class default
     
     hardcover:
       enabled: false
       priority: 10
-      kind: network
       api_key: ${HARDCOVER_API_KEY}
     
     private_db:
       enabled: false
       priority: 1  # Highest priority when enabled
-      kind: local
-      is_override: true  # Can intentionally clear fields
+      # is_override: true is the class default
       connection_string: ${PRIVATE_DB_URL}
   
   aggregation:
     strategy: "confidence"  # priority | confidence
     # Identifiers are not FieldNames - they're lookup keys
+    # Use null/empty for local-only operations (e.g., "analyze audio")
     required_identifiers: ["asin"]  # At least one must be present to fetch
     required_fields: ["title"]       # Merged result must have these
     stop_on_complete: true
