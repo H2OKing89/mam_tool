@@ -1737,6 +1737,10 @@ def import_single(
         # Preview file renames
         rename_files_in_folder(staging_folder, parsed, dry_run=True)
 
+        # Preview OPF sidecar generation
+        if generate_opf_sidecar and audnex_data:
+            logger.info("[DRY RUN] Would generate metadata.opf in %s", target_path.name)
+
         # Preview cleanup (dry_run mode)
         cleanup_result: CleanupResult | None = None
         if (
