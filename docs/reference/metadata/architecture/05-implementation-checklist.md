@@ -75,38 +75,74 @@
 
 ---
 
-## Phase 5: Schemas + Cleaning + JSON Sidecar
+## Phase 5: Schemas + Provider System + JSON Sidecar
 
-- [ ] Create `metadata/schemas/canonical.py`:
+> Split into sub-phases for smaller, reviewable PRs.
+
+### Phase 5a: Schemas + Cleaning (no behavior change)
+
+> **Guardrail:** Phase 5a introduces schemas + cleaning facade only; no pipeline conversion yet.
+
+- [ ] Create `metadata/schemas/__init__.py` + `canonical.py`:
   - `Person`, `Series`, `Genre`, `CanonicalMetadata` (ALL in one file)
   - **Do NOT split into person.py/series.py/genre.py yet** (avoid circular import risk)
 - [ ] Create `metadata/cleaning.py` as **facade over existing functions**:
   - Re-export from `shelfr.utils.naming`: `filter_title`, `filter_subtitle`, etc.
   - **Don't duplicate** — wrap existing functions
-- [ ] Create `metadata/orchestration.py` (renamed from pipeline.py):
+
+### Phase 5b: Provider System (core architecture)
+
+- [ ] Create `metadata/providers/__init__.py` + `types.py`:
+  - `LookupContext`, `ProviderResult`, `FieldName`, `IdType`, `ProviderKind`
+- [ ] Create `metadata/providers/base.py`:
+  - `MetadataProvider` protocol
+- [ ] Create `metadata/providers/registry.py`:
+  - `ProviderRegistry` (instance-based, stable ordering)
+- [ ] Create `metadata/providers/audnex.py`:
+  - `AudnexProvider` (wraps client from Phase 3 in provider interface)
+  - Ensure `kind = "network"` and `is_override = False` (required for two-stage fetch)
+- [ ] Create `metadata/providers/mock.py`:
+  - `MockProvider` for testing (needed to test aggregator)
+- [ ] Create `metadata/aggregator.py`:
+  - Basic `MetadataAggregator` with deterministic precedence
+  - Two-stage fetch (local → network), `_safe_fetch()` error isolation
+  - `_safe_fetch()` returns `ProviderResult(success=False, error=...)` on failure (never raises)
+
+### Phase 5c: Orchestration + Exporters
+
+- [ ] Create `metadata/orchestration.py`:
+  - Keep as **thin facade initially** (wire-through only, no new logic)
   - `fetch_metadata()`, `fetch_all_metadata()`, `save_metadata_files()`
-- [ ] Create `metadata/json/generator.py` (JSON sidecar feature)
-- [ ] Define `MetadataProvider` protocol in `metadata/providers/base.py`
-- [ ] Define `MetadataExporter` protocol in `metadata/exporters/base.py`
+- [ ] Create `metadata/exporters/__init__.py` + `base.py`:
+  - `MetadataExporter` protocol
+- [ ] Create `metadata/exporters/json.py`:
+  - `JsonExporter` for ABS metadata.json sidecar
+  - Sidecar writing is an exporter responsibility (not separate generator)
 
 ---
 
 ## Phase 6: Move OPF + Deprecations
 
 - [ ] Move `src/shelfr/opf/` → `metadata/opf/`
-- [ ] Create deprecation shim at old location (env-var gated)
-- [ ] Create JSON exporter → `metadata/exporters/json.py`
+- [ ] Create deprecation shim in `src/shelfr/opf/__init__.py`:
+  - Old import path raises `DeprecationWarning` unless `SHELFR_ENABLE_LEGACY_OPF=1`
+  - In legacy mode, old import path re-exports new functions
+- [ ] Create `metadata/exporters/opf.py`:
+  - `OpfExporter` wrapping existing OPF generation
 
 ---
 
 ## Phase 7: Infrastructure (As Needed)
 
+> These are optional enhancements — the core system works without them.
+
 - [ ] Implement `MetadataCache` with `FileCache` default
 - [ ] Implement `MetadataEvents` hook system
 - [ ] Add schema versioning to `CanonicalMetadata`
-- [ ] Per-provider rate limiting
-- [ ] Circuit breaker integration
-- [ ] Implement `MetadataAggregator` with deterministic precedence
+- [ ] Per-provider rate limiting (`ProviderResilience` class)
+- [ ] Circuit breaker integration (already have infrastructure)
+
+> **Note:** If JSON sidecar needs multi-source deterministic merges (e.g., ABS override + Audnex) before Phase 5b is ready, pull Aggregator forward as needed.
 
 ---
 
@@ -129,9 +165,11 @@
 | Phase 2 | ⏳ Not Started | Formatting (presentation) |
 | Phase 3 | ⏳ Not Started | Audnex client |
 | Phase 4 | ⏳ Not Started | MAM (depends on above) |
-| Phase 5 | ⏳ Not Started | Schemas + Cleaning + JSON |
+| Phase 5a | ⏳ Not Started | Schemas + Cleaning |
+| Phase 5b | ⏳ Not Started | Provider system + Aggregator |
+| Phase 5c | ⏳ Not Started | Orchestration + JSON exporter |
 | Phase 6 | ⏳ Not Started | OPF move + deprecations |
-| Phase 7 | ⏳ Not Started | Infrastructure |
+| Phase 7 | ⏳ Not Started | Infrastructure (optional) |
 | Future | ⏳ Not Started | As needed |
 
 ---
@@ -148,16 +186,20 @@ Phase 1 (MediaInfo) ──→ Phase 2 (Formatting) ──→ Phase 3 (Audnex)
     │                                            Phase 4 (MAM)
     │                                                   │
     ▼                                                   ▼
-Phase 5 (Schemas/Cleaning/JSON) ←───────────────────────┘
+Phase 5a/5b/5c (Schemas/Providers/JSON) ←───────────────┘
     │
     ▼
 Phase 6 (OPF + Deprecations)
     │
     ▼
-Phase 7 (Infrastructure)
+Phase 7 (Infrastructure - optional)
 ```
 
-**Critical Path for JSON sidecar:** Phase 0 → Phase 1 → Phase 5 (schemas) → Phase 6 (JSON exporter)
+**Critical Path for JSON sidecar:** Phase 0 → Phase 5a (schemas) → Phase 5c (JSON exporter)
+
+> *Assumes existing metadata fetch logic still lives in `metadata/__init__.py` until Phase 3 extraction.*
+
+**Alternative path:** Phase 5a (schemas) doesn't actually depend on Phase 1 extraction — you can do Phase 0 → Phase 5a → Phase 5c if you want JSON sidecar before extracting MediaInfo.
 
 ---
 
@@ -172,7 +214,9 @@ Phase 7 (Infrastructure)
 | Phase 2 | BBCode output, HTML conversion |
 | Phase 3 | Mock HTTP responses, circuit breaker |
 | Phase 4 | Category mapping, MAM JSON golden tests |
-| Phase 5 | Schema validation, cleaning idempotence |
+| Phase 5a | Schema validation, cleaning idempotence |
+| Phase 5b | MockProvider, aggregator merge logic, registry, deterministic tie-breaking (same confidence → priority wins), override provider behavior (empty values), two-stage fetch short-circuit |
+| Phase 5c | Orchestration wire-through, JSON exporter golden tests |
 | Phase 6 | OPF output, JSON sidecar golden tests |
 | Phase 7 | Cache hit/miss, event emission |
 
