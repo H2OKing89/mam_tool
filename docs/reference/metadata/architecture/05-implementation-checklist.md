@@ -176,7 +176,7 @@
 
 ## Dependencies
 
-```bash
+```text
 Phase 0 (Scaffolding) ← MUST BE FIRST
     │
     ▼

@@ -190,7 +190,7 @@ class NormalizedBook:
     source_path: Path
     computed_folder_name: str
     computed_file_name: str
-    
+
     # Reference to canonical metadata
     canonical: CanonicalMetadata  # Link to truth
 ```
@@ -261,7 +261,7 @@ if os.getenv("SHELFR_WARN_LEGACY_IMPORTS") == "1":
 
 ### 4.1 Current Flow (Fragmented)
 
-```
+```text
 Audnex API
     │
     ├──→ metadata.py::fetch_audnex_book()
@@ -287,7 +287,7 @@ This sentence is the north star for all refactor PRs. Every component does exact
 
 ### 4.3 Proposed Flow (Unified)
 
-```
+```text
 Audnex API Response
     │
     ▼

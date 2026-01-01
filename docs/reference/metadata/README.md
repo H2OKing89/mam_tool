@@ -8,7 +8,7 @@
 
 Shelfr's metadata system transforms raw audiobook data from various sources into clean, standardized outputs for MAM uploads and Audiobookshelf imports.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                        Metadata System Overview                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -46,7 +46,8 @@ Shelfr's metadata system transforms raw audiobook data from various sources into
 | `CanonicalMetadata` | Full metadata for sidecars | `opf/schemas.py` | OPF/JSON exporters |
 
 **Relationship:**
-```
+
+```text
 Audnex API Response
        │
        ├──→ NormalizedBook ──→ MAM folder/file naming
@@ -61,7 +62,7 @@ Both models solve the same problem (Audible's inconsistent metadata) but for dif
 
 ### Data Flow
 
-```
+```text
 ┌──────────────┐     ┌────────────┐     ┌───────────────────┐     ┌───────────┐     ┌───────────┐
 │  Providers   │────▶│ Aggregator │────▶│ CanonicalMetadata │────▶│ Cleaning  │────▶│ Exporters │
 │ (fetch data) │     │  (merge)   │     │ (single truth)    │     │(normalize)│     │ (output)  │

@@ -25,7 +25,7 @@ Implement a unified `src/shelfr/metadata/` module for generating both `metadata.
 
 ### 2.1 Authoritative ABS Source
 
-**File:** `server/models/Book.js` → `getAbsMetadataJson()`  
+**File:** `server/models/Book.js` → `getAbsMetadataJson()`
 **Repo:** [advplyr/audiobookshelf](https://github.com/advplyr/audiobookshelf)
 
 ```javascript
@@ -449,7 +449,7 @@ Given Audnex response for ASIN `1774247291`:
 
 ## 9. Architecture Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    Audnex API Response                       │
 └─────────────────────────────────────────────────────────────┘

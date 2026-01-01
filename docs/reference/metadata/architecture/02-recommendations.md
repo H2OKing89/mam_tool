@@ -14,7 +14,7 @@
 # Before
 src/shelfr/metadata.py
 
-# After  
+# After
 src/shelfr/metadata/__init__.py  # Same content, now a package
 ```
 
@@ -96,10 +96,10 @@ metadata/mam/
 
 ### 6.1 Shared Types
 
-**Action:** Create `metadata/types.py` for small shared types
+**Action:** Create `metadata/models.py` for small shared types
 
 ```python
-# metadata/types.py
+# metadata/models.py
 @dataclass
 class Chapter:
     title: str
@@ -131,7 +131,7 @@ metadata/schemas/
 # metadata/cleaning.py (v1 - facade, not duplicate)
 from shelfr.utils.naming import (
     filter_title,
-    filter_subtitle, 
+    filter_subtitle,
     filter_series,
     filter_authors,
     transliterate_text,

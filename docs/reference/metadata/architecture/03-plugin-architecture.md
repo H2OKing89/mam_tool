@@ -69,13 +69,13 @@ FieldName = Literal[
 @dataclass(frozen=True)
 class LookupContext:
     """Everything a provider might need to look up metadata.
-    
+
     Why not just identifier + id_type? Our pipeline uses:
     - asin (primary lookup)
     - m4b_path (MediaInfo extraction)
     - source_dir (Libation path heuristics)
     - existing_abs_json (user corrections from ABS sidecar)
-    
+
     The `ids` dict is future-proof: adding goodreads_id/hardcover_id
     doesn't require changing this class signature.
     """
@@ -83,16 +83,16 @@ class LookupContext:
     path: Path | None = None              # m4b or folder
     source_dir: Path | None = None        # Libation path (series heuristics)
     existing_abs_json: dict[str, Any] | None = None
-    
+
     # Convenience properties for common IDs
     @property
     def asin(self) -> str | None:
         return self.ids.get("asin")
-    
+
     @property
     def isbn(self) -> str | None:
         return self.ids.get("isbn")
-    
+
     # Ergonomic constructors (frozen dataclass needs classmethods)
     @classmethod
     def from_id(
@@ -110,11 +110,11 @@ class LookupContext:
             source_dir=source_dir,
             existing_abs_json=existing_abs_json,
         )
-    
+
     @classmethod
     def from_asin(cls, *, asin: str, **kwargs) -> "LookupContext":
         return cls.from_id(id_type="asin", identifier=asin, **kwargs)
-    
+
     @classmethod
     def from_isbn(cls, *, isbn: str, **kwargs) -> "LookupContext":
         return cls.from_id(id_type="isbn", identifier=isbn, **kwargs)
@@ -123,7 +123,7 @@ class LookupContext:
 @dataclass
 class ProviderResult:
     """Result from a metadata provider lookup.
-    
+
     Note: `fields` uses typed FieldName keys, not free-form strings.
     This prevents schema drift across providers.
     """
@@ -141,7 +141,7 @@ class ProviderResult:
 ## 4. Provider Protocol
 
 > Use `Protocol` (duck typing) for flexibility with mocks and plugins. Don't mix with `ABC`.
-> 
+>
 > **Simplification:** One protocol, all providers implement `async fetch()`. Sync providers wrap their own sync work with `asyncio.to_thread()`. This keeps the aggregator dead simple.
 
 ```python
@@ -155,39 +155,39 @@ ProviderKind = Literal["local", "network"]
 @runtime_checkable
 class MetadataProvider(Protocol):
     """Protocol for pluggable metadata providers.
-    
+
     Use Protocol (not ABC) for:
     - Easy mock providers in tests
     - Duck typing (no inheritance required)
     - Runtime checking with @runtime_checkable if needed
-    
+
     All providers implement async fetch(). Sync providers (MediaInfo)
     wrap their subprocess work with asyncio.to_thread() internally.
     This keeps the aggregator simple — it doesn't care who's sync vs async.
-    
+
     Conventional defaults (Protocol can't enforce, but providers should follow):
     - kind = "network"  (most providers are network-based)
     - is_override = False  (only abs_sidecar/private_db can clear fields)
     Consider creating a ProviderBase mixin if you want to avoid repeating these.
     """
-    
+
     name: str              # "audnex", "hardcover", "mediainfo"
     priority: int          # Lower = higher priority (0 = primary)
     kind: ProviderKind     # "local" (cheap) or "network" (expensive)
     is_override: bool      # True for abs_sidecar/private_db (can clear fields)
-    
+
     def can_lookup(self, ctx: LookupContext, id_type: IdType) -> bool:
         """Check if provider can handle this lookup context.
-        
+
         Args:
             ctx: Full lookup context (ASIN, path, existing metadata, etc.)
             id_type: Which identifier to use for lookup
         """
         ...
-    
+
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         """Fetch metadata from this provider.
-        
+
         For sync providers (MediaInfo), implement as:
             async def fetch(self, ctx, id_type):
                 return await asyncio.to_thread(self._fetch_sync, ctx, id_type)
@@ -212,26 +212,26 @@ from .types import LookupContext, IdType
 @dataclass
 class ProviderRegistry:
     """Registry for metadata providers.
-    
+
     Instance-based for testability (new registry per test).
     """
     _providers: dict[str, MetadataProvider] = dataclass_field(default_factory=dict)
-    
+
     def register(self, provider: MetadataProvider) -> None:
         """Register a provider."""
         self._providers[provider.name] = provider
-    
+
     def get(self, name: str) -> MetadataProvider | None:
         """Get provider by name."""
         return self._providers.get(name)
-    
+
     def all(self) -> list[MetadataProvider]:
         """All registered providers in priority order (lowest first).
-        
+
         Stable sort: (priority, name) prevents jitter when priorities tie.
         """
         return sorted(self._providers.values(), key=lambda p: (p.priority, p.name))
-    
+
     def get_for_context(
         self, ctx: LookupContext, id_type: IdType
     ) -> list[MetadataProvider]:
@@ -263,7 +263,7 @@ Before looking at code, these rules prevent subtle bugs:
 
 To actually save work when `stop_on_complete=True`:
 
-```
+```text
 Stage 1: Run "cheap locals" first (ABS sidecar, MediaInfo, Libation)
          → Check if required_fields are filled
 Stage 2: Run network providers only if still missing required fields
@@ -307,18 +307,18 @@ class AggregatedResult:
 
 class MetadataAggregator:
     """Aggregate metadata from multiple providers with conflict resolution.
-    
+
     Merge strategy tie-breaker order (deterministic, no randomness):
     1. Higher confidence score
     2. Lower provider priority (more trusted)
     3. Value quality heuristic (non-empty > empty, longer summary > shorter)
-    
+
     Note: Some fields use custom merge semantics instead of scalar conflict resolution:
     - genres: union + normalize (combine from all providers)
     - authors/narrators: union with ordering preserved from highest-priority provider
     - chapters: prefer single provider (Audnex > MediaInfo), not union
     """
-    
+
     def __init__(
         self,
         registry: ProviderRegistry | None = None,
@@ -337,7 +337,7 @@ class MetadataAggregator:
         self.registry = registry or default_registry
         self.merge_strategy = merge_strategy
         self.required_identifiers = required_identifiers  # None = no requirement
-    
+
     async def fetch_all(
         self,
         ctx: LookupContext,
@@ -348,7 +348,7 @@ class MetadataAggregator:
         required_fields: list[FieldName] | None = None,
     ) -> AggregatedResult:
         """Fetch from multiple providers and merge results.
-        
+
         Two-stage fetch when stop_on_complete=True:
         1. Run local providers first (cheap, parallelized)
         2. Run network providers only if required_fields still missing
@@ -356,22 +356,22 @@ class MetadataAggregator:
         # Validate identifiers early (if required_identifiers is set)
         if self.required_identifiers and not (self.required_identifiers & set(ctx.ids.keys())):
             raise ValueError(f"Missing required identifiers: {sorted(self.required_identifiers)}")
-        
+
         required = set(required_fields or ["title"])
-        
+
         # Get applicable providers
         if providers:
             provider_list = [self.registry.get(n) for n in providers if self.registry.get(n)]
         else:
             provider_list = self.registry.get_for_context(ctx, id_type)
-        
+
         # Build provider lookup for is_override check
         provider_map = {p.name: p for p in provider_list}
-        
+
         # Split by kind attribute (not hardcoded names)
         local_providers = [p for p in provider_list if p.kind == "local"]
         network_providers = [p for p in provider_list if p.kind == "network"]
-        
+
         # Stage 1: Run local providers (cheap, parallelized, error-safe)
         results: list[ProviderResult] = []
         if local_providers:
@@ -379,20 +379,20 @@ class MetadataAggregator:
                 *(self._safe_fetch(p, ctx, id_type) for p in local_providers)
             )
             results.extend(stage1)
-        
+
         # Check if we can skip network calls
         if stop_on_complete:
             filled = self._get_filled_fields(results, provider_map)
             if required.issubset(filled):
                 return self._merge(results, provider_map)
-        
+
         # Stage 2: Run network providers (also error-safe)
         for provider in network_providers:
             result = await self._safe_fetch(provider, ctx, id_type)
             results.append(result)
-        
+
         return self._merge(results, provider_map)
-    
+
     async def _safe_fetch(
         self,
         provider: MetadataProvider,
@@ -404,28 +404,28 @@ class MetadataAggregator:
             return await provider.fetch(ctx, id_type)
         except Exception as e:
             return ProviderResult(provider=provider.name, success=False, error=str(e))
-    
+
     def _merge(
         self,
         results: list[ProviderResult],
         provider_map: dict[str, MetadataProvider],
     ) -> AggregatedResult:
         """Merge multiple provider results into canonical metadata.
-        
+
         Core rules:
         - Skip success=False results
         - Skip empty values (unless from override provider via is_override flag)
         """
         # Implementation: iterate fields, apply strategy, track conflicts
         ...
-    
+
     def _get_filled_fields(
         self,
         results: list[ProviderResult],
         provider_map: dict[str, MetadataProvider],
     ) -> set[FieldName]:
         """Get all fields that have values set.
-        
+
         Override providers count as "filled" even for empty values
         (user intentionally cleared the field).
         """
@@ -440,11 +440,11 @@ class MetadataAggregator:
                 elif not self._is_empty(value):
                     filled.add(field)
         return filled
-    
+
     def _is_empty(self, value: Any) -> bool:
         """Check if a value is considered empty."""
         return value is None or value == "" or value == []
-    
+
     def _should_skip_empty(
         self,
         provider: MetadataProvider,
@@ -452,21 +452,21 @@ class MetadataAggregator:
         value: Any,
     ) -> bool:
         """Check if an empty value should be skipped.
-        
+
         Override providers (is_override=True) can set empty values
         intentionally — user wants to clear a field.
         """
         if provider.is_override:
             return False  # Override providers can set empty
         return self._is_empty(value)
-    
+
     def _resolve_conflict(
         self,
         field: FieldName,
         candidates: dict[str, tuple[Any, float, int]],  # provider -> (value, confidence, priority)
     ) -> tuple[Any, str]:
         """Resolve a field conflict using deterministic tie-breakers.
-        
+
         Returns:
             (resolved_value, resolution_reason) where reason is one of:
             - "priority": priority was the deciding factor
@@ -477,23 +477,23 @@ class MetadataAggregator:
             # Lowest priority number wins
             provider, (value, _, _) = min(candidates.items(), key=lambda x: x[1][2])
             return value, "priority"
-        
+
         # Confidence strategy with full tie-breaker chain
         # Build scored list: (provider, value, confidence, priority, quality)
         scored = []
         for provider, (value, confidence, priority) in candidates.items():
             quality = self._value_quality(field, value)
             scored.append((provider, value, confidence, priority, quality))
-        
+
         # Sort by: max(confidence), min(priority), max(quality)
         scored.sort(key=lambda x: (-x[2], x[3], -x[4]))
         winner = scored[0]
-        
+
         if len(scored) == 1:
             return winner[1], "confidence"
-        
+
         second = scored[1]
-        
+
         # Determine what actually broke the tie
         if winner[2] != second[2]:
             reason = "confidence"
@@ -501,9 +501,9 @@ class MetadataAggregator:
             reason = "priority"
         else:
             reason = "quality"
-        
+
         return winner[1], reason
-    
+
     def _value_quality(self, field: FieldName, value: Any) -> int:
         """Heuristic quality score for tie-breaking."""
         if value is None or value == "" or value == []:
@@ -525,21 +525,21 @@ Your current `metadata.py` becomes **four providers** without changing behavior:
 # metadata/providers/audnex.py
 class AudnexProvider:
     """Audnex API provider (primary source for audiobook metadata)."""
-    
+
     name = "audnex"
     priority = 0  # Primary
     kind = "network"
     is_override = False
-    
+
     EMITS: set[FieldName] = {
         "title", "subtitle", "authors", "narrators", "publisher",
         "language", "release_date", "genres", "summary", "cover_url",
         "series_name", "series_position", "chapters",
     }
-    
+
     def can_lookup(self, ctx: LookupContext, id_type: IdType) -> bool:
         return id_type == "asin" and ctx.asin is not None
-    
+
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         # Wraps: fetch_audnex_book, fetch_audnex_chapters, fetch_audnex_author
         ...
@@ -553,24 +553,24 @@ import asyncio
 
 class MediaInfoProvider:
     """MediaInfo provider (local, sync subprocess wrapped in async)."""
-    
+
     name = "mediainfo"
     priority = 5
     kind = "local"
     is_override = False
-    
+
     EMITS: set[FieldName] = {
         "duration_seconds", "codec", "bitrate", "channels", "container",
         "chapters",  # Fallback if Audnex chapters unavailable
     }
-    
+
     def can_lookup(self, ctx: LookupContext, id_type: IdType) -> bool:
         return ctx.path is not None and ctx.path.exists()
-    
+
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         # Wrap sync subprocess in threadpool
         return await asyncio.to_thread(self._fetch_sync, ctx, id_type)
-    
+
     def _fetch_sync(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         # Wraps: run_mediainfo, detect_audio_format, _parse_chapters_from_mediainfo
         ...
@@ -584,20 +584,20 @@ import asyncio
 
 class LibationProvider:
     """Libation path heuristics provider (series fallback)."""
-    
+
     name = "libation"
     priority = 20  # Lower priority than Audnex
     kind = "local"
     is_override = False
-    
+
     EMITS: set[FieldName] = {"series_name", "series_position"}
-    
+
     def can_lookup(self, ctx: LookupContext, id_type: IdType) -> bool:
         return ctx.source_dir is not None
-    
+
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         return await asyncio.to_thread(self._fetch_sync, ctx, id_type)
-    
+
     def _fetch_sync(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         # Wraps: resolve_series() + path heuristics
         # Lower confidence than Audnex, but valuable fallback
@@ -615,19 +615,19 @@ class LibationProvider:
 # metadata/providers/abs_sidecar.py
 class AbsSidecarProvider:
     """ABS metadata.json provider (user corrections).
-    
+
     This is an OVERRIDE provider: it can intentionally set empty values
     (user wants to clear a field that Audnex got wrong).
     """
-    
+
     name = "abs_sidecar"
     priority = 2  # High priority when enabled (user corrections are trusted)
     kind = "local"
     is_override = True  # Can intentionally clear fields
-    
+
     def can_lookup(self, ctx: LookupContext, id_type: IdType) -> bool:
         return ctx.existing_abs_json is not None
-    
+
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         # Sync operation, but trivial (just dict access)
         data = ctx.existing_abs_json
@@ -647,14 +647,14 @@ class HardcoverProvider:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self._client: httpx.AsyncClient | None = None
-    
+
     async def __aenter__(self):
         self._client = httpx.AsyncClient(
             base_url="https://api.hardcover.app",
             headers={"Authorization": f"Bearer {self.api_key}"},
         )
         return self
-    
+
     async def __aexit__(self, *args):
         if self._client:
             await self._client.aclose()
@@ -682,31 +682,31 @@ metadata:
       priority: 0       # Override class default if needed
       # kind: network   # Omit to use class default
       regions: ["us", "uk", "au"]
-    
+
     mediainfo:
       enabled: true
       priority: 5
-    
+
     libation:
       enabled: true
       priority: 20
-    
+
     abs_sidecar:
       enabled: true
       priority: 2  # High priority (user corrections)
       # is_override: true is the class default
-    
+
     hardcover:
       enabled: false
       priority: 10
       api_key: ${HARDCOVER_API_KEY}
-    
+
     private_db:
       enabled: false
       priority: 1  # Highest priority when enabled
       # is_override: true is the class default
       connection_string: ${PRIVATE_DB_URL}
-  
+
   aggregation:
     strategy: "confidence"  # priority | confidence
     # Identifiers are not FieldNames - they're lookup keys
@@ -820,4 +820,4 @@ print(result.missing)      # Fields no provider had
 | **Phase 5** | Extract `AudnexProvider` from `metadata/__init__.py` |
 | **Phase 5** | Create basic `MetadataAggregator` |
 | **Phase 7** | Add `MediaInfoProvider`, `LibationProvider`, `AbsSidecarProvider` |
-| **Future** | Add `HardcoverProvider`, `GoodreadsProvider`, `PrivateDbProvider`
+| **Future** | Add `HardcoverProvider`, `GoodreadsProvider`, `PrivateDbProvider` |
