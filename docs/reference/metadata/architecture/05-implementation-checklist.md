@@ -48,14 +48,14 @@
 
 ## Phase 2: Extract Formatting (Presentation Layer)
 
-- [ ] Create `metadata/formatting/bbcode.py`:
+- [x] Create `metadata/formatting/bbcode.py`:
   - **Public:** `render_bbcode_description()`
-  - **Private:** `_convert_newlines_for_mam()`, `_format_release_date()`, `_format_duration()`, `_format_chapter_time()`
+  - **Private:** `_convert_newlines_for_mam()`, `_format_release_date()`, `_parse_chapters_from_audnex()`
   - Import `Chapter` from `metadata/models.py` (not mediainfo)
-- [ ] Create `metadata/formatting/html.py`:
+- [x] Create `metadata/formatting/html.py`:
   - **Public:** `html_to_bbcode()` (no underscore — used externally)
   - **Private:** `_clean_html()`
-- [ ] Update re-exports
+- [x] Update re-exports
 
 **Test Migration:**
 
@@ -190,7 +190,7 @@
 | --- | --- | --- |
 | Phase 0 | ✅ Complete | Package scaffolding (PR #66) |
 | Phase 1 | ✅ Complete | MediaInfo extraction (PR #66) |
-| Phase 2 | ⏳ Not Started | Formatting (presentation) |
+| Phase 2 | ✅ Complete | Formatting extraction |
 | Phase 3 | ⏳ Not Started | Audnex client |
 | Phase 4 | ⏳ Not Started | MAM (depends on above) |
 | Phase 5a | ⏳ Not Started | Schemas + Cleaning |
