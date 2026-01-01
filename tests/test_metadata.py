@@ -424,7 +424,7 @@ class TestRunMediainfo:
         mock_settings = MagicMock()
         mock_settings.mediainfo.binary = "mediainfo"
 
-        with patch("shelfr.metadata.get_settings", return_value=mock_settings):
+        with patch("shelfr.metadata.mediainfo.extractor.get_settings", return_value=mock_settings):
             result = run_mediainfo(Path("/nonexistent/file.m4b"))
 
         assert result is None
@@ -443,8 +443,11 @@ class TestRunMediainfo:
         temp_path.write_bytes(b"fake audio data")
 
         with (
-            patch("subprocess.run", return_value=mock_result),
-            patch("shelfr.metadata.get_settings", return_value=mock_settings),
+            patch(
+                "shelfr.metadata.mediainfo.extractor._run_mediainfo_subprocess",
+                return_value=mock_result,
+            ),
+            patch("shelfr.metadata.mediainfo.extractor.get_settings", return_value=mock_settings),
         ):
             result = run_mediainfo(temp_path)
 
@@ -1395,8 +1398,11 @@ class TestRunMediainfoEdgeCases:
         temp_file.write_bytes(b"fake")
 
         with (
-            patch("subprocess.run", side_effect=FileNotFoundError()),
-            patch("shelfr.metadata.get_settings", return_value=mock_settings),
+            patch(
+                "shelfr.metadata.mediainfo.extractor._run_mediainfo_subprocess",
+                side_effect=FileNotFoundError(),
+            ),
+            patch("shelfr.metadata.mediainfo.extractor.get_settings", return_value=mock_settings),
         ):
             result = run_mediainfo(temp_file)
 
@@ -1414,10 +1420,10 @@ class TestRunMediainfoEdgeCases:
 
         with (
             patch(
-                "subprocess.run",
+                "shelfr.metadata.mediainfo.extractor._run_mediainfo_subprocess",
                 side_effect=subprocess.CalledProcessError(1, "mediainfo", stderr="Error"),
             ),
-            patch("shelfr.metadata.get_settings", return_value=mock_settings),
+            patch("shelfr.metadata.mediainfo.extractor.get_settings", return_value=mock_settings),
         ):
             result = run_mediainfo(temp_file)
 
@@ -1436,8 +1442,11 @@ class TestRunMediainfoEdgeCases:
         temp_file.write_bytes(b"fake")
 
         with (
-            patch("subprocess.run", return_value=mock_result),
-            patch("shelfr.metadata.get_settings", return_value=mock_settings),
+            patch(
+                "shelfr.metadata.mediainfo.extractor._run_mediainfo_subprocess",
+                return_value=mock_result,
+            ),
+            patch("shelfr.metadata.mediainfo.extractor.get_settings", return_value=mock_settings),
         ):
             result = run_mediainfo(temp_file)
 
