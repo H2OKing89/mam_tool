@@ -10,7 +10,8 @@ from __future__ import annotations
 import functools
 import logging
 import re
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from typing import Any
 
 from jinja2 import BaseLoader, ChoiceLoader, Environment, FileSystemLoader, PackageLoader
 
@@ -30,9 +31,6 @@ from shelfr.utils.naming import (
     filter_title,
     transliterate_text,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -83,8 +81,6 @@ def _format_release_date(date_str: str) -> str:
     try:
         # Handle both YYYY-MM-DD and YYYY-MM-DDTHH:MM:SS formats
         date_part = date_str[:10] if len(date_str) >= 10 else date_str
-        from datetime import datetime
-
         dt = datetime.strptime(date_part, "%Y-%m-%d")
         # Format: January 1, 2016 (no leading zero on day)
         # Use f-string with dt.day to avoid %-d which breaks on Windows
@@ -147,13 +143,15 @@ def render_bbcode_description(
     template = env.get_template("mam_description.j2")
 
     # Get settings for transliteration and naming config
+    settings = None
+    filters = None
+    naming_config = None
     try:
         settings = get_settings()
         filters = settings.filters
         naming_config = settings.naming
-    except Exception:
-        filters = None
-        naming_config = None
+    except (AttributeError, KeyError, FileNotFoundError) as e:
+        logger.debug(f"Settings unavailable, using defaults: {e}")
 
     # Extract and clean title from Audnex
     # Apply same filter_title() used for JSON title field for consistency
@@ -239,14 +237,14 @@ def render_bbcode_description(
         chapters = _parse_chapters_from_mediainfo(mediainfo_data)
         logger.debug(f"Using {len(chapters)} chapters from mediainfo (Audnex not available)")
 
-    # Get signature setting from config
+    # Get signature setting from config (reuse settings from above)
     show_signature = True  # Default
-    try:
-        settings = get_settings()
-        if settings.mam and settings.mam.description:
-            show_signature = settings.mam.description.show_signature
-    except Exception:
-        pass  # Use default if config not available
+    if settings is not None:
+        try:
+            if settings.mam and settings.mam.description:
+                show_signature = settings.mam.description.show_signature
+        except (AttributeError, KeyError):
+            pass  # Use default if config structure differs
 
     # Render template
     description = template.render(

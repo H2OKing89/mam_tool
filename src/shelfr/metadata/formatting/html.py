@@ -15,11 +15,12 @@ def html_to_bbcode(text: str) -> str:
     Supported MAM BBCode tags:
     - [b], [i], [u], [s] - Basic formatting
     - [size=N], [font=], [color=] - Font styling
-    - [url], [url=], [img] - Links and images
+    - [url], [url=] - Links (converted from <a href>)
     - [center], [sup], [sub] - Layout
     - [br] - Line breaks
 
     Converts:
+    - <a href="URL">text</a> → [url=URL]text[/url]
     - <b>, <strong> → [b], [/b]
     - <i>, <em> → [i], [/i]
     - <u> → [u], [/u]
@@ -32,6 +33,17 @@ def html_to_bbcode(text: str) -> str:
 
     Also decodes HTML entities.
     """
+    # Convert anchor tags to BBCode [url=...] format
+    # Match <a href="URL"> or <a href='URL'> with optional other attributes
+    text = re.sub(
+        r'<a\s+[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+        r"[url=\1]\2[/url]",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    # Handle anchor tags without href (just keep inner text)
+    text = re.sub(r"<a\s+[^>]*>(.*?)</a>", r"\1", text, flags=re.IGNORECASE | re.DOTALL)
+
     # Convert bold tags to BBCode
     text = re.sub(r"<b\b[^>]*>", "[b]", text, flags=re.IGNORECASE)
     text = re.sub(r"</b>", "[/b]", text, flags=re.IGNORECASE)
@@ -87,6 +99,13 @@ def _clean_html(text: str) -> str:
     Converts HTML paragraphs to newlines, strips remaining tags,
     and decodes HTML entities.
     """
+    import warnings
+
+    warnings.warn(
+        "_clean_html is deprecated, use html_to_bbcode() instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     # Convert paragraph breaks to double newlines (before stripping tags)
     # Handle both </p> and <p> as paragraph boundaries
     text = re.sub(r"</p>\s*", "\n\n", text, flags=re.IGNORECASE)
