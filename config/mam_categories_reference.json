@@ -1,5 +1,5 @@
 {
-  "_comment": "Official MAM category schema for reference/validation. Do not edit - this mirrors MAM's API.",
+  "_comment": "Official MAM category schema for reference/validation. Do not modify category data - this mirrors MAM's API. Formatting changes are acceptable.",
   "_source": "MyAnonaMouse API",
   "_updated": "2025-12-20",
   "categories": {
