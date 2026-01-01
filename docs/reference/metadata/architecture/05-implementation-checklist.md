@@ -23,7 +23,7 @@
 
 > MediaInfo is the cleanest extraction: no network, no state, pure functions.
 
-- [ ] Create `metadata/types.py` with shared `Chapter` dataclass
+- [ ] Create `metadata/models.py` with shared `Chapter` dataclass (avoids collision with `providers/types.py`)
 - [ ] Create `metadata/mediainfo/extractor.py` with:
   - `AudioFormat` dataclass (MediaInfo-specific, stays here)
   - `detect_audio_format()`, `detect_audio_format_from_file()`

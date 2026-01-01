@@ -186,7 +186,7 @@ from shelfr.metadata.opf import *
 ```bash
 metadata/
 ├── __init__.py         # Public API (facade re-exports)
-├── types.py            # Chapter (shared small types)
+├── models.py           # Chapter (shared small types); avoids collision with providers/types.py
 ├── cleaning.py         # Facade over utils/naming
 ├── orchestration.py    # fetch_all_metadata, etc. (was pipeline.py)
 ├── schemas/
@@ -240,6 +240,6 @@ metadata/
 
 1. ⏳ Phase 0: `metadata.py` → `metadata/__init__.py`
 2. ⏳ Phase 1: Extract `metadata/mediainfo/extractor.py`
-3. ⏳ Phase 5: Create `metadata/types.py` (Chapter)
+3. ⏳ Phase 5: Create `metadata/models.py` (Chapter)
 4. ⏳ Phase 5: Create `metadata/json/` (JSON sidecar feature)
 5. ⏳ Continue incremental extraction
