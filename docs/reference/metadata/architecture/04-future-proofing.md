@@ -10,28 +10,81 @@ Providers fetch metadata **in**, but we also need pluggable **exporters** for ou
 
 ```python
 # metadata/exporters/base.py
+from typing import Protocol
+from pathlib import Path
+
 class MetadataExporter(Protocol):
-    """Protocol for pluggable output formats."""
+    """Protocol for pluggable output formats.
+    
+    Mirrors provider architecture with registry pattern.
+    """
     
     name: str  # "opf", "json", "nfo", "cue"
     file_extension: str  # ".opf", ".json", ".nfo"
     
-    def export(self, metadata: CanonicalMetadata, **options) -> str:
-        """Generate output content from canonical metadata."""
+    def render(self, metadata: CanonicalMetadata, **options) -> str | bytes:
+        """Generate output content from canonical metadata.
+        
+        Returns str for text formats (OPF, JSON, NFO, MD),
+        bytes for binary formats (future: zip, images).
+        """
         ...
     
-    def write(self, metadata: CanonicalMetadata, path: Path, **options) -> Path:
-        """Write to file, return final path."""
+    def output_path(self, base_dir: Path, **options) -> Path:
+        """Compute default output path for this exporter.
+        
+        Different exporters may use different naming conventions:
+        - OPF: {asin}.opf
+        - JSON: metadata.json
+        - NFO: {title}.nfo
+        """
         ...
+    
+    def write(self, metadata: CanonicalMetadata, base_dir: Path, **options) -> Path:
+        """Write to file with atomic write + proper encoding, return final path.
+        
+        Implementation note: use a shared helper for atomic writes:
+        - Write to tmp file in same directory
+        - os.replace(tmp, final) for atomicity
+        - Text encoding for str, binary mode for bytes
+        """
+        ...
+
+
+# metadata/exporters/registry.py
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from .base import MetadataExporter
+
+
+@dataclass
+class ExporterRegistry:
+    """Registry for exporters (mirrors ProviderRegistry pattern)."""
+    _exporters: dict[str, MetadataExporter] = field(default_factory=dict)
+    
+    def register(self, exporter: MetadataExporter) -> None:
+        self._exporters[exporter.name] = exporter
+    
+    def get(self, name: str) -> MetadataExporter | None:
+        return self._exporters.get(name)
+    
+    def all(self) -> list[MetadataExporter]:
+        # Stable order: by name
+        return sorted(self._exporters.values(), key=lambda e: e.name)
 ```
 
 **Potential exporters:**
+
 - `OPFExporter` - Current OPF generator
 - `JsonExporter` - ABS metadata.json
 - `NFOExporter` - Kodi/Plex NFO format
 - `CueExporter` - CUE sheets for chapter markers
 - `M3UExporter` - Playlist generation
 - `MarkdownExporter` - Human-readable summary
+
+> **When to build:** Extract to this pattern when you add a third format. Current OPF/JSON generation works fine.
 
 ---
 
