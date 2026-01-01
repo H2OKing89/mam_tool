@@ -10,12 +10,15 @@
 
 - [ ] Create `src/shelfr/metadata/` directory
 - [ ] Move `metadata.py` → `metadata/__init__.py` (contents unchanged)
-- [ ] Verify `import shelfr.metadata` still works
+- [ ] Update any internal imports that referenced `metadata.py` as a module (no behavior change)
+- [ ] Verify import still works: `python -c "import shelfr.metadata; print(shelfr.metadata.__file__)"`
 - [ ] Run full test suite
 
 **Why separate phase?** This is pure scaffolding — no behavior change, no refactoring, just enabling the package structure. Ship this first before any extraction.
 
 > **Note:** After Phase 0, there is no `metadata.py` — the facade becomes `metadata/__init__.py`.
+>
+> **Reminder:** When creating new subpackages in later phases, add `__init__.py` files to each directory (unless intentionally using namespace packages).
 
 ---
 
@@ -24,7 +27,7 @@
 > MediaInfo is the cleanest extraction: no network, no state, pure functions.
 
 - [ ] Create `metadata/models.py` with shared `Chapter` dataclass (avoids collision with `providers/types.py`)
-- [ ] Create `metadata/mediainfo/extractor.py` with:
+- [ ] Create `metadata/mediainfo/__init__.py` + `extractor.py` with:
   - `AudioFormat` dataclass (MediaInfo-specific, stays here)
   - `detect_audio_format()`, `detect_audio_format_from_file()`
   - `run_mediainfo()`, `save_mediainfo_json()`
@@ -37,11 +40,12 @@
 ## Phase 2: Extract Formatting (Presentation Layer)
 
 - [ ] Create `metadata/formatting/bbcode.py`:
-  - `render_bbcode_description()`, `_convert_newlines_for_mam()`
-  - `_format_release_date()`, `_format_duration()`, `_format_chapter_time()`
-  - Import `Chapter` from `metadata/types.py` (not mediainfo)
+  - **Public:** `render_bbcode_description()`
+  - **Private:** `_convert_newlines_for_mam()`, `_format_release_date()`, `_format_duration()`, `_format_chapter_time()`
+  - Import `Chapter` from `metadata/models.py` (not mediainfo)
 - [ ] Create `metadata/formatting/html.py`:
-  - `_html_to_bbcode()`, `_clean_html()`
+  - **Public:** `html_to_bbcode()` (no underscore — used externally)
+  - **Private:** `_clean_html()`
 - [ ] Update re-exports
 
 ---
