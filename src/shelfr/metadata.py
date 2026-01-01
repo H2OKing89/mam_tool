@@ -334,7 +334,8 @@ def _format_release_date(date_str: str) -> str:
 
         dt = datetime.strptime(date_part, "%Y-%m-%d")
         # Format: January 1, 2016 (no leading zero on day)
-        return dt.strftime("%B %-d, %Y")
+        # Use f-string with dt.day to avoid %-d which breaks on Windows
+        return f"{dt:%B} {dt.day}, {dt:%Y}"
     except (ValueError, IndexError):
         return date_str
 

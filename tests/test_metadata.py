@@ -2092,3 +2092,42 @@ class TestMapGenresToCategories:
             result = _map_genres_to_categories([{"name": "Audiobook"}])
 
         assert result == []
+
+
+class TestFormatReleaseDate:
+    """Tests for _format_release_date function (Windows compatibility)."""
+
+    def test_single_digit_day(self):
+        """Single-digit day should not have leading zero."""
+        from shelfr.metadata import _format_release_date
+
+        result = _format_release_date("2016-01-01")
+        assert result == "January 1, 2016"
+
+    def test_double_digit_day(self):
+        """Double-digit day should render correctly."""
+        from shelfr.metadata import _format_release_date
+
+        result = _format_release_date("2024-12-25")
+        assert result == "December 25, 2024"
+
+    def test_with_time_suffix(self):
+        """Date with time suffix should be handled."""
+        from shelfr.metadata import _format_release_date
+
+        result = _format_release_date("2023-06-15T00:00:00Z")
+        assert result == "June 15, 2023"
+
+    def test_invalid_format_returns_original(self):
+        """Invalid date format should return original string."""
+        from shelfr.metadata import _format_release_date
+
+        result = _format_release_date("not-a-date")
+        assert result == "not-a-date"
+
+    def test_empty_string_returns_empty(self):
+        """Empty string should return empty string."""
+        from shelfr.metadata import _format_release_date
+
+        result = _format_release_date("")
+        assert result == ""
