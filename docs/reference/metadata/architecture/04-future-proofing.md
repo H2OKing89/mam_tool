@@ -94,11 +94,39 @@ Don't let each provider implement caching differently:
 
 ```python
 # metadata/cache.py
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any, Protocol
+
+from .providers.types import FieldName, IdType
+from .schemas.versioning import SCHEMA_VERSION
+
+
+def make_cache_key(provider: str, id_type: IdType, identifier: str, region: str = "us") -> str:
+    """Build versioned cache key — auto-invalidates when schema changes.
+    
+    Note: region param is intentional for providers like Audnex that
+    return different results per region.
+    """
+    return f"{SCHEMA_VERSION}:{provider}:{id_type}:{identifier}:{region}"
+
+
+@dataclass(frozen=True)
+class CachedResult:
+    """What we store in cache — enough to reconstruct ProviderResult."""
+    fields: dict[FieldName, Any]
+    confidence: dict[FieldName, float]
+    fetched_at: datetime  # Should be timezone-aware: datetime.now(timezone.utc)
+    schema_version: str = SCHEMA_VERSION
+
+
 class MetadataCache(Protocol):
     """Abstract caching interface."""
     
     async def get(self, key: str) -> CachedResult | None: ...
-    async def set(self, key: str, value: Any, ttl_seconds: int) -> None: ...
+    async def set(self, key: str, value: CachedResult, ttl_seconds: int) -> None: ...
     async def invalidate(self, key: str) -> None: ...
     async def invalidate_pattern(self, pattern: str) -> None: ...
 
@@ -114,41 +142,69 @@ class RedisCache(MetadataCache):
     """Redis for distributed/multi-instance setups."""
 ```
 
+**Key design decisions:**
+
+1. **Schema version in cache key** — old entries auto-invalidate when `CanonicalMetadata` changes
+2. **Cache stores provenance** — `confidence`, `fetched_at` survive cache round-trip
+3. **Apply cache at provider boundary** — network providers get most benefit
+4. **Migration lives in IO layer** — readers/writers migrate, aggregator stays dumb
+
 ---
 
 ## 3. Event Hooks / Middleware
+
+> **YAGNI Note:** Structured logging gives you 80% of this. Add events when you actually need Discord alerts or external integrations.
 
 Allow instrumentation without modifying core code:
 
 ```python
 # metadata/events.py
-class MetadataEvents:
-    """Event system for metadata operations."""
+import inspect
+import logging
+from dataclasses import dataclass, field
+from typing import Callable
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class EventBus:
+    """Event system for metadata operations.
     
-    # Event types
+    Instance-based (not class-level globals) for test isolation.
+    Pass into ProviderRegistry / Aggregator / Orchestration.
+    """
+    _handlers: dict[str, list[Callable]] = field(default_factory=dict)
+    
+    # Event type constants
     PROVIDER_FETCH_START = "provider.fetch.start"
     PROVIDER_FETCH_SUCCESS = "provider.fetch.success"
     PROVIDER_FETCH_ERROR = "provider.fetch.error"
     AGGREGATION_CONFLICT = "aggregation.conflict"
     EXPORT_COMPLETE = "export.complete"
     
-    _handlers: dict[str, list[Callable]] = {}
-    
-    @classmethod
-    def on(cls, event: str, handler: Callable) -> None:
+    def on(self, event: str, handler: Callable) -> None:
         """Register event handler."""
-        cls._handlers.setdefault(event, []).append(handler)
+        self._handlers.setdefault(event, []).append(handler)
     
-    @classmethod
-    async def emit(cls, event: str, data: dict) -> None:
-        """Emit event to all handlers."""
-        for handler in cls._handlers.get(event, []):
-            await handler(data)
+    async def emit(self, event: str, data: dict) -> None:
+        """Emit event to all handlers (with error isolation)."""
+        for handler in self._handlers.get(event, []):
+            try:
+                result = handler(data)
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.exception("Event handler failed", extra={"event": event})
 
 
-# Usage: metrics, logging, notifications
-MetadataEvents.on("provider.fetch.error", send_discord_alert)
-MetadataEvents.on("aggregation.conflict", log_conflict_for_review)
+# Usage (instance-based, not global)
+event_bus = EventBus()
+event_bus.on("provider.fetch.error", send_discord_alert)
+event_bus.on("aggregation.conflict", log_conflict_for_review)
+
+# Pass to aggregator
+aggregator = MetadataAggregator(registry=registry, event_bus=event_bus)
 ```
 
 ---
