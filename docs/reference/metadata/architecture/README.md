@@ -94,71 +94,70 @@ The package exposes a clean, minimal API:
 
 ```python
 from shelfr.metadata import (
-    # Core pipeline
-    get_metadata,       # Fetch + merge from providers
-    normalize,          # Clean a CanonicalMetadata instance
-    export,             # Render to one or more formats
-    build_sidecars,     # Convenience: get + normalize + export
+    # Core orchestration
+    fetch_metadata,          # Fetch + merge from providers
+    normalize_canonical,     # Clean a CanonicalMetadata instance
+    export_sidecars,         # Render to one or more formats
+    build_sidecars,          # Convenience: fetch + normalize + export
     
     # Types
-    CanonicalMetadata,  # The canonical data model
-    ProviderResult,     # What providers return
-    ExportResult,       # What exporters return
+    CanonicalMetadata,       # The canonical data model
+    ProviderResult,          # What providers return
+    LookupContext,           # Provider lookup input
 )
 
 # Simple usage
-metadata = await get_metadata(asin="B08G9PRS1K", providers=["audnex", "mediainfo"])
-metadata = normalize(metadata)
-await export(metadata, formats=["opf", "abs_json"], output_dir=book_path)
+ctx = LookupContext.from_asin(asin="B08G9PRS1K", path=book_path)
+metadata = await fetch_metadata(ctx, providers=["audnex", "mediainfo"])
+metadata = normalize_canonical(metadata)
+await export_sidecars(metadata, formats=["opf", "json"], output_dir=book_path)
 
 # Or all-in-one
-await build_sidecars(book_path, asin="B08G9PRS1K", formats=["opf", "abs_json"])
+await build_sidecars(book_path, asin="B08G9PRS1K", formats=["opf", "json"])
 ```
 
 ---
 
 ## Target Module Structure
 
+> This is the **end-state target** — it arrives through phases. See [Implementation Checklist](05-implementation-checklist.md) for the incremental path.
+
 ```bash
 src/shelfr/metadata/
-├── __init__.py           # Public API (re-exports from submodules)
-├── pipeline.py           # Orchestration: get_metadata, build_sidecars
-├── cleaning.py           # normalize_canonical() - THE cleaning entrypoint
-├── conventions.py        # Language mapping, series formatting, title casing
-├── aggregator.py         # Multi-provider merge logic with precedence
+├── __init__.py              # Public API (facade re-exports)
+├── aggregator.py            # Merge logic (deterministic precedence)
+├── orchestration.py         # fetch_all_metadata, build_sidecars, etc.
+├── cleaning.py              # normalize_canonical() — THE cleaning entrypoint
+├── models.py                # Shared Chapter dataclass
 │
-├── schemas/              # All Pydantic schemas (SINGLE SOURCE OF TRUTH)
-│   ├── __init__.py       # Re-exports CanonicalMetadata, Person, Series, etc.
-│   ├── canonical.py      # CanonicalMetadata, Person, Series, Genre
-│   ├── abs_json.py       # ABSJsonMetadata (versioned output schema)
-│   ├── opf.py            # OPFMetadata, OPFCreator, etc.
-│   └── results.py        # ProviderResult, AggregatedResult, ExportResult
+├── schemas/
+│   └── canonical.py         # CanonicalMetadata, Person, Series, Genre
 │
-├── providers/            # Pluggable metadata sources
-│   ├── __init__.py       # ProviderRegistry, base protocol
-│   ├── base.py           # MetadataProvider protocol
-│   ├── audnex.py         # Primary provider (from metadata.py)
-│   ├── mediainfo.py      # Technical metadata (from metadata.py)
-│   ├── libation.py       # Folder structure parsing
-│   └── abs_local.py      # Read existing ABS metadata.json
+├── providers/
+│   ├── base.py              # MetadataProvider protocol
+│   ├── types.py             # LookupContext, ProviderResult, FieldName, IdType, ProviderKind
+│   ├── registry.py          # ProviderRegistry (instance-based, stable ordering)
+│   ├── audnex.py            # Primary network provider
+│   ├── mediainfo.py         # Local technical metadata
+│   ├── libation.py          # Folder structure parsing
+│   ├── abs_sidecar.py       # Read existing ABS metadata.json (override provider)
+│   └── mock.py              # MockProvider for tests
 │
-├── exporters/            # Pluggable output formats
-│   ├── __init__.py       # ExporterRegistry, base protocol
-│   ├── base.py           # MetadataExporter protocol
-│   ├── opf.py            # OPF sidecar (from opf/)
-│   └── abs_json.py       # ABS JSON sidecar (NEW)
+├── exporters/
+│   ├── base.py              # MetadataExporter protocol
+│   ├── json.py              # ABS metadata.json sidecar
+│   └── opf.py               # OPF sidecar (moved in Phase 6)
 │
-└── mam/                  # MAM-specific (future extraction)
-    ├── __init__.py
+└── mam/                     # MAM-specific (future extraction)
     ├── json_builder.py
     └── categories.py
 ```
 
-**Key changes from original:**
-- `helpers.py` → `conventions.py` (avoids junk drawer)
-- `canonical.py` only in `schemas/` (re-exported from `__init__.py`)
-- Added `pipeline.py` (orchestration entrypoint)
-- Added `schemas/results.py` (provider/exporter result types)
+**Key changes from original `metadata.py`:**
+
+- God module → package with focused submodules
+- Provider results in `providers/types.py` (not scattered schemas)
+- `orchestration.py` (renamed from `pipeline.py` to avoid overloading)
 
 ---
 
@@ -193,7 +192,7 @@ When ABS changes fields later, add an adapter layer rather than breaking existin
 | **Aggregator** | Unit | Precedence rules, merge determinism, conflict resolution |
 | **Cleaning** | Unit + Golden | Normalization rules, edge cases, regression tests |
 | **Exporters** | Snapshot | Output matches expected OPF/JSON exactly |
-| **Pipeline** | Integration | End-to-end: input → sidecars on disk |
+| **Orchestration** | Integration | End-to-end: input → sidecars on disk |
 
 **Golden tests:** Use `tests/golden/` fixtures for real-world examples.
 
@@ -201,31 +200,37 @@ When ABS changes fields later, add an adapter layer rather than breaking existin
 
 ## Migration Strategy (Ship Value Fast)
 
-Safest sequence that keeps momentum:
+See [Implementation Checklist](05-implementation-checklist.md) for the detailed phased approach.
+
+**Summary sequence:**
 
 | Step | What | Why |
 |------|------|-----|
-| 1 | Create `schemas/canonical.py` | Single source of truth |
-| 2 | Implement JSON exporter first | Core need (ABS JSON sidecar) |
-| 3 | Write aggregator with 2 providers | Audnex + MediaInfo (minimum useful combo) |
-| 4 | Add `cleaning.py` with `normalize_canonical()` | Central cleaning entrypoint |
-| 5 | Move OPF into exporters | Reuse canonical + cleaning |
-| 6 | Add `pipeline.py` | Orchestration entrypoint |
-| 7 | Chip away at `metadata.py` | Replace call sites gradually |
+| 0 | Package scaffolding (`metadata.py` → `metadata/__init__.py`) | Unblocks the package layout |
+| 1 | Extract MediaInfo (leaf module) | Cleanest extraction, no dependencies |
+| 2–4 | Extract Formatting, Audnex client, MAM | Incremental decomposition |
+| 5a | Introduce canonical schema | Single source of truth |
+| 5b | Add provider system + aggregator | Deterministic merges |
+| 5c | Add JSON exporter | First deliverable value |
+| 6 | Move OPF into exporters | Share canonical + cleaning |
+| 7 | Infrastructure (cache, events) | As needed |
 
 **Rule:** Each step should be independently shippable and testable.
+
+> **Fast path for JSON sidecar:** If the immediate goal is JSON sidecar, you can do **0 → 5a → 5c** before extracting MediaInfo/Formatting/Audnex. Schemas don't depend on the extraction phases.
 
 ---
 
 ## Recommended Approach
 
-1. **Don't refactor everything at once** - too risky
-2. **Build JSON sidecar in new location** (`metadata/exporters/abs_json.py`)
-3. **Create shared schemas** (`metadata/schemas/canonical.py`)
-4. **Move OPF** after JSON works
-5. **Break up `metadata.py`** incrementally over time
+1. **Don't refactor everything at once** — too risky
+2. **Phase 0 first** — scaffolding unblocks everything
+3. **Build JSON sidecar in new location** (`metadata/exporters/json.py`)
+4. **Create shared schemas** (`metadata/schemas/canonical.py`)
+5. **Move OPF** after JSON works
+6. **Break up `metadata.py`** incrementally over time
 
-See [Implementation Checklist](05-implementation-checklist.md) for detailed tasks.
+See [Implementation Checklist](05-implementation-checklist.md) for the detailed phased approach.
 
 ---
 
