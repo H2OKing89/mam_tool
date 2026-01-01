@@ -20,7 +20,7 @@ To support future metadata sources (Hardcover, Goodreads, OpenLibrary, private d
 ## 1. Current Sources
 
 | Source | Type | Strengths | Weaknesses |
-|--------|------|-----------|------------|
+| --- | --- | --- | --- |
 | **Audnex** | API | ASIN, chapters, accurate narrator/author | US-centric, no reviews |
 | **MediaInfo** | Local (sync) | Bitrate, codec, duration, embedded tags | No book metadata |
 | **Libation** | Local | Folder structure, series heuristics | Limited fields |
@@ -31,7 +31,7 @@ To support future metadata sources (Hardcover, Goodreads, OpenLibrary, private d
 ## 2. Potential Future Sources
 
 | Source | What It Offers | Use Case |
-|--------|----------------|----------|
+| --- | --- | --- |
 | **Hardcover** | Better series data, edition tracking, reviews | Series-heavy libraries |
 | **Goodreads** | Reviews, ratings, popularity | Social metadata |
 | **OpenLibrary** | ISBN data, covers, open data | Fallback, legal covers |
@@ -800,7 +800,7 @@ print(result.missing)      # Fields no provider had
 ## 12. Benefits
 
 | Benefit | Description |
-|---------|-------------|
+| --- | --- |
 | **Extensibility** | Add new sources without touching core code |
 | **Fallback chain** | If Audnex fails, try Hardcover, then Libation heuristics |
 | **Field-level sourcing** | Use best source for each field |
@@ -814,7 +814,7 @@ print(result.missing)      # Fields no provider had
 ## 13. Implementation Priority
 
 | Phase | What to Build |
-|-------|---------------|
+| --- | --- |
 | **Phase 5** | Define `LookupContext`, `ProviderResult`, `MetadataProvider` protocol |
 | **Phase 5** | Create `ProviderRegistry` (instance-based) |
 | **Phase 5** | Extract `AudnexProvider` from `metadata/__init__.py` |

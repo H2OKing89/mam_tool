@@ -39,6 +39,7 @@
 - [ ] Run tests
 
 **Test Migration:**
+
 - Update imports: `from metadata.mediainfo import AudioFormat` → `from shelfr.metadata.mediainfo import AudioFormat`
 - Update patch targets: `@patch("metadata.run_mediainfo")` → `@patch("shelfr.metadata.mediainfo.run_mediainfo")`
 - Verify re-exports work: tests using `from shelfr.metadata import detect_audio_format` should still pass
@@ -57,6 +58,7 @@
 - [ ] Update re-exports
 
 **Test Migration:**
+
 - Update imports: `from metadata import render_bbcode_description` → `from shelfr.metadata.formatting.bbcode import render_bbcode_description`
 - Update mocks: Replace `metadata._format_duration` patches with `shelfr.metadata.formatting.bbcode._format_duration`
 - Verify `Chapter` imports from `metadata.models` (not `mediainfo`)
@@ -74,6 +76,7 @@
 - [ ] Update re-exports
 
 **Test Migration:**
+
 - Update HTTP mocks: `@patch("metadata.httpx.get")` → `@patch("shelfr.metadata.audnex.client.httpx.get")`
 - Update circuit breaker patches to new module path
 - Test chapter parsing: `_parse_chapters_from_audnex` now in `metadata.audnex.client`
@@ -92,6 +95,7 @@
   - `_build_series_list()`, `_get_mediainfo_string()`
 
 **Test Migration:**
+
 - Update category test imports: `from metadata.mam.categories import _infer_fiction_or_nonfiction`
 - Update MAM JSON golden tests: adjust import paths to `shelfr.metadata.mam.json_builder`
 - Verify integration: MAM builder depends on mediainfo/audnex/formatting extracted in Phases 1-3
@@ -183,7 +187,7 @@
 ## Progress Tracking
 
 | Phase | Status | Notes |
-|-------|--------|-------|
+| --- | --- | --- |
 | Phase 0 | ⏳ Not Started | Package scaffolding |
 | Phase 1 | ⏳ Not Started | MediaInfo (leaf module) |
 | Phase 2 | ⏳ Not Started | Formatting (presentation) |
@@ -232,7 +236,7 @@ Phase 7 (Infrastructure - optional)
 ### Per-Phase Testing
 
 | Phase | Test Focus |
-|-------|------------|
+| --- | --- |
 | Phase 0 | Import smoke test, full test suite passes |
 | Phase 1 | MediaInfo parsing, AudioFormat detection |
 | Phase 2 | BBCode output, HTML conversion |

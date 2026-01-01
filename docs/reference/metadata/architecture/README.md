@@ -1,7 +1,7 @@
 # Metadata Architecture Documentation
 
-> **Date:** January 1, 2026  
-> **Status:** Audit Complete - Refactor Recommended  
+> **Date:** January 1, 2026
+> **Status:** Audit Complete - Refactor Recommended
 > **Related:** [JSON Sidecar Discovery](../../../implementation/json-sidecar-discovery.md) | [Naming System](../naming/NAMING.md)
 
 ---
@@ -13,7 +13,7 @@ This folder contains the comprehensive metadata architecture documentation for s
 ## Quick Links
 
 | Document | Description |
-|----------|-------------|
+| --- | --- |
 | [Current State Audit](01-current-state-audit.md) | Analysis of existing files, duplicates, and issues |
 | [Recommendations](02-recommendations.md) | Phased refactoring plan and migration strategy |
 | [Plugin Architecture](03-plugin-architecture.md) | Provider system for extensible metadata sources |
@@ -29,7 +29,7 @@ The current metadata handling is **fragmented across 8+ files** with significant
 ### Key Issues
 
 | Issue | Severity | Impact |
-|-------|----------|--------|
+| --- | --- | --- |
 | `metadata.py` is 2040 lines (god module) | 🔴 High | Hard to maintain, test, navigate |
 | 3+ duplicate schema definitions | 🔴 High | Risk of drift, confusion |
 | OPF module isolated from main metadata | 🟡 Medium | Can't share cleaners/helpers |
@@ -50,7 +50,7 @@ The current metadata handling is **fragmented across 8+ files** with significant
 ```
 
 | Stage | Input | Output | Rule |
-|-------|-------|--------|------|
+| --- | --- | --- | --- |
 | **Providers** | ASIN, path, etc. | Partial canonical fragments | Each provider returns what it knows |
 | **Aggregator** | Multiple fragments | Merged CanonicalMetadata | Precedence rules resolve conflicts |
 | **Cleaning** | Raw CanonicalMetadata | Normalized CanonicalMetadata | Single entrypoint: `normalize_canonical()` |
@@ -65,7 +65,7 @@ The current metadata handling is **fragmented across 8+ files** with significant
 When multiple providers have data for the same field, use these rules:
 
 | Field Category | Priority Order | Rationale |
-|----------------|----------------|-----------|
+| --- | --- | --- |
 | **Identifiers** (ASIN, ISBN) | Audnex > abs_sidecar > Libation | Audnex is authoritative for ASINs |
 | **Title/Subtitle/Series** | Audnex > abs_sidecar (if trusted) > Libation | Audnex normalizes Audible's mess |
 | **Authors** | Audnex > abs_sidecar > Libation | Audnex has author ASINs |
@@ -99,7 +99,7 @@ from shelfr.metadata import (
     normalize_canonical,     # Clean a CanonicalMetadata instance
     export_sidecars,         # Render to one or more formats
     build_sidecars,          # Convenience: fetch + normalize + export
-    
+
     # Types
     CanonicalMetadata,       # The canonical data model
     ProviderResult,          # What providers return
@@ -168,13 +168,13 @@ ABS JSON schema can evolve. Build in version awareness:
 ```python
 class ABSJsonMetadata(BaseModel):
     """ABS metadata.json output schema."""
-    
+
     # Schema version for future migrations
     _schema_version: ClassVar[str] = "1.0.0"
-    
+
     title: str
     # ... fields ...
-    
+
     @classmethod
     def get_version(cls) -> str:
         return cls._schema_version
@@ -187,7 +187,7 @@ When ABS changes fields later, add an adapter layer rather than breaking existin
 ## Testing Strategy
 
 | Component | Test Type | What to Verify |
-|-----------|-----------|----------------|
+| --- | --- | --- |
 | **Providers** | Unit | Given fixture input → correct canonical fragment |
 | **Aggregator** | Unit | Precedence rules, merge determinism, conflict resolution |
 | **Cleaning** | Unit + Golden | Normalization rules, edge cases, regression tests |
@@ -205,7 +205,7 @@ See [Implementation Checklist](05-implementation-checklist.md) for the detailed 
 **Summary sequence:**
 
 | Step | What | Why |
-|------|------|-----|
+| --- | --- | --- |
 | 0 | Package scaffolding (`metadata.py` → `metadata/__init__.py`) | Unblocks the package layout |
 | 1 | Extract MediaInfo (leaf module) | Cleanest extraction, no dependencies |
 | 2–4 | Extract Formatting, Audnex client, MAM | Incremental decomposition |
@@ -237,7 +237,7 @@ See [Implementation Checklist](05-implementation-checklist.md) for the detailed 
 ## File Size Summary
 
 | Current Location | Lines | Status |
-|-----------------|-------|--------|
+| --- | --- | --- |
 | `metadata.py` | 2,040 | 🔴 Too large, split needed |
 | `opf/` (total) | ~1,234 | 🟢 Well-structured |
 | `schemas/*.py` | ~400 | 🟡 OK but duplicates |

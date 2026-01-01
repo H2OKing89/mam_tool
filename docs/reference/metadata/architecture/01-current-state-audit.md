@@ -9,7 +9,7 @@
 ### 1.1 Core Metadata Files
 
 | File | Lines | Purpose | Issues |
-|------|-------|---------|--------|
+| --- | --- | --- | --- |
 | `metadata.py` | **2040** | Audnex API, MediaInfo, BBCode, MAM JSON | God module, does too much |
 | `models.py` | 316 | Core dataclasses (`AudiobookRelease`, `NormalizedBook`) | OK, but mixed concerns |
 | `discovery.py` | ~200 | Libation folder parsing, `LibationMetadata` | OK |
@@ -17,7 +17,7 @@
 ### 1.2 OPF Module (New, Well-Structured)
 
 | File | Lines | Purpose |
-|------|-------|---------|
+| --- | --- | --- |
 | `opf/__init__.py` | 102 | Public API exports |
 | `opf/schemas.py` | 328 | `CanonicalMetadata`, `OPFMetadata`, `Person`, `Series` |
 | `opf/generator.py` | 373 | XML generation |
@@ -29,7 +29,7 @@
 ### 1.3 Schema Definitions (schemas/ directory)
 
 | File | Lines | Purpose | Overlaps With |
-|------|-------|---------|---------------|
+| --- | --- | --- | --- |
 | `schemas/audnex.py` | 158 | Audnex API validation | - |
 | `schemas/abs_metadata.py` | 111 | ABS metadata.json validation | `abs/rename.py` |
 | `schemas/abs.py` | 357 | ABS API schemas | - |
@@ -38,7 +38,7 @@
 ### 1.4 ABS Module (abs/ directory)
 
 | File | Key Classes/Functions | Metadata Role |
-|------|----------------------|---------------|
+| --- | --- | --- |
 | `abs/rename.py` | `AbsMetadataSchema`, `AbsMetadata` dataclass | **Duplicate** of `schemas/abs_metadata.py` |
 | `abs/asin.py` | ASIN extraction/resolution | Uses metadata.json |
 | `abs/importer.py` | Import logic, calls `write_opf()` | Coordinates metadata |
@@ -52,7 +52,7 @@
 There are two distinct concerns being conflated:
 
 | Layer | Purpose | Should Be |
-|-------|---------|-----------|
+| --- | --- | --- |
 | **ABS Output Schema** | What we write to `metadata.json` for ABS import | `AbsMetadataJson` |
 | **Canonical Schema** | Internal truth we export FROM (richer than ABS) | `CanonicalMetadata` |
 
@@ -139,7 +139,7 @@ class AudnexSeries(BaseModel):
 All shared types should live in ONE place and be imported everywhere:
 
 | Path | Contents |
-|------|----------|
+| --- | --- |
 | `metadata/schemas/canonical.py` | Types only: `Person`, `Series`, `Genre`, `CanonicalMetadata` |
 | `metadata/pipeline.py` | Builders/constructors: `CanonicalMetadata.from_audnex()`, merge orchestration |
 
@@ -161,7 +161,7 @@ class AudnexBook(BaseModel):
 ### 2.5 Model Layers (Why Both Pydantic and Dataclasses Exist)
 
 | Layer | Type | Purpose | Examples |
-|-------|------|---------|----------|
+| --- | --- | --- | --- |
 | **Validation Schemas** | Pydantic | Raw API response validation | `AudnexBook`, `AbsMetadataJson` |
 | **Canonical Schema** | Pydantic | Normalized truth (provider-merged) | `CanonicalMetadata`, `Person`, `Series` |
 | **Pipeline Models** | dataclass | Workflow state, file paths, computed values | `AudiobookRelease`, `NormalizedBook` |
@@ -177,7 +177,7 @@ class AudnexBook(BaseModel):
 These two models solve the same problem (Audible's inconsistent metadata) but for different purposes:
 
 | Model | Purpose | Fields | Used By |
-|-------|---------|--------|---------|
+| --- | --- | --- | --- |
 | `NormalizedBook` | Workflow artifact | Paths, computed filenames, local state | Naming pipeline (MAM paths) |
 | `CanonicalMetadata` | Metadata truth | All metadata fields | OPF/JSON exporters |
 
@@ -206,7 +206,7 @@ At **2,040 lines**, this file handles far too many responsibilities:
 ### 3.1 Responsibilities (should be separate)
 
 | Section | Lines | Should Be |
-|---------|-------|-----------|
+| --- | --- | --- |
 | `AudioFormat` detection | 60-280 | `metadata/audio_format.py` |
 | Jinja BBCode templates | 290-350 | `metadata/bbcode/` |
 | `render_bbcode_description()` | 500-650 | `metadata/bbcode/generator.py` |
@@ -308,7 +308,7 @@ Audnex API Response
 When multiple providers have data, use deterministic precedence (prevents "whoever was called last wins"):
 
 | Field Category | Priority Order | Rationale |
-|----------------|----------------|----------|
+| --- | --- | --- |
 | **Identifiers** (ASIN, ISBN) | Audnex > ABS local > Libation | Audnex is authoritative |
 | **Title/Subtitle/Series** | Audnex > ABS local (if trusted) | Audnex normalizes Audible's mess |
 | **Authors** | Audnex > ABS local > Libation | Audnex has author ASINs |
@@ -344,7 +344,7 @@ When multiple providers have data, use deterministic precedence (prevents "whoev
 > **Note:** `CanonicalMetadata` currently lives in the OPF module. Relocation to `metadata/schemas/canonical.py` is part of Phase 1 (see [Implementation Checklist](05-implementation-checklist.md)).
 
 | Schema | Location | Notes |
-|--------|----------|-------|
+| --- | --- | --- |
 | `CanonicalMetadata` | `opf/schemas.py` | ✅ Canonical (move to `metadata/schemas/` later) |
 | `OPFMetadata` | `opf/schemas.py` | ✅ OPF-specific export (move later) |
 | `Person` | `opf/schemas.py` | 🔄 Unify with `AudnexAuthor` (move to shared) |
