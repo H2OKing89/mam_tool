@@ -15,34 +15,34 @@ from pathlib import Path
 
 class MetadataExporter(Protocol):
     """Protocol for pluggable output formats.
-    
+
     Mirrors provider architecture with registry pattern.
     """
-    
+
     name: str  # "opf", "json", "nfo", "cue"
     file_extension: str  # ".opf", ".json", ".nfo"
-    
+
     def render(self, metadata: CanonicalMetadata, **options) -> str | bytes:
         """Generate output content from canonical metadata.
-        
+
         Returns str for text formats (OPF, JSON, NFO, MD),
         bytes for binary formats (future: zip, images).
         """
         ...
-    
+
     def output_path(self, base_dir: Path, **options) -> Path:
         """Compute default output path for this exporter.
-        
+
         Different exporters may use different naming conventions:
         - OPF: {asin}.opf
         - JSON: metadata.json
         - NFO: {title}.nfo
         """
         ...
-    
+
     def write(self, metadata: CanonicalMetadata, base_dir: Path, **options) -> Path:
         """Write to file with atomic write + proper encoding, return final path.
-        
+
         Implementation note: use a shared helper for atomic writes:
         - Write to tmp file in same directory
         - os.replace(tmp, final) for atomicity
@@ -63,13 +63,13 @@ from .base import MetadataExporter
 class ExporterRegistry:
     """Registry for exporters (mirrors ProviderRegistry pattern)."""
     _exporters: dict[str, MetadataExporter] = field(default_factory=dict)
-    
+
     def register(self, exporter: MetadataExporter) -> None:
         self._exporters[exporter.name] = exporter
-    
+
     def get(self, name: str) -> MetadataExporter | None:
         return self._exporters.get(name)
-    
+
     def all(self) -> list[MetadataExporter]:
         # Stable order: by name
         return sorted(self._exporters.values(), key=lambda e: e.name)
@@ -106,7 +106,7 @@ from .schemas.versioning import SCHEMA_VERSION
 
 def make_cache_key(provider: str, id_type: IdType, identifier: str, region: str = "us") -> str:
     """Build versioned cache key — auto-invalidates when schema changes.
-    
+
     Note: region param is intentional for providers like Audnex that
     return different results per region.
     """
@@ -124,7 +124,7 @@ class CachedResult:
 
 class MetadataCache(Protocol):
     """Abstract caching interface."""
-    
+
     async def get(self, key: str) -> CachedResult | None: ...
     async def set(self, key: str, value: CachedResult, ttl_seconds: int) -> None: ...
     async def invalidate(self, key: str) -> None: ...
@@ -170,23 +170,23 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EventBus:
     """Event system for metadata operations.
-    
+
     Instance-based (not class-level globals) for test isolation.
     Pass into ProviderRegistry / Aggregator / Orchestration.
     """
     _handlers: dict[str, list[Callable]] = field(default_factory=dict)
-    
+
     # Event type constants
     PROVIDER_FETCH_START = "provider.fetch.start"
     PROVIDER_FETCH_SUCCESS = "provider.fetch.success"
     PROVIDER_FETCH_ERROR = "provider.fetch.error"
     AGGREGATION_CONFLICT = "aggregation.conflict"
     EXPORT_COMPLETE = "export.complete"
-    
+
     def on(self, event: str, handler: Callable) -> None:
         """Register event handler."""
         self._handlers.setdefault(event, []).append(handler)
-    
+
     async def emit(self, event: str, data: dict) -> None:
         """Emit event to all handlers (with error isolation)."""
         for handler in self._handlers.get(event, []):
@@ -219,7 +219,7 @@ SCHEMA_VERSION = "2.0.0"
 
 class VersionedMetadata(BaseModel):
     """Wrapper with version tracking."""
-    
+
     schema_version: str = SCHEMA_VERSION
     data: CanonicalMetadata
     migrated_from: str | None = None  # Previous version if migrated
@@ -267,7 +267,7 @@ hardcover:
 # JsonMappingProvider for "simple JSON API" providers
 class JsonMappingProvider(BaseProvider):
     """Quick wins for simple APIs via config-driven mapping."""
-    
+
     def __init__(self, name: str, mapping: dict[str, str], ...):
         self.mapping = mapping
         ...
@@ -297,7 +297,7 @@ class AggregatedResult:
     provenance: dict[FieldName, list[FieldProvenance]]  # field -> all candidates (descending confidence)
     conflicts: list[FieldConflict]          # Fields where providers disagreed
     missing: list[FieldName]                # Fields no provider had
-    
+
     # Timing info for debugging
     fetched_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     provider_timings: dict[str, float] = field(default_factory=dict)  # provider -> seconds
@@ -320,17 +320,17 @@ Some APIs support bulk lookups — design for it using `LookupContext`:
 ```python
 class MetadataProvider(Protocol):
     # ... existing attributes ...
-    
+
     supports_batch: bool = False  # Add now, default False
     max_batch_size: int = 1
-    
+
     async def fetch_batch(
-        self, 
+        self,
         ctxs: list[LookupContext],
         id_type: IdType,
     ) -> list[ProviderResult]:
         """Fetch multiple items in one request (if supported).
-        
+
         Only network providers meaningfully implement this.
         MediaInfo is "batch" by just running local scans in parallel.
         """
@@ -348,10 +348,10 @@ Let users add their own fields that flow through the system:
 ```python
 class CanonicalMetadata(BaseModel):
     # ... standard fields ...
-    
+
     # User-defined extras (preserved through pipeline)
     custom_fields: dict[str, Any] = Field(default_factory=dict)
-    
+
     # Example usage:
     # metadata.custom_fields["my_rating"] = 5
     # metadata.custom_fields["read_date"] = "2024-01-15"
@@ -364,6 +364,7 @@ class CanonicalMetadata(BaseModel):
 ## 9. Sync/Async Design
 
 > **Already solved.** Your current provider architecture handles this cleanly:
+>
 > - All providers implement `async fetch()`
 > - Sync providers (MediaInfo) wrap their work with `asyncio.to_thread()` internally
 > - Aggregator doesn't care who's sync vs async
@@ -375,7 +376,7 @@ class CanonicalMetadata(BaseModel):
 class MediaInfoProvider:
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         return await asyncio.to_thread(self._fetch_sync, ctx, id_type)
-    
+
     def _fetch_sync(self, ctx, id_type) -> ProviderResult:
         # Actual sync work here
         ...
@@ -398,11 +399,11 @@ provider = Cached(RateLimited(CircuitBroken(HardcoverProvider(...))))
 # metadata/providers/resilience.py
 class ProviderResilience:
     """Per-provider rate limiting + circuit breakers."""
-    
+
     def __init__(self):
         self._breakers: dict[str, CircuitBreaker] = {}
         self._limiters: dict[str, RateLimiter] = {}
-    
+
     def get_breaker(self, provider_name: str) -> CircuitBreaker:
         if provider_name not in self._breakers:
             self._breakers[provider_name] = CircuitBreaker(
@@ -411,7 +412,7 @@ class ProviderResilience:
                 name=f"provider:{provider_name}"
             )
         return self._breakers[provider_name]
-    
+
     def get_limiter(self, provider_name: str) -> RateLimiter:
         # Config-driven rates
         rates = {
@@ -429,7 +430,7 @@ class ProviderResilience:
 async def _safe_fetch(self, provider, ctx, id_type):
     breaker = self.resilience.get_breaker(provider.name)
     limiter = self.resilience.get_limiter(provider.name)
-    
+
     await limiter.acquire()
     async with breaker:  # Or breaker.call(...) depending on your implementation
         return await provider.fetch(ctx, id_type)
@@ -447,23 +448,23 @@ Make providers easy to mock:
 # metadata/providers/mock.py
 class MockProvider:
     """Mock provider for testing."""
-    
+
     name = "mock"
     priority = 999
     kind = "local"
     is_override = False
     supports_batch = False
     max_batch_size = 1
-    
+
     def __init__(self, responses: dict[str, ProviderResult]):
         self.responses = responses
         self.call_log: list[LookupContext] = []
-    
+
     def can_lookup(self, ctx: LookupContext, id_type: IdType) -> bool:
         # Safely check if we have a response for this id_type
         key = ctx.ids.get(id_type)
         return key is not None and key in self.responses
-    
+
     async def fetch(self, ctx: LookupContext, id_type: IdType) -> ProviderResult:
         self.call_log.append(ctx)
         key = ctx.ids.get(id_type, "")
@@ -480,10 +481,10 @@ def test_aggregator_merges_correctly():
             confidence={"title": 1.0, "authors": 1.0},
         )
     })
-    
+
     registry = ProviderRegistry()
     registry.register(mock)
-    
+
     aggregator = MetadataAggregator(registry=registry)
     # ... test assertions
 ```
@@ -497,7 +498,7 @@ def test_aggregator_merges_correctly():
 ### Build Now (low cost, high value)
 
 | Item | Effort | Why Now |
-|------|--------|---------|
+| --- | --- | --- |
 | **MockProvider** (§11) | 30 min | Essential for aggregator tests |
 | **custom_fields dict** (§8) | 5 min | One-line future-proofing |
 | **supports_batch = False** (§7) | 5 min | Add to protocol, implement later |
@@ -506,7 +507,7 @@ def test_aggregator_merges_correctly():
 ### Design For, Defer Implementation
 
 | Item | When to Build |
-|------|---------------|
+| --- | --- |
 | **Exporters** (§1) | When adding 3rd output format |
 | **Caching layer** (§2) | When network calls become pain point |
 | **Batch operations** (§7) | When hitting API that supports bulk |
@@ -515,7 +516,7 @@ def test_aggregator_merges_correctly():
 ### Likely YAGNI
 
 | Item | Alternative |
-|------|-------------|
+| --- | --- |
 | **Event hooks** (§3) | Structured logging covers 80% |
 | **Field mapping YAML** (§5) | Code mappings are more debuggable |
 | **Redis cache** (§2) | File/SQLite cache sufficient for single-user tool |

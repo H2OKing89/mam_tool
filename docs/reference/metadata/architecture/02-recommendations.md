@@ -38,6 +38,7 @@ src/shelfr/metadata/__init__.py  # Same content, now a package
 **Action:** Create `metadata/mediainfo/extractor.py`
 
 Move from `metadata/__init__.py`:
+
 - `AudioFormat` dataclass
 - `detect_audio_format()`, `detect_audio_format_from_file()`
 - `run_mediainfo()`, `save_mediainfo_json()`
@@ -68,6 +69,7 @@ Also move `_format_release_date()` here (only consumer is bbcode).
 **Action:** Create `metadata/audnex/client.py`
 
 Move:
+
 - `fetch_audnex_book()`, `fetch_audnex_author()`
 - `fetch_audnex_chapters()`, `_parse_chapters_from_audnex()`
 - `save_audnex_json()`
@@ -214,7 +216,7 @@ metadata/
 ## 9. Migration Risk Assessment
 
 | Risk | Mitigation |
-|------|------------|
+| --- | --- |
 | Breaking existing imports | Keep `metadata/__init__.py` as facade re-export layer |
 | Test breakage | Run full test suite after each phase |
 | Hidden dependencies | Use `grep` to find all usages before moving |
@@ -227,7 +229,7 @@ metadata/
 ## 10. Recommended Shipping Order
 
 | PR | Phase | What | Why This Order |
-|----|-------|------|----------------|
+| --- | --- | --- | --- |
 | 1 | Phase 0 | Package scaffolding | Enables everything else |
 | 2 | Phase 1 | MediaInfo extraction | Leaf module, zero dependencies |
 | 3 | Phase 2 | Formatting extraction | Low coupling, presentation only |
