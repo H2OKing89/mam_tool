@@ -201,12 +201,40 @@ class OPFMetadata(BaseModel):
         Convert canonical metadata to ABS-friendly OPF format.
 
         This applies the Audnexus → OPF mapping rules:
+        - Title is cleaned using filter_title (removes format indicators like "Light Novel")
         - Authors get role="aut", narrators get role="nrt"
         - Language is converted to ISO 639-2/B (e.g., "english" → "eng")
-        - Series uses Calibre meta format
+        - Series uses Calibre meta format with filter_series applied
         - Custom fields preserved in custom_meta
         """
+        from pathlib import Path
+
+        from shelfr.config import _load_naming_config
         from shelfr.opf.mappings import to_iso_language
+        from shelfr.utils.naming import filter_series, filter_title
+
+        # Load naming config for filter functions
+        # Load directly from naming.json to avoid settings cache issues
+        naming_config = None
+        try:
+            # Try common config locations
+            for config_dir in [Path.cwd(), Path(__file__).parent.parent.parent.parent]:
+                if (config_dir / "config" / "naming.json").exists():
+                    naming_config = _load_naming_config(config_dir)
+                    break
+        except Exception:
+            pass  # Fall back to no config (basic cleaning only)
+
+        # Clean title using filter_title (removes "Light Novel", etc.)
+        # keep_volume=True to preserve "Vol. X" for ABS
+        clean_title = filter_title(meta.title, naming_config=naming_config, keep_volume=True)
+
+        # Clean subtitle if present
+        clean_subtitle: str | None = None
+        if meta.subtitle:
+            clean_subtitle = filter_title(
+                meta.subtitle, naming_config=naming_config, keep_volume=True
+            )
 
         # Build creators list (authors first, then narrators)
         creators: list[OPFCreator] = []
@@ -223,18 +251,23 @@ class OPFMetadata(BaseModel):
             identifiers.append(OPFIdentifier(value=meta.isbn, scheme="ISBN"))
 
         # Build series list (primary first, then secondary)
+        # Apply filter_series for consistent naming
         series: list[OPFSeries] = []
         if meta.series_primary:
+            clean_series_name = filter_series(meta.series_primary.name, naming_config=naming_config)
             series.append(
                 OPFSeries(
-                    name=meta.series_primary.name,
+                    name=clean_series_name,
                     index=meta.series_primary.position or "1",
                 )
             )
         if meta.series_secondary:
+            clean_series_name = filter_series(
+                meta.series_secondary.name, naming_config=naming_config
+            )
             series.append(
                 OPFSeries(
-                    name=meta.series_secondary.name,
+                    name=clean_series_name,
                     index=meta.series_secondary.position or "1",
                 )
             )
@@ -266,12 +299,12 @@ class OPFMetadata(BaseModel):
         desc = meta.description or meta.summary or ""
 
         return cls(
-            title=meta.title,
+            title=clean_title,
             language=to_iso_language(meta.language),
             creators=creators,
             identifiers=identifiers,
             date=meta.release_date_iso,
-            subtitle=meta.subtitle,
+            subtitle=clean_subtitle,
             publisher=meta.publisher_name or None,
             description=desc if desc else None,
             subjects=meta.get_all_genres(),

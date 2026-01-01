@@ -274,8 +274,11 @@ class TestOPFMetadata:
         canonical = CanonicalMetadata.from_audnex(SAMPLE_AUDNEX_RESPONSE)
         opf = OPFMetadata.from_canonical(canonical)
 
-        assert opf.title == "He Who Fights with Monsters: A LitRPG Adventure"
-        assert opf.subtitle == "He Who Fights with Monsters, Book 1"
+        # Title is cleaned (filter_title removes format indicators
+        # AND genre tags like "A LitRPG Adventure")
+        assert opf.title == "He Who Fights with Monsters"
+        # Subtitle is cleaned (filter_title removes ", Book 1" pattern)
+        assert opf.subtitle == "He Who Fights with Monsters"
         assert opf.language == "eng"  # Converted to ISO
         assert opf.publisher == "Podium Audio"
         assert opf.date == "2021-03-09"
@@ -413,15 +416,16 @@ class TestOPFGenerator:
 
     def test_calibre_series_format(self) -> None:
         """Series uses Calibre meta format."""
+        # Use a series name that won't be cleaned by filter_series
         meta = CanonicalMetadata(
             asin="test",
             title="Test",
-            series_primary=Series(name="Epic Series", position="5"),
+            series_primary=Series(name="The Stormlight Archive", position="5"),
         )
         xml_str = generate_opf(meta)
 
         assert 'name="calibre:series"' in xml_str
-        assert 'content="Epic Series"' in xml_str
+        assert 'content="The Stormlight Archive"' in xml_str
         assert 'name="calibre:series_index"' in xml_str
         assert 'content="5"' in xml_str
 
