@@ -165,7 +165,7 @@
   - In legacy mode, old import path re-exports new functions
 - [x] Create `metadata/exporters/opf.py`:
   - `OpfExporter` wrapping existing OPF generation
-- [x] Add tests for OpfExporter (7 tests)
+- [x] Add tests for OpfExporter (11 tests)
 
 ---
 

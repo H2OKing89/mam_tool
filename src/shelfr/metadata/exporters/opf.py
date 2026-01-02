@@ -14,6 +14,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
+
 from shelfr.exceptions import ExportError
 
 if TYPE_CHECKING:
@@ -58,7 +60,13 @@ class OpfExporter:
         from shelfr.metadata.opf import OPFGenerator
 
         # Build OPF metadata from aggregated fields
-        opf_metadata = self._convert_to_opf_metadata(result)
+        try:
+            opf_metadata = self._convert_to_opf_metadata(result)
+        except ValidationError as e:
+            raise ExportError(
+                f"Invalid metadata for OPF export: {e}",
+                format_name=self.name,
+            ) from e
 
         # Generate and write OPF file
         generator = OPFGenerator()

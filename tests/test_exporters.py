@@ -606,6 +606,34 @@ class TestOpfExporter:
 
             assert "Failed to write metadata.opf" in str(exc_info.value)
             assert exc_info.value.format_name == "opf"
+            # Verify original exception is preserved as __cause__
+            assert exc_info.value.__cause__ is not None
+            assert isinstance(exc_info.value.__cause__, OSError)
+
+    @pytest.mark.asyncio
+    async def test_export_raises_export_error_on_validation_failure(
+        self, exporter: OpfExporter, tmp_path: Path
+    ) -> None:
+        """Test that ValidationError during metadata conversion raises ExportError."""
+        from pydantic import ValidationError
+
+        result = AggregatedResult(fields={"title": "Test"})
+
+        # Mock _convert_to_opf_metadata to raise ValidationError
+        with patch.object(
+            exporter,
+            "_convert_to_opf_metadata",
+            side_effect=ValidationError.from_exception_data(
+                "OPFMetadata", [{"type": "missing", "loc": ("title",), "msg": "Field required"}]
+            ),
+        ):
+            with pytest.raises(ExportError) as exc_info:
+                await exporter.export(result, tmp_path)
+
+            assert "Invalid metadata for OPF export" in str(exc_info.value)
+            assert exc_info.value.format_name == "opf"
+            assert exc_info.value.__cause__ is not None
+            assert isinstance(exc_info.value.__cause__, ValidationError)
 
 
 class TestOpfExporterRegistry:
