@@ -118,21 +118,31 @@ def validate_abs_metadata(data: dict[str, Any]) -> AbsMetadataJson:
     return AbsMetadataJson.model_validate(data)
 
 
-def validate_abs_metadata_for_write(data: dict[str, Any]) -> AbsMetadataJson:
+def validate_abs_metadata_for_write(
+    data: dict[str, Any] | AbsMetadataJson,
+) -> AbsMetadataJson:
     """Validate metadata.json structure for writing (strict, requires title).
 
+    This is the single validation gate for all ABS metadata write paths.
+    Call this before writing metadata.json to ensure the output is valid
+    for Audiobookshelf import.
+
     Args:
-        data: Dictionary to validate
+        data: Dictionary or AbsMetadataJson model to validate
 
     Returns:
         Validated AbsMetadataJson model
 
     Raises:
         pydantic.ValidationError: If validation fails
-        ValueError: If title is missing or empty
+        ValueError: If title is missing, empty, or whitespace-only
     """
-    model = AbsMetadataJson.model_validate(data)
-    if not model.title:
-        msg = "title is required for writing metadata.json"
+    # Accept either dict or model
+    model = data if isinstance(data, AbsMetadataJson) else AbsMetadataJson.model_validate(data)
+
+    # Enforce non-empty title (catches None, "", and "   ")
+    if not model.title or not model.title.strip():
+        msg = "ABS metadata.json write requires a non-empty title"
         raise ValueError(msg)
+
     return model

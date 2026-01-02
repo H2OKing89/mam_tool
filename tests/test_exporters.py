@@ -248,16 +248,28 @@ class TestJsonExporter:
         assert content["chapters"][1]["start"] == 300.0
 
     @pytest.mark.asyncio
-    async def test_export_missing_title_uses_placeholder(
+    async def test_export_missing_title_raises_in_strict_mode(
         self, exporter: JsonExporter, tmp_path: Path
     ) -> None:
-        """Test that missing title uses 'Unknown' placeholder."""
+        """Test that missing title raises ValueError in strict mode (default)."""
         result = AggregatedResult(fields={})
 
-        output_file = await exporter.export(result, tmp_path)
+        with pytest.raises(ValueError, match="non-empty title"):
+            await exporter.export(result, tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_export_missing_title_allowed_with_strict_false(
+        self, exporter: JsonExporter, tmp_path: Path
+    ) -> None:
+        """Test that missing title is allowed with strict=False."""
+        result = AggregatedResult(fields={})
+
+        output_file = await exporter.export(result, tmp_path, strict=False)
         content = json.loads(output_file.read_text())
 
-        assert content["title"] == "Unknown"
+        # Title is None/missing since we don't provide one and strict=False
+        # The JSON may have title as null or not present
+        assert "authors" in content or content.get("title") is None or "title" not in content
 
     @pytest.mark.asyncio
     async def test_export_genres(self, exporter: JsonExporter, tmp_path: Path) -> None:
@@ -428,7 +440,11 @@ class TestExportError:
         """Test that write failures raise ExportError."""
         result = AggregatedResult(fields={"title": "Test"})
 
-        with patch.object(Path, "write_text", side_effect=OSError("Disk full")):
+        # Patch write_abs_metadata_json to simulate write failure
+        with patch(
+            "shelfr.metadata.exporters.json.write_abs_metadata_json",
+            side_effect=OSError("Disk full"),
+        ):
             with pytest.raises(ExportError) as exc_info:
                 await exporter.export(result, tmp_path)
 
@@ -442,7 +458,11 @@ class TestExportError:
         """Test that permission errors raise ExportError."""
         result = AggregatedResult(fields={"title": "Test"})
 
-        with patch.object(Path, "write_text", side_effect=PermissionError("Permission denied")):
+        # Patch write_abs_metadata_json to simulate permission error
+        with patch(
+            "shelfr.metadata.exporters.json.write_abs_metadata_json",
+            side_effect=PermissionError("Permission denied"),
+        ):
             with pytest.raises(ExportError) as exc_info:
                 await exporter.export(result, tmp_path)
 

@@ -5,16 +5,18 @@ This exporter converts aggregated metadata to the ABS metadata.json format,
 which is read by Audiobookshelf during library scans.
 
 The output matches the AbsMetadataJson schema in schemas/abs_metadata.py.
+All writes go through write_abs_metadata_json() to enforce title validation.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from shelfr.abs.metadata_builder import write_abs_metadata_json
 from shelfr.exceptions import ExportError
+from shelfr.schemas.abs_metadata import AbsChapter, AbsMetadataJson
 
 if TYPE_CHECKING:
     from shelfr.metadata.aggregator import AggregatedResult
@@ -48,132 +50,132 @@ class JsonExporter:
     file_extension: str = ".json"
     description: str = "Audiobookshelf metadata.json sidecar"
 
-    async def export(self, result: AggregatedResult, output_dir: Path) -> Path:
+    async def export(
+        self,
+        result: AggregatedResult,
+        output_dir: Path,
+        *,
+        strict: bool = True,
+    ) -> Path:
         """Export aggregated metadata to metadata.json.
+
+        Uses write_abs_metadata_json() as the single write gate to ensure
+        consistent validation across all export paths.
 
         Args:
             result: Aggregated metadata from MetadataAggregator
             output_dir: Directory to write metadata.json
+            strict: If True (default), require non-empty title.
+                Set to False only for debug/partial workflows.
 
         Returns:
             Path to the written file
 
         Raises:
             ExportError: If file write fails (permission denied, disk full, etc.)
-
-        Note:
-            Uses synchronous file write (Path.write_text) which is acceptable
-            for small metadata files. For latency-sensitive scenarios with
-            large files, consider using asyncio.to_thread().
+            ValueError: If strict=True and title is missing/empty
         """
-        output_path = output_dir / "metadata.json"
+        # Convert aggregated fields to AbsMetadataJson model
+        abs_model = self._convert_to_abs_model(result)
 
-        # Convert aggregated fields to ABS format
-        abs_data = self._convert_to_abs_format(result)
-
-        # Write with pretty formatting for readability
+        # Write through the validated write gate
         try:
-            output_path.write_text(
-                json.dumps(abs_data, indent=2, ensure_ascii=False) + "\n",
-                encoding="utf-8",
-            )
+            output_path = write_abs_metadata_json(output_dir, abs_model, strict=strict)
         except OSError as e:
             raise ExportError(
                 f"Failed to write metadata.json: {e}",
                 format_name=self.name,
-                output_path=output_path,
+                output_path=output_dir / "metadata.json",
             ) from e
+
+        if output_path is None:
+            # Should not happen without dry_run, but handle gracefully
+            raise ExportError(
+                "write_abs_metadata_json returned None unexpectedly",
+                format_name=self.name,
+                output_path=output_dir / "metadata.json",
+            )
 
         logger.debug("Exported metadata to %s", output_path)
         return output_path
 
-    def _convert_to_abs_format(self, result: AggregatedResult) -> dict[str, Any]:
-        """Convert aggregated result to ABS metadata.json format.
+    def _convert_to_abs_model(self, result: AggregatedResult) -> AbsMetadataJson:
+        """Convert aggregated result to AbsMetadataJson model.
 
         Args:
             result: Aggregated metadata
 
         Returns:
-            Dict matching AbsMetadataJson schema
+            AbsMetadataJson model ready for write_abs_metadata_json()
         """
         fields = result.fields
-        abs_data: dict[str, Any] = {}
 
-        # Required field
+        # Title - pass through as-is, let validation handle missing titles
+        # In strict mode, write_abs_metadata_json() will raise ValueError
+        # In non-strict mode, None/empty title will be written
         title = fields.get("title")
-        if title:
-            abs_data["title"] = title
-        else:
-            # ABS requires title, use placeholder if missing
-            abs_data["title"] = "Unknown"
+        if not title:
             logger.warning("Missing title in aggregated metadata")
 
         # Optional simple fields
-        if subtitle := fields.get("subtitle"):
-            abs_data["subtitle"] = subtitle
-
-        if publisher := fields.get("publisher"):
-            abs_data["publisher"] = publisher
-
-        if description := fields.get("description"):
-            abs_data["description"] = description
-
-        if isbn := fields.get("isbn"):
-            abs_data["isbn"] = isbn
-
-        if language := fields.get("language"):
-            abs_data["language"] = language
+        subtitle = fields.get("subtitle")
+        publisher = fields.get("publisher")
+        description = fields.get("description")
+        isbn = fields.get("isbn")
+        language = fields.get("language")
+        asin = fields.get("asin")
 
         # Boolean fields
-        if fields.get("is_adult"):
-            abs_data["explicit"] = True
+        explicit = bool(fields.get("is_adult"))
 
         # People lists - extract names from Person objects or use strings directly
-        authors = fields.get("authors", [])
-        if authors:
-            abs_data["authors"] = self._extract_names(authors)
-
-        narrators = fields.get("narrators", [])
-        if narrators:
-            abs_data["narrators"] = self._extract_names(narrators)
+        authors = self._extract_names(fields.get("authors", []))
+        narrators = self._extract_names(fields.get("narrators", []))
 
         # Series - format as "Name #Position"
+        series: list[str] = []
         series_name = fields.get("series_name")
         series_position = fields.get("series_position")
         if series_name:
             series_str = series_name
             if series_position:
                 series_str = f"{series_name} #{series_position}"
-            abs_data["series"] = [series_str]
+            series.append(series_str)
 
         # Genres - extract names from Genre objects or use strings directly
-        genres = fields.get("genres", [])
-        if genres:
-            abs_data["genres"] = self._extract_names(genres)
+        genres = self._extract_names(fields.get("genres", []))
 
         # Date fields - ABS uses publishedYear and publishedDate
+        published_year: str | None = None
+        published_date: str | None = None
         release_date = fields.get("release_date")
         if release_date:
-            # Try to extract year
             year = self._extract_year(release_date)
             if year:
-                abs_data["publishedYear"] = str(year)
-            # Also include full date if available
+                published_year = str(year)
             if isinstance(release_date, str) and len(release_date) >= 10:
-                abs_data["publishedDate"] = release_date[:10]
-
-        # ASIN - include if available
-        # Check both the fields dict and result for ASIN
-        asin = fields.get("asin")
-        if asin:
-            abs_data["asin"] = asin
+                published_date = release_date[:10]
 
         # Chapters
-        chapters = fields.get("chapters", [])
-        if chapters:
-            abs_data["chapters"] = self._convert_chapters(chapters)
+        chapters = self._convert_chapters(fields.get("chapters", []))
 
-        return abs_data
+        return AbsMetadataJson(
+            title=title,
+            subtitle=subtitle,
+            authors=authors,  # Empty list is fine, default_factory handles it
+            narrators=narrators,
+            series=series,
+            genres=genres,
+            publisher=publisher,
+            description=description,
+            isbn=isbn,
+            asin=asin,
+            language=language,
+            explicit=explicit,
+            published_year=published_year,
+            published_date=published_date,
+            chapters=chapters,  # Empty list is fine
+        )
 
     def _extract_names(self, items: list[Any]) -> list[str]:
         """Extract names from Person/Genre objects or return strings as-is.
@@ -220,34 +222,42 @@ class JsonExporter:
 
         return None
 
-    def _convert_chapters(self, chapters: list[Any]) -> list[dict[str, Any]]:
-        """Convert chapter data to ABS format.
+    def _convert_chapters(self, chapters: list[Any]) -> list[AbsChapter]:
+        """Convert chapter data to AbsChapter models.
 
         Args:
             chapters: List of Chapter objects or dicts
 
         Returns:
-            List of chapter dicts matching AbsChapter schema
+            List of AbsChapter models
         """
-        abs_chapters = []
+        abs_chapters: list[AbsChapter] = []
         for i, chapter in enumerate(chapters):
             if isinstance(chapter, dict):
+                start_val = chapter.get("start") or chapter.get("start_time") or 0
+                end_val = chapter.get("end") or chapter.get("end_time") or 0
                 abs_chapters.append(
-                    {
-                        "id": chapter.get("id", i),
-                        "start": chapter.get("start", chapter.get("start_time", 0)),
-                        "end": chapter.get("end", chapter.get("end_time", 0)),
-                        "title": chapter.get("title", f"Chapter {i + 1}"),
-                    }
+                    AbsChapter(
+                        id=chapter.get("id", i),
+                        start=float(start_val),
+                        end=float(end_val),
+                        title=chapter.get("title", f"Chapter {i + 1}"),
+                    )
                 )
             elif hasattr(chapter, "title"):
                 # Chapter dataclass or similar
+                start_val = getattr(chapter, "start_time", None)
+                if start_val is None:
+                    start_val = getattr(chapter, "start", 0)
+                end_val = getattr(chapter, "end_time", None)
+                if end_val is None:
+                    end_val = getattr(chapter, "end", 0)
                 abs_chapters.append(
-                    {
-                        "id": getattr(chapter, "id", i),
-                        "start": getattr(chapter, "start_time", getattr(chapter, "start", 0)),
-                        "end": getattr(chapter, "end_time", getattr(chapter, "end", 0)),
-                        "title": chapter.title,
-                    }
+                    AbsChapter(
+                        id=getattr(chapter, "id", i),
+                        start=float(start_val or 0),
+                        end=float(end_val or 0),
+                        title=chapter.title,
+                    )
                 )
         return abs_chapters

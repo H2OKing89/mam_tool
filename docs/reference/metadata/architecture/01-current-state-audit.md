@@ -72,8 +72,16 @@ class AbsMetadataJson(BaseModel):
     published_year: str | int | None = Field(default=None, validation_alias="publishedYear")
     chapters: list[AbsChapter] = Field(default_factory=list)
 
-# For writing, use validate_abs_metadata_for_write() to ensure title is present
+# Read paths: title optional (permissive, handles incomplete real-world files)
+# Write paths: title REQUIRED (enforced by validate_abs_metadata_for_write())
 ```
+
+**Write path enforcement:**
+
+- **`write_abs_metadata_json()`** is the single canonical write gate
+- **`strict=True` (default):** calls `validate_abs_metadata_for_write()`, raises `ValueError` if title is missing/empty/whitespace
+- **`strict=False`:** escape hatch for debug dumps or partial scrape workflows
+- **`JsonExporter.export()`** uses `write_abs_metadata_json(strict=True)` by default
 
 **~~ABS Compat Schema (DUPLICATE, should die): `abs/rename.py` → `AbsMetadataSchema`~~**
 
@@ -135,9 +143,9 @@ These are duplicated *only* because importing the canonical types inside `schema
 
 #### Why the duplication exists (in plain English)
 
-* `schemas/audnex.py` is a validation layer (Pydantic schema definitions for raw Audnex API responses).
-* Canonical types live under `shelfr.metadata.schemas.canonical`.
-* Importing canonical types from within `schemas/audnex.py` sounds harmless… until Python realizes importing `shelfr.metadata.schemas.canonical` implicitly executes `shelfr.metadata.__init__`, which eagerly imports the aggregator/providers, which import the Audnex client, which imports `schemas.audnex` again.
+- `schemas/audnex.py` is a validation layer (Pydantic schema definitions for raw Audnex API responses).
+- Canonical types live under `shelfr.metadata.schemas.canonical`.
+- Importing canonical types from within `schemas/audnex.py` sounds harmless… until Python realizes importing `shelfr.metadata.schemas.canonical` implicitly executes `shelfr.metadata.__init__`, which eagerly imports the aggregator/providers, which import the Audnex client, which imports `schemas.audnex` again.
 
 At that point Python is holding two open doors in a hallway and tries to walk through both at once. The universe collapses into a singularity. (A.k.a. "partially initialized module" error.)
 
@@ -217,9 +225,9 @@ This is why `schemas/audnex.py` cannot safely import canonical types right now.
 
 This duplication is **not** a conceptual necessity. It's a practical side-effect of:
 
-* eager imports in `metadata/__init__.py` (package initialization pulls in aggregator/providers)
-* "from canonical import …" being evaluated at import-time in a schema module
-* the Audnex client importing validators from the schema module
+- eager imports in `metadata/__init__.py` (package initialization pulls in aggregator/providers)
+- "from canonical import …" being evaluated at import-time in a schema module
+- the Audnex client importing validators from the schema module
 
 With a refactor of import structure (or lazy import boundaries), this can be removed cleanly.
 
@@ -229,15 +237,15 @@ With a refactor of import structure (or lazy import boundaries), this can be rem
 
 **Workaround:** Keep lightweight Audnex boundary models inside `schemas/audnex.py`:
 
-* `AudnexAuthor`, `AudnexSeries`, `AudnexGenre` remain "API shapes"
-* Canonical `Person/Series/Genre` remain "internal truth"
-* Mapping happens after validation (provider boundary), not inside schema definitions
+- `AudnexAuthor`, `AudnexSeries`, `AudnexGenre` remain "API shapes"
+- Canonical `Person/Series/Genre` remain "internal truth"
+- Mapping happens after validation (provider boundary), not inside schema definitions
 
 **Why this is reasonable today:**
 
-* The duplication is tiny (a few small models)
-* It isolates API parsing from internal domain models (a good boundary anyway)
-* It avoids import-order landmines while the module layout is still in flux
+- The duplication is tiny (a few small models)
+- It isolates API parsing from internal domain models (a good boundary anyway)
+- It avoids import-order landmines while the module layout is still in flux
 
 ---
 
@@ -245,9 +253,9 @@ With a refactor of import structure (or lazy import boundaries), this can be rem
 
 **Use canonical `Person` / `Series` everywhere beyond the raw Audnex parsing boundary.**
 
-* ✅ Validation layer: `schemas/audnex.py` types (`AudnexAuthor`, `AudnexSeries`)
-* ✅ Provider layer: converts to canonical (`Person`, `Series`)
-* ✅ Everything else (exporters, cleaning, pipeline, aggregators): canonical only
+- ✅ Validation layer: `schemas/audnex.py` types (`AudnexAuthor`, `AudnexSeries`)
+- ✅ Provider layer: converts to canonical (`Person`, `Series`)
+- ✅ Everything else (exporters, cleaning, pipeline, aggregators): canonical only
 
 A simple conversion helper keeps the boundary explicit:
 
@@ -281,13 +289,13 @@ Then schemas reference `"Person"` as a string, or use `Annotated` + Pydantic for
 
 **Pros:**
 
-* Minimal disruption
-* Lets internal code type against canonical types without runtime import
+- Minimal disruption
+- Lets internal code type against canonical types without runtime import
 
 **Cons:**
 
-* Doesn't fully unify runtime models unless you redesign the schema layer
-* Pydantic forward refs can be finicky if not resolved in the right module order
+- Doesn't fully unify runtime models unless you redesign the schema layer
+- Pydantic forward refs can be finicky if not resolved in the right module order
 
 ##### Option B) Lazy imports (move imports inside functions) (medium effort, reliable)
 
@@ -297,13 +305,13 @@ Example: `metadata/__init__.py` should not import aggregator/providers eagerly. 
 
 **Pros:**
 
-* Breaks cycle at the root (eager `__init__` behavior)
-* Improves startup time and reduces side effects
+- Breaks cycle at the root (eager `__init__` behavior)
+- Improves startup time and reduces side effects
 
 **Cons:**
 
-* Requires discipline and consistent patterns across the package
-* Needs careful test coverage to avoid surprising import-time behavior changes
+- Requires discipline and consistent patterns across the package
+- Needs careful test coverage to avoid surprising import-time behavior changes
 
 ##### Option C) Split "schemas/types" into a dependency-free module (cleanest long-term)
 
@@ -311,36 +319,36 @@ Create a small `shelfr.metadata.types` (or `shelfr.domain.types`) module that co
 
 Then:
 
-* `schemas/audnex.py` can import from `types` safely
-* canonical metadata can import from `types` safely
-* providers/clients never imported from `types`
+- `schemas/audnex.py` can import from `types` safely
+- canonical metadata can import from `types` safely
+- providers/clients never imported from `types`
 
 **Pros:**
 
-* Canonical win: types become foundational and safe everywhere
-* Very common pattern in larger Python codebases
+- Canonical win: types become foundational and safe everywhere
+- Very common pattern in larger Python codebases
 
 **Cons:**
 
-* Requires moving files and updating imports (but it's a "one-and-done" change)
+- Requires moving files and updating imports (but it's a "one-and-done" change)
 
 ##### Option D) Move `from_audnex()` factories out of canonical schemas (surgical fix)
 
 If `canonical.py` currently imports anything "provider-ish" (directly or indirectly), move those mapping factories into a separate module:
 
-* `canonical.py`: only models
-* `mappers/audnex_to_canonical.py`: conversion logic
-* `providers/audnex.py`: calls mapper
+- `canonical.py`: only models
+- `mappers/audnex_to_canonical.py`: conversion logic
+- `providers/audnex.py`: calls mapper
 
 **Pros:**
 
-* Preserves model purity
-* Removes import pressure from canonical types
+- Preserves model purity
+- Removes import pressure from canonical types
 
 **Cons:**
 
-* Requires adjusting call sites
-* Needs clear ownership of mapping rules (provider vs mapper)
+- Requires adjusting call sites
+- Needs clear ownership of mapping rules (provider vs mapper)
 
 ##### Option E) Provider registration restructuring (bigger refactor)
 
@@ -350,13 +358,13 @@ This is the "architectural" solution if the system is growing into a plugin-like
 
 **Pros:**
 
-* Most scalable
-* Eliminates entire class of import-order problems
+- Most scalable
+- Eliminates entire class of import-order problems
 
 **Cons:**
 
-* Bigger change, needs design time
-* Not worth it unless provider ecosystem expands significantly
+- Bigger change, needs design time
+- Not worth it unless provider ecosystem expands significantly
 
 ---
 
@@ -364,10 +372,10 @@ This is the "architectural" solution if the system is growing into a plugin-like
 
 This duplication can remain until one of these becomes true:
 
-* People keep accidentally using `AudnexAuthor` outside validation/provider boundary
-* A change requires updating both models frequently (maintenance pain)
-* Pydantic serialization/deserialization starts diverging between the two
-* The metadata package's import-time side effects begin causing other cycles
+- People keep accidentally using `AudnexAuthor` outside validation/provider boundary
+- A change requires updating both models frequently (maintenance pain)
+- Pydantic serialization/deserialization starts diverging between the two
+- The metadata package's import-time side effects begin causing other cycles
 
 Until then, documenting the constraint + enforcing the boundary is the pragmatic move.
 
@@ -375,10 +383,10 @@ Until then, documenting the constraint + enforcing the boundary is the pragmatic
 
 #### Bottom line
 
-* The duplication exists because **import-time side effects in `metadata/__init__.py`** pull in providers/clients which depend back on `schemas/audnex.py`.
-* This is a **near-term refactor limitation**, not a fundamental design constraint.
-* **New code should always prefer canonical `Person/Series`**; use `AudnexAuthor/AudnexSeries` only at the raw response validation boundary.
-* There are clear future refactor paths (TYPE_CHECKING, lazy loading, types module split) if/when it becomes worth it.
+- The duplication exists because **import-time side effects in `metadata/__init__.py`** pull in providers/clients which depend back on `schemas/audnex.py`.
+- This is a **near-term refactor limitation**, not a fundamental design constraint.
+- **New code should always prefer canonical `Person/Series`**; use `AudnexAuthor/AudnexSeries` only at the raw response validation boundary.
+- There are clear future refactor paths (TYPE_CHECKING, lazy loading, types module split) if/when it becomes worth it.
 
 ### 2.3 Single Source of Truth (Target State)
 
@@ -403,9 +411,9 @@ Audnex schemas (`AudnexAuthor`, `AudnexSeries`, `AudnexGenre`) remain separate d
 
 **Rule:** Don't add 18 fields to `NormalizedBook` because it's convenient. Keep layers separate:
 
-* Validation = external API shapes
-* Canonical = internal truth
-* Pipeline = operational state
+- Validation = external API shapes
+- Canonical = internal truth
+- Pipeline = operational state
 
 ### 2.5 NormalizedBook vs CanonicalMetadata (Boundary)
 
@@ -485,10 +493,10 @@ if os.getenv("SHELFR_WARN_LEGACY_IMPORTS") == "1":
 
 **This lets you:**
 
-* Move code out of `metadata.py` incrementally
-* Keep `workflow.py`, `abs/importer.py`, and tests working
-* Add deprecation warnings in phases, not one big bang
-* Avoid breaking test suites that treat warnings as errors
+- Move code out of `metadata.py` incrementally
+- Keep `workflow.py`, `abs/importer.py`, and tests working
+- Add deprecation warnings in phases, not one big bang
+- Avoid breaking test suites that treat warnings as errors
 
 ---
 
@@ -559,16 +567,16 @@ When multiple providers have data, use deterministic precedence (prevents "whoev
 
 ### 5.1 Who imports `metadata.py`?
 
-* `tests/test_metadata.py` - heavy usage
-* `tests/test_bbcode_signature.py` - `_convert_newlines_for_mam`
-* `tests/test_series_resolution.py` - `build_mam_json`
-* `workflow.py` - main pipeline
-* `abs/importer.py` - enrichment
+- `tests/test_metadata.py` - heavy usage
+- `tests/test_bbcode_signature.py` - `_convert_newlines_for_mam`
+- `tests/test_series_resolution.py` - `build_mam_json`
+- `workflow.py` - main pipeline
+- `abs/importer.py` - enrichment
 
 ### 5.2 Who imports `opf/`?
 
-* `abs/importer.py` - `CanonicalMetadata`, `write_opf`
-* `tests/test_opf.py` - comprehensive tests
+- `abs/importer.py` - `CanonicalMetadata`, `write_opf`
+- `tests/test_opf.py` - comprehensive tests
 
 **OPF is cleanly isolated** - good foundation for unified module.
 
