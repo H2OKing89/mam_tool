@@ -34,6 +34,13 @@ from shelfr.utils.naming import (
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "render_bbcode_description",
+    "_convert_newlines_for_mam",
+    "_format_release_date",
+    "_parse_chapters_from_audnex",
+]
+
 
 # =============================================================================
 # BBCode Description Template
@@ -295,7 +302,7 @@ def _convert_newlines_for_mam(text: str) -> str:
     # Pattern to split while keeping delimiters
     parts = re.split(r"(\[pre\]|\[/pre\])", text, flags=re.IGNORECASE)
 
-    result_parts = []
+    result_parts: list[str] = []
     inside_pre = False
 
     for part in parts:

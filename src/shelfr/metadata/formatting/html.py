@@ -7,6 +7,8 @@ from __future__ import annotations
 import html as html_lib
 import re
 
+__all__ = ["html_to_bbcode", "_clean_html"]
+
 
 def html_to_bbcode(text: str) -> str:
     """
