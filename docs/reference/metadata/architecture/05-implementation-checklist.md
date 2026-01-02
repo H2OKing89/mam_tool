@@ -125,18 +125,18 @@
 
 ### Phase 5b: Provider System (core architecture)
 
-- [ ] Create `metadata/providers/__init__.py` + `types.py`:
+- [x] Create `metadata/providers/__init__.py` + `types.py`:
   - `LookupContext`, `ProviderResult`, `FieldName`, `IdType`, `ProviderKind`
-- [ ] Create `metadata/providers/base.py`:
+- [x] Create `metadata/providers/base.py`:
   - `MetadataProvider` protocol
-- [ ] Create `metadata/providers/registry.py`:
+- [x] Create `metadata/providers/registry.py`:
   - `ProviderRegistry` (instance-based, stable ordering)
-- [ ] Create `metadata/providers/audnex.py`:
+- [x] Create `metadata/providers/audnex.py`:
   - `AudnexProvider` (wraps client from Phase 3 in provider interface)
   - Ensure `kind = "network"` and `is_override = False` (required for two-stage fetch)
-- [ ] Create `metadata/providers/mock.py`:
+- [x] Create `metadata/providers/mock.py`:
   - `MockProvider` for testing (needed to test aggregator)
-- [ ] Create `metadata/aggregator.py`:
+- [x] Create `metadata/aggregator.py`:
   - Basic `MetadataAggregator` with deterministic precedence
   - Two-stage fetch (local → network), `_safe_fetch()` error isolation
   - `_safe_fetch()` returns `ProviderResult(success=False, error=...)` on failure (never raises)
@@ -198,8 +198,8 @@
 | Phase 2 | ✅ Complete | Formatting extraction (PR #67) |
 | Phase 3 | ✅ Complete | Audnex client extraction (PR #68) |
 | Phase 4 | ✅ Complete | MAM extraction (categories.py + json_builder.py) |
-| Phase 5a | ⏳ Not Started | Schemas + Cleaning |
-| Phase 5b | ⏳ Not Started | Provider system + Aggregator |
+| Phase 5a | ✅ Complete | Schemas + Cleaning (PR #73) |
+| Phase 5b | ✅ Complete | Provider system + Aggregator |
 | Phase 5c | ⏳ Not Started | Orchestration + JSON exporter |
 | Phase 6 | ⏳ Not Started | OPF move + deprecations |
 | Phase 7 | ⏳ Not Started | Infrastructure (optional) |

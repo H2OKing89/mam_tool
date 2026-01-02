@@ -17,6 +17,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
+# Provider system - pluggable metadata providers
+from shelfr.metadata.aggregator import (
+    AggregatedResult as AggregatedResult,
+)
+from shelfr.metadata.aggregator import (
+    FieldConflict as FieldConflict,
+)
+from shelfr.metadata.aggregator import (
+    MetadataAggregator as MetadataAggregator,
+)
 from shelfr.metadata.audnex import (
     _fetch_audnex_book_region as _fetch_audnex_book_region,
 )
@@ -150,6 +160,36 @@ from shelfr.metadata.mediainfo.extractor import (
 
 # Shared types
 from shelfr.metadata.models import Chapter as Chapter
+from shelfr.metadata.providers import (
+    AudnexProvider as AudnexProvider,
+)
+from shelfr.metadata.providers import (
+    FieldName as FieldName,
+)
+from shelfr.metadata.providers import (
+    IdType as IdType,
+)
+from shelfr.metadata.providers import (
+    LookupContext as LookupContext,
+)
+from shelfr.metadata.providers import (
+    MetadataProvider as MetadataProvider,
+)
+from shelfr.metadata.providers import (
+    MockProvider as MockProvider,
+)
+from shelfr.metadata.providers import (
+    ProviderKind as ProviderKind,
+)
+from shelfr.metadata.providers import (
+    ProviderRegistry as ProviderRegistry,
+)
+from shelfr.metadata.providers import (
+    ProviderResult as ProviderResult,
+)
+from shelfr.metadata.providers import (
+    default_registry as default_registry,
+)
 
 # Canonical schemas - unified metadata types
 from shelfr.metadata.schemas import (
