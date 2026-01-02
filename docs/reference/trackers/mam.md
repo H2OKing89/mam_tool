@@ -24,10 +24,10 @@ MyAnonamouse (MAM) is the primary upload destination. It has **no API upload** �
 
 For each release, shelfr generates:
 
-1. **Torrent file** — via mkbrr (Docker)
-2. **BBCode description** — formatted synopsis, chapter list, technical info
-3. **MAM JSON payload** — form field helpers (category, tags, etc.)
-4. **Validation warnings** — issues that may cause upload rejection
+1. **Torrent file** — via mkbrr (Docker) ✅
+2. **BBCode description** — formatted synopsis, chapter list, technical info ✅
+3. **MAM JSON payload** — form field helpers (category, tags, etc.) ✅ (extraction to `metadata/mam/` in Phase 4)
+4. **Validation warnings** — issues that may cause upload rejection ⏳ (basic validation exists; enhanced in Phase 4)
 
 The user then manually uploads via MAM's web form.
 
@@ -142,15 +142,19 @@ See [BBCode Reference](../mam/BBCODE.md) for full details.
 
 ## Dupe Checking
 
-### Current State
+### Current State (Pre-Phase 4)
 
 Manual — user checks MAM search before uploading.
 
-### Planned Approach
+### Planned Approach (Post-Phase 4)
 
-1. Search MAM by ASIN (if available)
+> **Prerequisite:** ASIN lookup available via Audnex extraction (Phase 3 complete).
+
+1. Search MAM by ASIN (if available from Audnex metadata)
 2. Search by title + author fuzzy match
 3. Return potential dupes with match confidence
+
+**Timeline:** Planned for post-Phase 4 work. Phase 3 Audnex extraction enables ASIN-based lookup.
 
 ### Trumping Policy
 
@@ -160,7 +164,7 @@ MAM allows "trumping" (replacing) existing uploads under certain conditions:
 - Better metadata
 - Fixing errors
 
-Shelfr should warn if a potential trump situation is detected.
+Shelfr should emit a **validation warning** (not an error) if a potential trump situation is detected. This is advisory — the user decides whether to proceed with upload.
 
 ---
 

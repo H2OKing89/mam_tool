@@ -56,7 +56,7 @@ RED has specific title formatting rules:
 Author - Title (Year) [Format]
 ```
 
-This differs from MAM's `Author - Title (Year) [Narrator]` convention.
+This differs from MAM's `Author - Title (Year) [Narrator]` convention (see [MAM naming](mam.md#folder-naming-convention)).
 
 ### Tracker Display Policy
 

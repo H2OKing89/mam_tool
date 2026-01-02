@@ -264,14 +264,8 @@ MAM logic is scattered:
 
 ## Open Questions
 
-1. **Should `ReleaseDraft` be a dataclass or Pydantic model?**
-   - Dataclass: lighter, consistent with `AudiobookRelease`
-   - Pydantic: validation, serialization for caching
+These design decisions are tracked as GitHub issues:
 
-2. **Where does category mapping config live?**
-   - Option A: `config/mam_categories.json` (current)
-   - Option B: `trackers/mam/categories.json` (co-located)
-
-3. **Should trackers share a base class or stay protocol-only?**
-   - Protocol: maximum flexibility, duck typing
-   - Base class: shared validation helpers, less boilerplate
+1. **ReleaseDraft: dataclass vs Pydantic model** — See [#70](https://github.com/H2OKing89/shelfr/issues/70)
+2. **Category mapping config location** — See [#71](https://github.com/H2OKing89/shelfr/issues/71)
+3. **TrackerDestination: Protocol vs base class** — See [#69](https://github.com/H2OKing89/shelfr/issues/69)

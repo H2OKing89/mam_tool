@@ -35,6 +35,8 @@ This separation prevents "MAM assumptions" from leaking into core naming/cleanin
 
 The core pipeline produces a tracker-agnostic `ReleaseDraft`. Each tracker plugin transforms that into its site-specific payload. Trackers MUST NOT reach back into internal modules to recompute names or re-clean metadata.
 
+> **⚠️ Protocol Stability:** This design is foundational for Phase 4 (MAM extraction) and future RED implementation. Changes to the `ReleaseDraft` boundary or `TrackerDestination` protocol may impact Phase 4+ schedules. The tracker plugin interface specification should be locked before Phase 4 begins.
+
 ```text
 Providers → Aggregator → CanonicalMetadata → Cleaning → ReleaseDraft
                                                               │
