@@ -109,10 +109,55 @@ class AudnexAuthor(BaseModel):
     asin: str | None = None
 ```
 
-**Structurally identical** but kept separate due to circular import:
-`schemas/audnex.py` → `metadata/schemas/canonical.py` → `metadata/__init__.py` → providers → `schemas/audnex.py`
+**Structurally identical** but kept separate due to **circular import constraint** (not fundamental, near-term refactor limitation):
 
-`AudnexAuthor` is documented as equivalent to `Person`. Use canonical `Person` for internal processing.
+#### Import Cycle Diagram
+
+```
+schemas/audnex.py
+    ├─ from shelfr.metadata.schemas.canonical import Person
+    │
+metadata/schemas/canonical.py
+    ├─ from shelfr.metadata.audnex.client import fetch_audnex_book  (indirect via metadata/__init__.py)
+    │
+metadata/__init__.py
+    ├─ from shelfr.metadata.aggregator import MetadataAggregator
+    │
+metadata/aggregator.py
+    ├─ from shelfr.metadata.providers.audnex import AudnexProvider
+    │
+metadata/providers/audnex.py
+    ├─ from shelfr.metadata.audnex.client import fetch_audnex_book
+    │
+metadata/audnex/client.py
+    └─ from shelfr.schemas.audnex import validate_audnex_book, validate_audnex_chapters
+           ↑
+    ════════╝ (back to top: circular!)
+```
+
+**Concrete import path:**
+
+1. `abs/rename.py` imports `from shelfr.schemas.audnex import AudnexBook`
+2. `schemas/audnex.py` executes; tries to import `from shelfr.metadata.schemas.canonical import Person`
+3. Python initializes `metadata/__init__.py` (first time accessing `shelfr.metadata`)
+4. `metadata/__init__.py` imports from `metadata.aggregator` (line 21)
+5. `metadata/aggregator.py` imports `MetadataAggregator` which imports providers (line 21)
+6. `metadata/providers/__init__.py` imports `AudnexProvider` (line 16)
+7. `metadata/providers/audnex.py` imports from `metadata.audnex.client` (line 15)
+8. `metadata/audnex/client.py` tries to import from `schemas.audnex` (line 24)
+9. **CYCLE:** `schemas.audnex` is still initializing (blocked at step 2)
+
+**Workaround & Why:**
+
+- `AudnexAuthor`, `AudnexSeries`, `AudnexGenre` must stay in `schemas/audnex.py` to break the cycle
+- They are structurally identical to canonical types but initialization order prevents direct import
+- **This is a near-term refactor limitation**, not fundamental:
+  - Could be resolved by deferring `metadata/__init__.py` imports (use `TYPE_CHECKING` + lazy loading)
+  - Or by moving Audnex providers to `shelfr.metadata.audnex` without back-importing to `metadata/__init__.py`
+  - Not worth the effort now; document as equivalent and use canonical `Person` for new code
+
+**Recommendation:**
+`AudnexAuthor` is documented as equivalent to `Person`. Use canonical `Person` for internal processing. Only use `AudnexAuthor` when parsing raw Audnex API responses directly.
 
 ### 2.3 Series Schema (2 versions)
 
@@ -136,7 +181,9 @@ class AudnexSeries(BaseModel):
     asin: str | None = None
 ```
 
-**Structurally identical** but kept separate due to circular import (same as Person/Author).
+**Structurally identical** but kept separate due to the **same circular import constraint** documented above.
+
+Import cycle prevents direct import of `Series` into `schemas/audnex.py`. The type is duplicated but documented as equivalent.
 
 ### 2.4 Single Source of Truth (Target State)
 
