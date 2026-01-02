@@ -133,7 +133,7 @@ def fetch_audnex_book(
             data = _fetch_audnex_book_region(
                 asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
             )
-        except (CircuitOpenError, Exception) as e:
+        except Exception as e:
             # After retries exhausted, log and return None
             logger.warning(f"Failed to fetch book {asin} (region={region}): {e}")
             return None, None
@@ -359,7 +359,7 @@ def fetch_audnex_chapters(asin: str, region: str | None = None) -> dict[str, Any
             data = _fetch_audnex_chapters_region(
                 asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
             )
-        except (CircuitOpenError, Exception) as e:
+        except Exception as e:
             logger.warning(f"Failed to fetch chapters {asin} (region={region}): {e}")
             return None
 
