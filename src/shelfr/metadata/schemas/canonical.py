@@ -17,9 +17,9 @@ Exporters (OPF, ABS JSON, MAM JSON) map canonical → specific format.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 
 class Person(BaseModel):
@@ -151,7 +151,7 @@ class CanonicalMetadata(BaseModel):
         mode="before",
     )
     @classmethod
-    def coerce_null_to_empty_or_default(cls, v: str | None, info: Any) -> str:
+    def coerce_null_to_empty_or_default(cls, v: str | None, info: ValidationInfo) -> str:
         """Coerce null values from Audnex API to empty string or field default.
 
         Audnex API can return null for these fields, but we want non-optional
@@ -163,7 +163,7 @@ class CanonicalMetadata(BaseModel):
                 "format_type": "unabridged",
                 "language": "english",
             }
-            return defaults.get(info.field_name, "")
+            return defaults.get(info.field_name or "", "")
         return v
 
     @classmethod
