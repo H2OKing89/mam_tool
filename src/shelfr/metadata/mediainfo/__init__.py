@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from .extractor import (
     AudioFormat,
+    _extract_audio_info,
+    _format_chapter_time,
+    _parse_chapters_from_mediainfo,
     detect_audio_format,
     detect_audio_format_from_file,
     run_mediainfo,
@@ -17,6 +20,9 @@ from .extractor import (
 
 __all__ = [
     "AudioFormat",
+    "_extract_audio_info",
+    "_format_chapter_time",
+    "_parse_chapters_from_mediainfo",
     "detect_audio_format",
     "detect_audio_format_from_file",
     "run_mediainfo",

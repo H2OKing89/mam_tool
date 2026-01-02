@@ -29,6 +29,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+__all__ = [
+    "AudioFormat",
+    "detect_audio_format",
+    "detect_audio_format_from_file",
+    "run_mediainfo",
+    "save_mediainfo_json",
+    "_extract_audio_info",
+    "_format_chapter_time",
+    "_parse_chapters_from_mediainfo",
+]
+
 
 # =============================================================================
 # Audio Format Detection

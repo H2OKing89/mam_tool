@@ -17,7 +17,7 @@ from jinja2 import BaseLoader, ChoiceLoader, Environment, FileSystemLoader, Pack
 
 from shelfr.config import get_settings
 from shelfr.metadata.formatting.html import html_to_bbcode
-from shelfr.metadata.mediainfo.extractor import (
+from shelfr.metadata.mediainfo import (
     _extract_audio_info,
     _format_chapter_time,
     _parse_chapters_from_mediainfo,
