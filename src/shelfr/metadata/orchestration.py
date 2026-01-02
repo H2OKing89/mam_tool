@@ -216,6 +216,7 @@ async def export_metadata_async(
         files = await export_metadata_async(result, book_path, formats=["json"])
         print(f"Wrote: {files['json']}")
     """
+    from shelfr.exceptions import ExportError
     from shelfr.metadata.exporters import get_exporter
 
     formats = formats or ["json"]
@@ -231,7 +232,7 @@ async def export_metadata_async(
             logger.debug("Exported %s to %s", format_name, file_path)
         except ValueError as e:
             logger.warning("Unknown export format '%s': %s", format_name, e)
-        except Exception as e:
+        except ExportError as e:
             logger.error("Failed to export %s: %s", format_name, e)
 
     return written

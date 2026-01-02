@@ -21,6 +21,7 @@ import httpx
 
 from shelfr.config import get_settings
 from shelfr.utils.circuit_breaker import CircuitOpenError, audnex_breaker
+from shelfr.utils.retry import NETWORK_EXCEPTIONS, retry_with_backoff
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,12 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+@retry_with_backoff(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exceptions=NETWORK_EXCEPTIONS,
+)
 def _fetch_audnex_book_region(
     asin: str,
     region: str,
@@ -255,6 +262,12 @@ def fetch_audnex_author(asin: str, region: str | None = None) -> dict[str, Any] 
 # =============================================================================
 
 
+@retry_with_backoff(
+    max_retries=3,
+    base_delay=1.0,
+    max_delay=10.0,
+    exceptions=NETWORK_EXCEPTIONS,
+)
 def _fetch_audnex_chapters_region(
     asin: str,
     region: str,
