@@ -226,6 +226,8 @@ class TestJsonExporter:
         content = json.loads(output_file.read_text())
 
         assert content["explicit"] is True
+        # Tags should include "Adult" for adult content (matches OPF pattern)
+        assert "Adult" in content.get("tags", [])
 
     @pytest.mark.asyncio
     async def test_export_chapters(self, exporter: JsonExporter, tmp_path: Path) -> None:
@@ -267,9 +269,9 @@ class TestJsonExporter:
         output_file = await exporter.export(result, tmp_path, strict=False)
         content = json.loads(output_file.read_text())
 
-        # Title is None/missing since we don't provide one and strict=False
-        # The JSON may have title as null or not present
-        assert "authors" in content or content.get("title") is None or "title" not in content
+        # With strict=False and no title provided, title should be absent from JSON
+        # (exclude_none=True in model_dump removes None fields)
+        assert "title" not in content, "Expected title to be omitted when missing and strict=False"
 
     @pytest.mark.asyncio
     async def test_export_genres(self, exporter: JsonExporter, tmp_path: Path) -> None:

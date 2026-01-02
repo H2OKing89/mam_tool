@@ -62,6 +62,15 @@ class TestValidateAbsMetadataForWrite:
         with pytest.raises(ValueError, match="non-empty title"):
             validate_abs_metadata_for_write(data)
 
+    def test_dict_with_invalid_type_raises_pydantic_error(self) -> None:
+        """Dict with invalid types raises pydantic.ValidationError."""
+        from pydantic import ValidationError
+
+        # title should be str, not int - triggers Pydantic validation
+        data = {"title": 123, "authors": "not a list"}
+        with pytest.raises(ValidationError):
+            validate_abs_metadata_for_write(data)
+
 
 class TestWriteAbsMetadataJsonStrict:
     """Tests for write_abs_metadata_json() strict mode enforcement."""
@@ -143,6 +152,19 @@ class TestWriteAbsMetadataJsonStrict:
         # You want to know your metadata is invalid even in dry-run mode
         with pytest.raises(ValueError, match="non-empty title"):
             write_abs_metadata_json(tmp_path, model, dry_run=True, strict=True)
+
+    def test_pydantic_validation_error_propagates(self, tmp_path: Path) -> None:
+        """Pydantic ValidationError propagates when dict has invalid types."""
+        from pydantic import ValidationError
+
+        # Pass dict with invalid types directly to validate_abs_metadata_for_write
+        # (write_abs_metadata_json expects AbsMetadataJson, not dict)
+        data = {"title": 123}  # title should be str
+        with pytest.raises(ValidationError):
+            validate_abs_metadata_for_write(data)
+
+        # File should not be created
+        assert not (tmp_path / "metadata.json").exists()
 
 
 class TestJsonExporterUsesStrictWrite:

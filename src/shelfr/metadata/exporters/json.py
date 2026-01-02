@@ -145,6 +145,11 @@ class JsonExporter:
         # Genres - extract names from Genre objects or use strings directly
         genres = self._extract_names(fields.get("genres", []))
 
+        # Tags - populate with Adult flag (matches OPF pattern)
+        tags: list[str] = []
+        if fields.get("is_adult"):
+            tags.append("Adult")
+
         # Date fields - ABS uses publishedYear and publishedDate
         published_year: str | None = None
         published_date: str | None = None
@@ -166,6 +171,7 @@ class JsonExporter:
             narrators=narrators,
             series=series,
             genres=genres,
+            tags=tags,
             publisher=publisher,
             description=description,
             isbn=isbn,
