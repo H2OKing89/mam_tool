@@ -113,13 +113,15 @@
 
 > **Guardrail:** Phase 5a introduces schemas + cleaning facade only; no pipeline conversion yet.
 
-- [ ] Create `metadata/schemas/__init__.py` + `canonical.py`:
+- [x] Create `metadata/schemas/__init__.py` + `canonical.py`:
   - `Person`, `Series`, `Genre`, `CanonicalMetadata` (ALL in one file)
   - **Design rationale:** Keep schema definitions co-located for easier updates and unified versioning (Phase 7). Circular imports are prevented by having aggregator import from schemas (not vice versa).
   - **Do NOT split into person.py/series.py/genre.py yet** (avoid circular import risk)
-- [ ] Create `metadata/cleaning.py` as **facade over existing functions**:
+- [x] Create `metadata/cleaning.py` as **facade over existing functions**:
   - Re-export from `shelfr.utils.naming`: `filter_title`, `filter_subtitle`, etc.
   - **Don't duplicate** — wrap existing functions
+- [x] Update `metadata/__init__.py` to re-export schemas and cleaning functions
+- [x] Add tests for CanonicalMetadata schema and cleaning facade
 
 ### Phase 5b: Provider System (core architecture)
 
