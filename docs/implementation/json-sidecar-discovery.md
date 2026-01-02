@@ -87,7 +87,7 @@ getAbsMetadataJson() {
 ### 2.3 Field Analysis
 
 | Field | Type | Source | Notes |
-|-------|------|--------|-------|
+| ------- | ------ | -------- | ------- |
 | `tags` | `string[]` | Audnex genres | **Merged with genres** (see Decision 3.6) |
 | `chapters` | `object[]` | Audio files | **Omitted** - ABS generates from audio |
 | `title` | `string` | Audnex `title` | Required, **cleaned** |
@@ -139,7 +139,7 @@ class AbsMetadataJson(BaseModel):
 ### 2.5 Key Differences from OPF
 
 | Aspect | OPF | JSON |
-|--------|-----|------|
+| ------- | ------ | -------- |
 | Format | XML (Dublin Core) | JSON |
 | Series format | `<calibre:series>` + `<calibre:series_index>` | `["Name #N"]` array |
 | Description | Plain text (HTML stripped) | HTML preserved |
@@ -272,7 +272,7 @@ src/shelfr/metadata/
 ### 4.1 Shared Components
 
 | File | Purpose |
-|------|---------|
+| ------- | --------- |
 | `canonical.py` | `CanonicalMetadata` - internal schema from Audnex API |
 | `cleaning.py` | `clean_title()`, `clean_subtitle()`, `clean_name()`, `clean_authors()`, `clean_narrators()` |
 | `helpers.py` | `format_series_string()`, `language_to_iso()`, `language_to_name()`, `merge_genres_tags()` |
@@ -310,7 +310,7 @@ write_sidecars(meta, Path("/audiobooks/MyBook"), opf=True, json=True)
 Current `src/shelfr/opf/` will be refactored:
 
 | Current Location | New Location |
-|-----------------|--------------|
+| ----------------- | -------------- |
 | `opf/__init__.py` | `metadata/__init__.py` + `metadata/opf/__init__.py` |
 | `opf/schemas.py` (CanonicalMetadata) | `metadata/canonical.py` |
 | `opf/schemas.py` (OPFMetadata) | `metadata/opf/schemas.py` |
@@ -425,7 +425,7 @@ Given Audnex response for ASIN `1774247291`:
 ## 7. Decisions Summary
 
 | Question | Decision |
-|----------|----------|
+| -------- | -------- |
 | Merge `tags` and `genres`? | ✅ Yes - same list for both fields |
 | Clean subtitle? | ✅ Yes - remove redundant series/book info |
 | Clean title/authors/narrators? | ✅ Yes - normalize all text fields |
@@ -438,9 +438,9 @@ Given Audnex response for ASIN `1774247291`:
 
 ## 8. References
 
-- ABS Source: [`server/models/Book.js#getAbsMetadataJson()`](https://github.com/advplyr/audiobookshelf/blob/main/server/models/Book.js#L337)
-- ABS Scanner: [`server/scanner/AbsMetadataFileScanner.js`](https://github.com/advplyr/audiobookshelf/blob/main/server/scanner/AbsMetadataFileScanner.js)
-- ABS Generator: [`server/utils/generators/abmetadataGenerator.js`](https://github.com/advplyr/audiobookshelf/blob/main/server/utils/generators/abmetadataGenerator.js)
+- ABS Source: [`server/models/Book.js#getAbsMetadataJson()`](https://github.com/advplyr/audiobookshelf/blob/master/server/models/Book.js#L337)
+- ABS Scanner: [`server/scanner/AbsMetadataFileScanner.js`](http://github.com/advplyr/audiobookshelf/blob/master/server/scanner/AbsMetadataFileScanner.js)
+- ABS Generator: [`server/utils/generators/abmetadataGenerator.js`](https://github.com/advplyr/audiobookshelf/blob/master/server/utils/generators/abmetadataGenerator.js)
 - Current OPF Module: `src/shelfr/metadata/opf/` (refactored)
 - ABS Metadata Schema: `src/shelfr/schemas/abs_metadata.py#AbsMetadataJson`
 - Sample JSON files: `samples/abs_metadata/json_samples/`

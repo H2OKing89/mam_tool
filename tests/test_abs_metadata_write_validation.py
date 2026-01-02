@@ -153,17 +153,26 @@ class TestWriteAbsMetadataJsonStrict:
         with pytest.raises(ValueError, match="non-empty title"):
             write_abs_metadata_json(tmp_path, model, dry_run=True, strict=True)
 
-    def test_pydantic_validation_error_propagates(self, tmp_path: Path) -> None:
+    def test_pydantic_validation_error_propagates(self) -> None:
         """Pydantic ValidationError propagates when dict has invalid types."""
         from pydantic import ValidationError
 
         # Pass dict with invalid types directly to validate_abs_metadata_for_write
-        # (write_abs_metadata_json expects AbsMetadataJson, not dict)
+        # (validate_abs_metadata_for_write doesn't do file I/O)
         data = {"title": 123}  # title should be str
         with pytest.raises(ValidationError):
             validate_abs_metadata_for_write(data)
 
-        # File should not be created
+    def test_pydantic_validation_error_prevents_write(self, tmp_path: Path) -> None:
+        """End-to-end: invalid dict types prevent file creation."""
+        from pydantic import ValidationError
+
+        # Build AbsMetadataJson from invalid dict - should fail at construction
+        data = {"title": 123}  # title should be str
+        with pytest.raises(ValidationError):
+            AbsMetadataJson(**data)
+
+        # File should not be created (construction failed before write)
         assert not (tmp_path / "metadata.json").exists()
 
 
@@ -209,6 +218,8 @@ class TestJsonExporterUsesStrictWrite:
     @pytest.mark.asyncio
     async def test_export_strict_false_allows_missing_title(self, tmp_path: Path) -> None:
         """JsonExporter.export(strict=False) allows missing title."""
+        import json
+
         from shelfr.metadata.aggregator import AggregatedResult
         from shelfr.metadata.exporters.json import JsonExporter
 
@@ -222,4 +233,8 @@ class TestJsonExporterUsesStrictWrite:
         output_path = await exporter.export(result, tmp_path, strict=False)
 
         assert output_path.exists()
-        # File is written (title will be null/missing in JSON)
+
+        # Verify JSON content: title absent or null, authors present
+        content = json.loads(output_path.read_text())
+        assert content.get("title") is None, "title should be absent or null"
+        assert content.get("authors") == ["Test Author"], "authors should be preserved"
