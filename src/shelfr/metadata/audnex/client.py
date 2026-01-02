@@ -18,8 +18,10 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import ValidationError
 
 from shelfr.config import get_settings
+from shelfr.schemas.audnex import validate_audnex_book, validate_audnex_chapters
 from shelfr.utils.circuit_breaker import CircuitOpenError, audnex_breaker
 from shelfr.utils.retry import NETWORK_EXCEPTIONS, retry_with_backoff
 
@@ -35,7 +37,7 @@ logger = logging.getLogger(__name__)
     max_retries=3,
     base_delay=1.0,
     max_delay=10.0,
-    exceptions=NETWORK_EXCEPTIONS,
+    retry_exceptions=NETWORK_EXCEPTIONS,
 )
 def _fetch_audnex_book_region(
     asin: str,
@@ -97,10 +99,8 @@ def _fetch_audnex_book_region(
 
         # Validate response structure (warns but doesn't fail)
         try:
-            from shelfr.schemas.audnex import validate_audnex_book
-
             validate_audnex_book(data)
-        except Exception as validation_error:
+        except ValidationError as validation_error:
             logger.warning(
                 f"Audnex book response validation warning for {asin}: {validation_error}"
             )
@@ -134,7 +134,8 @@ def fetch_audnex_book(
                 asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
             )
         except Exception as e:
-            # After retries exhausted, log and return None
+            # Handles failures after retries exhausted or immediate exceptions
+            # (e.g., CircuitOpenError bypasses retry and propagates directly)
             logger.warning(f"Failed to fetch book {asin} (region={region}): {e}")
             return None, None
 
@@ -265,7 +266,7 @@ def fetch_audnex_author(asin: str, region: str | None = None) -> dict[str, Any] 
     max_retries=3,
     base_delay=1.0,
     max_delay=10.0,
-    exceptions=NETWORK_EXCEPTIONS,
+    retry_exceptions=NETWORK_EXCEPTIONS,
 )
 def _fetch_audnex_chapters_region(
     asin: str,
@@ -326,8 +327,6 @@ def _fetch_audnex_chapters_region(
 
         # Validate response structure (warns but doesn't fail)
         try:
-            from shelfr.schemas.audnex import validate_audnex_chapters
-
             validate_audnex_chapters(data)
         except Exception as validation_error:
             logger.warning(
@@ -360,6 +359,8 @@ def fetch_audnex_chapters(asin: str, region: str | None = None) -> dict[str, Any
                 asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
             )
         except Exception as e:
+            # Handles failures after retries exhausted or immediate exceptions
+            # (e.g., CircuitOpenError bypasses retry and propagates directly)
             logger.warning(f"Failed to fetch chapters {asin} (region={region}): {e}")
             return None
 
