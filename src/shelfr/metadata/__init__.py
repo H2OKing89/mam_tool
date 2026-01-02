@@ -38,6 +38,32 @@ from shelfr.metadata.audnex import (
     save_audnex_json as save_audnex_json,
 )
 
+# Cleaning facade - re-exports from utils.naming
+from shelfr.metadata.cleaning import (
+    filter_author as filter_author,
+)
+from shelfr.metadata.cleaning import (
+    filter_authors as filter_authors,
+)
+from shelfr.metadata.cleaning import (
+    filter_series as filter_series,
+)
+from shelfr.metadata.cleaning import (
+    filter_subtitle as filter_subtitle,
+)
+from shelfr.metadata.cleaning import (
+    filter_title as filter_title,
+)
+from shelfr.metadata.cleaning import (
+    normalize_audnex_book as normalize_audnex_book,
+)
+from shelfr.metadata.cleaning import (
+    resolve_series as resolve_series,
+)
+from shelfr.metadata.cleaning import (
+    transliterate_text as transliterate_text,
+)
+
 # Formatting - BBCode and HTML conversion
 from shelfr.metadata.formatting import (
     render_bbcode_description as render_bbcode_description,
@@ -124,6 +150,20 @@ from shelfr.metadata.mediainfo.extractor import (
 
 # Shared types
 from shelfr.metadata.models import Chapter as Chapter
+
+# Canonical schemas - unified metadata types
+from shelfr.metadata.schemas import (
+    CanonicalMetadata as CanonicalMetadata,
+)
+from shelfr.metadata.schemas import (
+    Genre as Genre,
+)
+from shelfr.metadata.schemas import (
+    Person as Person,
+)
+from shelfr.metadata.schemas import (
+    Series as Series,
+)
 
 # Backward compatibility alias (internal code used underscore prefix)
 _html_to_bbcode = html_to_bbcode

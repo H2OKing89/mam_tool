@@ -1289,7 +1289,13 @@ class TestSaveJson:
             output_path = Path(tmpdir) / "audnex.json"
             data = {"asin": "B09TEST123", "title": "Test"}
 
-            save_audnex_json(data, output_path)
+            # Mock settings for permission fixing
+            mock_settings = MagicMock()
+            mock_settings.target_uid = 99
+            mock_settings.target_gid = 100
+
+            with patch("shelfr.metadata.audnex.client.get_settings", return_value=mock_settings):
+                save_audnex_json(data, output_path)
 
             assert output_path.exists()
             import json
@@ -2212,3 +2218,144 @@ class TestFormatReleaseDate:
 
         result = _format_release_date("")
         assert result == ""
+
+
+class TestCanonicalMetadataSchema:
+    """Tests for CanonicalMetadata schema in metadata/schemas/."""
+
+    def test_create_from_minimal_data(self):
+        """Can create with just required fields."""
+        from shelfr.metadata.schemas import CanonicalMetadata
+
+        meta = CanonicalMetadata(asin="B0TEST1234", title="Test Book")
+        assert meta.asin == "B0TEST1234"
+        assert meta.title == "Test Book"
+        assert meta.authors == []
+        assert meta.narrators == []
+
+    def test_create_with_people(self):
+        """Can create with Person objects."""
+        from shelfr.metadata.schemas import CanonicalMetadata, Person
+
+        meta = CanonicalMetadata(
+            asin="B0TEST1234",
+            title="Test Book",
+            authors=[Person(name="John Author", asin="A0AUTHOR12")],
+            narrators=[Person(name="Jane Narrator")],
+        )
+        assert len(meta.authors) == 1
+        assert meta.authors[0].name == "John Author"
+        assert meta.authors[0].asin == "A0AUTHOR12"
+        assert meta.primary_author == "John Author"
+        assert meta.primary_narrator == "Jane Narrator"
+
+    def test_create_with_series(self):
+        """Can create with Series objects."""
+        from shelfr.metadata.schemas import CanonicalMetadata, Series
+
+        meta = CanonicalMetadata(
+            asin="B0TEST1234",
+            title="Test Book",
+            series_primary=Series(name="Test Series", position="1"),
+            series_secondary=Series(name="Universe Series", position="5"),
+        )
+        assert meta.series_primary is not None
+        assert meta.series_primary.name == "Test Series"
+        assert meta.series_primary.position == "1"
+        assert len(meta.all_series) == 2
+
+    def test_series_position_normalized(self):
+        """Series position should be normalized to string."""
+        from shelfr.metadata.schemas import Series
+
+        series = Series(name="Test", position=1)  # int input
+        assert series.position == "1"
+
+        series2 = Series(name="Test", position=1.5)  # float input
+        assert series2.position == "1.5"
+
+    def test_from_audnex_data(self):
+        """Can create from Audnex-style dict."""
+        from shelfr.metadata.schemas import CanonicalMetadata
+
+        audnex_data = {
+            "asin": "B0TEST1234",
+            "title": "Test Book",
+            "subtitle": "A Subtitle",
+            "authors": [{"name": "John Author", "asin": "A0AUTHOR12"}],
+            "seriesPrimary": {"name": "Test Series", "position": "1"},
+            "releaseDate": "2024-01-15",
+            "formatType": "unabridged",
+        }
+        meta = CanonicalMetadata.from_audnex(audnex_data)
+        assert meta.asin == "B0TEST1234"
+        assert meta.subtitle == "A Subtitle"
+        assert meta.authors[0].name == "John Author"
+        assert meta.series_primary is not None
+        assert meta.series_primary.name == "Test Series"
+        assert meta.release_year == 2024
+
+    def test_release_date_iso(self):
+        """release_date_iso property returns YYYY-MM-DD."""
+        from shelfr.metadata.schemas import CanonicalMetadata
+
+        meta = CanonicalMetadata(
+            asin="B0TEST1234",
+            title="Test",
+            release_date="2024-01-15T00:00:00Z",
+        )
+        assert meta.release_date_iso == "2024-01-15"
+
+    def test_get_all_genres_deduped(self):
+        """get_all_genres returns deduplicated list."""
+        from shelfr.metadata.schemas import CanonicalMetadata, Genre
+
+        meta = CanonicalMetadata(
+            asin="B0TEST1234",
+            title="Test",
+            genres=[
+                Genre(name="Fantasy"),
+                Genre(name="Science Fiction"),
+                Genre(name="Fantasy"),  # Duplicate
+            ],
+        )
+        genres = meta.get_all_genres()
+        assert genres == ["Fantasy", "Science Fiction"]
+
+
+class TestCleaningFacade:
+    """Tests for metadata/cleaning.py facade."""
+
+    def test_filter_title_reexported(self):
+        """filter_title is accessible via cleaning facade."""
+        from shelfr.metadata.cleaning import filter_title
+
+        # Basic test - just verify function works
+        result = filter_title("Test Title")
+        assert result == "Test Title"
+
+    def test_resolve_series_reexported(self):
+        """resolve_series is accessible via cleaning facade."""
+        from shelfr.metadata.cleaning import resolve_series
+
+        # Call with empty data to verify function accessible
+        result = resolve_series(audnex_data={}, libation_path=None, title="Test")
+        # Returns None when no series found
+        assert result is None
+
+    def test_all_exports_available(self):
+        """All expected functions are exported from cleaning."""
+        from shelfr.metadata import cleaning
+
+        expected_exports = [
+            "filter_author",
+            "filter_authors",
+            "filter_series",
+            "filter_subtitle",
+            "filter_title",
+            "normalize_audnex_book",
+            "resolve_series",
+            "transliterate_text",
+        ]
+        for name in expected_exports:
+            assert hasattr(cleaning, name), f"Missing export: {name}"
