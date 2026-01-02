@@ -20,6 +20,8 @@ IdType = Literal["asin", "isbn", "goodreads_id", "hardcover_id"]
 # All canonical metadata fields - typed literal for safety
 # Note: Consider migrating to Enum later for runtime validation/iteration
 FieldName = Literal[
+    # Identifiers
+    "asin",
     # Book metadata
     "title",
     "subtitle",

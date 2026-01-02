@@ -74,6 +74,20 @@ from shelfr.metadata.cleaning import (
     transliterate_text as transliterate_text,
 )
 
+# Exporters - convert aggregated metadata to output formats
+from shelfr.metadata.exporters import (
+    JsonExporter as JsonExporter,
+)
+from shelfr.metadata.exporters import (
+    MetadataExporter as MetadataExporter,
+)
+from shelfr.metadata.exporters import (
+    get_exporter as get_exporter,
+)
+from shelfr.metadata.exporters import (
+    list_exporters as list_exporters,
+)
+
 # Formatting - BBCode and HTML conversion
 from shelfr.metadata.formatting import (
     render_bbcode_description as render_bbcode_description,
@@ -160,6 +174,23 @@ from shelfr.metadata.mediainfo.extractor import (
 
 # Shared types
 from shelfr.metadata.models import Chapter as Chapter
+
+# Orchestration - high-level fetch and export functions
+from shelfr.metadata.orchestration import (
+    export_metadata_async as export_metadata_async,
+)
+from shelfr.metadata.orchestration import (
+    fetch_all_metadata_legacy as fetch_all_metadata_legacy,
+)
+from shelfr.metadata.orchestration import (
+    fetch_metadata_async as fetch_metadata_async,
+)
+from shelfr.metadata.orchestration import (
+    fetch_metadata_legacy as fetch_metadata_legacy,
+)
+from shelfr.metadata.orchestration import (
+    save_metadata_files_legacy as save_metadata_files_legacy,
+)
 from shelfr.metadata.providers import (
     AudnexProvider as AudnexProvider,
 )
@@ -212,7 +243,7 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Combined Operations
+# Combined Operations (Delegate to orchestration.py)
 # =============================================================================
 
 
@@ -230,19 +261,7 @@ def fetch_metadata(
     Returns:
         Tuple of (audnex_data, mediainfo_data, audnex_chapters), any may be None on error.
     """
-    audnex_data = None
-    mediainfo_data = None
-    audnex_chapters = None
-
-    if asin:
-        audnex_data, _ = fetch_audnex_book(asin)  # Region not needed here
-        # Also fetch chapter data from Audnex (authoritative source)
-        audnex_chapters = fetch_audnex_chapters(asin)
-
-    if m4b_path and m4b_path.exists():
-        mediainfo_data = run_mediainfo(m4b_path)
-
-    return audnex_data, mediainfo_data, audnex_chapters
+    return fetch_metadata_legacy(asin=asin, m4b_path=m4b_path)
 
 
 def save_metadata_files(
@@ -258,13 +277,7 @@ def save_metadata_files(
         audnex_data: Audnex data to save (skipped if None)
         mediainfo_data: MediaInfo data to save (skipped if None)
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    if audnex_data:
-        save_audnex_json(audnex_data, output_dir / "audnex.json")
-
-    if mediainfo_data:
-        save_mediainfo_json(mediainfo_data, output_dir / "mediainfo.json")
+    save_metadata_files_legacy(output_dir, audnex_data=audnex_data, mediainfo_data=mediainfo_data)
 
 
 def fetch_all_metadata(
@@ -289,9 +302,9 @@ def fetch_all_metadata(
     Returns:
         Tuple of (audnex_data, mediainfo_data, audnex_chapters), any may be None on error.
     """
-    audnex_data, mediainfo_data, audnex_chapters = fetch_metadata(asin=asin, m4b_path=m4b_path)
-
-    if save_intermediate and output_dir:
-        save_metadata_files(output_dir, audnex_data=audnex_data, mediainfo_data=mediainfo_data)
-
-    return audnex_data, mediainfo_data, audnex_chapters
+    return fetch_all_metadata_legacy(
+        asin=asin,
+        m4b_path=m4b_path,
+        output_dir=output_dir,
+        save_intermediate=save_intermediate,
+    )

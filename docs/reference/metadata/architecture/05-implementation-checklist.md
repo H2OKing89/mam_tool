@@ -143,14 +143,17 @@
 
 ### Phase 5c: Orchestration + Exporters
 
-- [ ] Create `metadata/orchestration.py`:
+- [x] Create `metadata/orchestration.py`:
   - Keep as **thin facade initially** (wire-through only, no new logic)
-  - `fetch_metadata()`, `fetch_all_metadata()`, `save_metadata_files()`
-- [ ] Create `metadata/exporters/__init__.py` + `base.py`:
+  - `fetch_metadata_legacy()`, `fetch_all_metadata_legacy()`, `save_metadata_files_legacy()`
+  - New async API: `fetch_metadata_async()`, `export_metadata_async()`
+- [x] Create `metadata/exporters/__init__.py` + `base.py`:
   - `MetadataExporter` protocol
-- [ ] Create `metadata/exporters/json.py`:
+  - Registry functions: `get_exporter()`, `list_exporters()`, `register_exporter()`
+- [x] Create `metadata/exporters/json.py`:
   - `JsonExporter` for ABS metadata.json sidecar
-  - Sidecar writing is an exporter responsibility (not separate generator)
+  - Converts aggregated fields to ABS format with proper mappings
+- [x] Add tests for orchestration and exporters (37 tests)
 
 ---
 
@@ -200,7 +203,7 @@
 | Phase 4 | ✅ Complete | MAM extraction (categories.py + json_builder.py) |
 | Phase 5a | ✅ Complete | Schemas + Cleaning (PR #73) |
 | Phase 5b | ✅ Complete | Provider system + Aggregator |
-| Phase 5c | ⏳ Not Started | Orchestration + JSON exporter |
+| Phase 5c | ✅ Complete | Orchestration + JSON exporter (PR #75) |
 | Phase 6 | ⏳ Not Started | OPF move + deprecations |
 | Phase 7 | ⏳ Not Started | Infrastructure (optional) |
 | Future | ⏳ Not Started | As needed |
