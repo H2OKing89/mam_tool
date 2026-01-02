@@ -87,7 +87,7 @@ getAbsMetadataJson() {
 ### 2.3 Field Analysis
 
 | Field | Type | Source | Notes |
-|-------|------|--------|-------|
+| ------- | ------ | -------- | ------- |
 | `tags` | `string[]` | Audnex genres | **Merged with genres** (see Decision 3.6) |
 | `chapters` | `object[]` | Audio files | **Omitted** - ABS generates from audio |
 | `title` | `string` | Audnex `title` | Required, **cleaned** |
@@ -108,18 +108,20 @@ getAbsMetadataJson() {
 
 ### 2.4 Existing Code in Shelfr
 
-**`src/shelfr/abs/rename.py`** already has `AbsMetadataSchema`:
+> **Status (Phase 7):** `AbsMetadataSchema` was removed and consolidated into `AbsMetadataJson` in `schemas/abs_metadata.py`.
+
+**`src/shelfr/schemas/abs_metadata.py`** has `AbsMetadataJson`:
 
 ```python
-class AbsMetadataSchema(BaseModel):
-    title: str | None = None
+class AbsMetadataJson(BaseModel):
+    title: str | None = None  # Optional for reading existing metadata
     subtitle: str | None = None
     authors: list[str] = Field(default_factory=list)
     narrators: list[str] = Field(default_factory=list)
     series: list[str] = Field(default_factory=list)  # ["Series Name #N"]
     genres: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
-    publishedYear: int | str | None = None
+    published_year: str | int | None = Field(default=None, validation_alias="publishedYear")
     publisher: str | None = None
     asin: str | None = None
     isbn: str | None = None
@@ -127,19 +129,17 @@ class AbsMetadataSchema(BaseModel):
     explicit: bool = False
     abridged: bool = False
     description: str | None = None
+    chapters: list[AbsChapter] = Field(default_factory=list)
 
     model_config = {"extra": "ignore"}
 ```
 
-**Missing from existing schema:**
-
-- `chapters` - array of chapter objects (we omit, ABS generates)
-- `publishedDate` - full date string
+**For writing metadata.json**, use `validate_abs_metadata_for_write()` to ensure required fields (title) are present.
 
 ### 2.5 Key Differences from OPF
 
 | Aspect | OPF | JSON |
-|--------|-----|------|
+| ------- | ------ | -------- |
 | Format | XML (Dublin Core) | JSON |
 | Series format | `<calibre:series>` + `<calibre:series_index>` | `["Name #N"]` array |
 | Description | Plain text (HTML stripped) | HTML preserved |
@@ -272,7 +272,7 @@ src/shelfr/metadata/
 ### 4.1 Shared Components
 
 | File | Purpose |
-|------|---------|
+| ------- | --------- |
 | `canonical.py` | `CanonicalMetadata` - internal schema from Audnex API |
 | `cleaning.py` | `clean_title()`, `clean_subtitle()`, `clean_name()`, `clean_authors()`, `clean_narrators()` |
 | `helpers.py` | `format_series_string()`, `language_to_iso()`, `language_to_name()`, `merge_genres_tags()` |
@@ -310,7 +310,7 @@ write_sidecars(meta, Path("/audiobooks/MyBook"), opf=True, json=True)
 Current `src/shelfr/opf/` will be refactored:
 
 | Current Location | New Location |
-|-----------------|--------------|
+| ----------------- | -------------- |
 | `opf/__init__.py` | `metadata/__init__.py` + `metadata/opf/__init__.py` |
 | `opf/schemas.py` (CanonicalMetadata) | `metadata/canonical.py` |
 | `opf/schemas.py` (OPFMetadata) | `metadata/opf/schemas.py` |
@@ -425,7 +425,7 @@ Given Audnex response for ASIN `1774247291`:
 ## 7. Decisions Summary
 
 | Question | Decision |
-|----------|----------|
+| -------- | -------- |
 | Merge `tags` and `genres`? | ✅ Yes - same list for both fields |
 | Clean subtitle? | ✅ Yes - remove redundant series/book info |
 | Clean title/authors/narrators? | ✅ Yes - normalize all text fields |
@@ -438,11 +438,11 @@ Given Audnex response for ASIN `1774247291`:
 
 ## 8. References
 
-- ABS Source: [`server/models/Book.js#getAbsMetadataJson()`](https://github.com/advplyr/audiobookshelf/blob/main/server/models/Book.js#L337)
-- ABS Scanner: [`server/scanner/AbsMetadataFileScanner.js`](https://github.com/advplyr/audiobookshelf/blob/main/server/scanner/AbsMetadataFileScanner.js)
-- ABS Generator: [`server/utils/generators/abmetadataGenerator.js`](https://github.com/advplyr/audiobookshelf/blob/main/server/utils/generators/abmetadataGenerator.js)
-- Current OPF Module: `src/shelfr/opf/` (to be refactored)
-- Existing Schema: `src/shelfr/abs/rename.py#AbsMetadataSchema`
+- ABS Source: [`server/models/Book.js#getAbsMetadataJson()`](https://github.com/advplyr/audiobookshelf/blob/master/server/models/Book.js#L337)
+- ABS Scanner: [`server/scanner/AbsMetadataFileScanner.js`](http://github.com/advplyr/audiobookshelf/blob/master/server/scanner/AbsMetadataFileScanner.js)
+- ABS Generator: [`server/utils/generators/abmetadataGenerator.js`](https://github.com/advplyr/audiobookshelf/blob/master/server/utils/generators/abmetadataGenerator.js)
+- Current OPF Module: `src/shelfr/metadata/opf/` (refactored)
+- ABS Metadata Schema: `src/shelfr/schemas/abs_metadata.py#AbsMetadataJson`
 - Sample JSON files: `samples/abs_metadata/json_samples/`
 
 ---

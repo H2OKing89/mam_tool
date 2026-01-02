@@ -13,7 +13,11 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from shelfr.schemas.abs_metadata import AbsChapter, AbsMetadataJson
+from shelfr.schemas.abs_metadata import (
+    AbsChapter,
+    AbsMetadataJson,
+    validate_abs_metadata_for_write,
+)
 
 if TYPE_CHECKING:
     from shelfr.abs.importer import ParsedFolderName
@@ -188,17 +192,31 @@ def write_abs_metadata_json(
     metadata: AbsMetadataJson,
     *,
     dry_run: bool = False,
+    strict: bool = True,
 ) -> Path | None:
     """Write metadata.json to the destination folder.
+
+    This is the single canonical write gate for ABS metadata.json files.
+    All write paths should use this function to ensure consistent validation.
 
     Args:
         dst_folder: Folder to write metadata.json into
         metadata: AbsMetadataJson model to serialize
         dry_run: If True, only log what would happen
+        strict: If True (default), enforce title requirement via
+            validate_abs_metadata_for_write(). Set to False only for
+            debug dumps or partial scrape workflows.
 
     Returns:
         Path to written file, or None if dry_run or error
+
+    Raises:
+        ValueError: If strict=True and title is missing/empty
     """
+    # Enforce validation before any I/O
+    if strict:
+        metadata = validate_abs_metadata_for_write(metadata)
+
     metadata_path = dst_folder / "metadata.json"
 
     if dry_run:

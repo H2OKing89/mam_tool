@@ -30,8 +30,8 @@
 
 | File | Lines | Purpose | Overlaps With |
 | --- | --- | --- | --- |
-| `schemas/audnex.py` | 158 | Audnex API validation | - |
-| `schemas/abs_metadata.py` | 111 | ABS metadata.json validation | `abs/rename.py` |
+| `schemas/audnex.py` | ~150 | Audnex API validation | - |
+| `schemas/abs_metadata.py` | ~130 | ABS metadata.json validation | ✅ Single source |
 | `schemas/abs.py` | 357 | ABS API schemas | - |
 | `schemas/naming.py` | 269 | Naming config schemas | `config.py` |
 
@@ -39,13 +39,15 @@
 
 | File | Key Classes/Functions | Metadata Role |
 | --- | --- | --- |
-| `abs/rename.py` | `AbsMetadataSchema`, `AbsMetadata` dataclass | **Duplicate** of `schemas/abs_metadata.py` |
+| `abs/rename.py` | `parse_abs_metadata()`, `AbsMetadata` dataclass | ✅ Uses `AbsMetadataJson` from schemas |
 | `abs/asin.py` | ASIN extraction/resolution | Uses metadata.json |
 | `abs/importer.py` | Import logic, calls `write_opf()` | Coordinates metadata |
 
 ---
 
 ## 2. Duplicate Definitions Found
+
+> **Status (Phase 7 Complete):** Most duplicates have been resolved. See notes below.
 
 ### 2.1 ABS JSON vs Canonical Schema (Two Layers, Currently Mixed)
 
@@ -58,31 +60,34 @@ There are two distinct concerns being conflated:
 
 **Important:** `CanonicalMetadata` is NOT an ABS schema. It should be richer than ABS JSON and exporter-driven. `CanonicalMetadata` should not be forced to match ABS JSON; exporters map canonical → ABS.
 
-**Current state (problematic):**
+**✅ RESOLVED (Phase 7):**
 
 **ABS Output Schema: `schemas/abs_metadata.py` → `AbsMetadataJson`**
 
 ```python
 class AbsMetadataJson(BaseModel):
-    title: str
+    title: str | None = None  # Optional for reading existing metadata
     subtitle: str | None = None
     authors: list[str] = Field(default_factory=list)
-    # ... with published_year/published_date aliases
+    published_year: str | int | None = Field(default=None, validation_alias="publishedYear")
     chapters: list[AbsChapter] = Field(default_factory=list)
+
+# Read paths: title optional (permissive, handles incomplete real-world files)
+# Write paths: title REQUIRED (enforced by validate_abs_metadata_for_write())
 ```
 
-**ABS Compat Schema (DUPLICATE, should die): `abs/rename.py` → `AbsMetadataSchema`**
+**Write path enforcement:**
 
-```python
-class AbsMetadataSchema(BaseModel):
-    title: str | None = None  # Different! Optional here
-    subtitle: str | None = None
-    authors: list[str] = Field(default_factory=list)
-    # ... NO chapters, NO published_date
-    publishedYear: int | str | None = None  # Different naming!
-```
+- **`write_abs_metadata_json()`** is the single canonical write gate
+- **`strict=True` (default):** calls `validate_abs_metadata_for_write()`, raises `ValueError` if title is missing/empty/whitespace
+- **`strict=False`:** escape hatch for debug dumps or partial scrape workflows
+- **`JsonExporter.export()`** uses `write_abs_metadata_json(strict=True)` by default
 
-**Canonical Schema (NOT ABS): `opf/schemas.py` → `CanonicalMetadata`**
+**~~ABS Compat Schema (DUPLICATE, should die): `abs/rename.py` → `AbsMetadataSchema`~~**
+
+✅ **REMOVED in Phase 7.** Now uses `AbsMetadataJson` from `schemas/abs_metadata.py`.
+
+**Canonical Schema: `metadata/schemas/canonical.py` → `CanonicalMetadata`**
 
 ```python
 class CanonicalMetadata(BaseModel):
@@ -94,27 +99,19 @@ class CanonicalMetadata(BaseModel):
 
 ### 2.2 Person/Author Schema (2 versions)
 
-**Version 1: `opf/schemas.py` → `Person`**
+> **Status:** Cannot be unified *today* due to circular import constraints. This is a near-term refactor limitation (initialization order + eager imports), not a fundamental design requirement.
+
+We currently have two structurally-identical models:
+
+#### Canonical types (internal truth)
+
+**`metadata/schemas/canonical.py` → `Person`, `Series`**
 
 ```python
 class Person(BaseModel):
     name: str
     asin: str | None = None
 ```
-
-**Version 2: `schemas/audnex.py` → `AudnexAuthor`**
-
-```python
-class AudnexAuthor(BaseModel):
-    asin: str | None = None
-    name: str
-```
-
-**Identical!** Should be unified.
-
-### 2.3 Series Schema (2 versions)
-
-**Version 1: `opf/schemas.py` → `Series`**
 
 ```python
 class Series(BaseModel):
@@ -123,42 +120,288 @@ class Series(BaseModel):
     asin: str | None = None
 ```
 
-**Version 2: `schemas/audnex.py` → `AudnexSeries`**
+#### Audnex validation types (API parsing boundary)
+
+**`schemas/audnex.py` → `AudnexAuthor`, `AudnexSeries`**
+
+```python
+class AudnexAuthor(BaseModel):
+    name: str
+    asin: str | None = None
+```
 
 ```python
 class AudnexSeries(BaseModel):
-    asin: str | None = None
     name: str
     position: str | None = None
+    asin: str | None = None
 ```
 
-**Identical!** Should be unified.
+These are duplicated *only* because importing the canonical types inside `schemas/audnex.py` triggers a circular import at runtime.
 
-### 2.4 Single Source of Truth (Target State)
+---
 
-All shared types should live in ONE place and be imported everywhere:
+#### Why the duplication exists (in plain English)
+
+- `schemas/audnex.py` is a validation layer (Pydantic schema definitions for raw Audnex API responses).
+- Canonical types live under `shelfr.metadata.schemas.canonical`.
+- Importing canonical types from within `schemas/audnex.py` sounds harmless… until Python realizes importing `shelfr.metadata.schemas.canonical` implicitly executes `shelfr.metadata.__init__`, which eagerly imports the aggregator/providers, which import the Audnex client, which imports `schemas.audnex` again.
+
+At that point Python is holding two open doors in a hallway and tries to walk through both at once. The universe collapses into a singularity. (A.k.a. "partially initialized module" error.)
+
+---
+
+#### Import Cycle Diagram (edges that form the loop)
+
+This is the cycle that occurs if `schemas/audnex.py` tries to import canonical `Person/Series`:
+
+```text
+┌───────────────────────────────┐
+│ shelfr/schemas/audnex.py       │
+│  (AudnexBook validation)       │
+└───────────────┬───────────────┘
+                │ 1) wants canonical Person/Series
+                ▼
+┌───────────────────────────────┐
+│ shelfr/metadata/schemas/       │
+│   canonical.py                 │
+└───────────────┬───────────────┘
+                │ 2) importing canonical touches package init
+                ▼
+┌───────────────────────────────┐
+│ shelfr/metadata/__init__.py    │
+│  (exports / facade)            │
+└───────────────┬───────────────┘
+                │ 3) eager import of aggregator/providers
+                ▼
+┌───────────────────────────────┐
+│ shelfr/metadata/aggregator.py  │
+└───────────────┬───────────────┘
+                │ 4) loads providers
+                ▼
+┌───────────────────────────────┐
+│ shelfr/metadata/providers/     │
+│   audnex.py                    │
+└───────────────┬───────────────┘
+                │ 5) imports audnex client
+                ▼
+┌───────────────────────────────┐
+│ shelfr/metadata/audnex/        │
+│   client.py                    │
+└───────────────┬───────────────┘
+                │ 6) imports audnex validators
+                ▼
+┌───────────────────────────────┐
+│ shelfr/schemas/audnex.py       │
+│  (still initializing!)         │
+└───────────────┴───────────────┘
+             ▲
+             └─────────────── CYCLE ────────────────
+```
+
+Key point: **the cycle is not "audnex ↔ canonical" directly** — it's **audnex → canonical → metadata package init → providers/client → audnex**. The "innocent" import of `Person` triggers the whole subsystem.
+
+---
+
+#### Concrete 9-step import path (exact chain)
+
+This is a realistic trace of how the loop happens during runtime import:
+
+1. `abs/rename.py` imports `AudnexBook` (or an Audnex schema) from `shelfr.schemas.audnex`
+2. Python starts importing `shelfr/schemas/audnex.py`
+3. `schemas/audnex.py` attempts `from shelfr.metadata.schemas.canonical import Person` (desired unification)
+4. Python begins importing `shelfr.metadata` to resolve `shelfr.metadata.schemas.canonical`
+5. Importing `shelfr.metadata` executes `shelfr/metadata/__init__.py`
+6. `metadata/__init__.py` imports the `MetadataAggregator` (or other exports) from `metadata/aggregator.py`
+7. `metadata/aggregator.py` imports provider modules (including the Audnex provider)
+8. The Audnex provider imports `metadata/audnex/client.py`
+9. `metadata/audnex/client.py` imports `shelfr.schemas.audnex` to validate responses → **but `schemas/audnex.py` is still initializing at step 2** → **circular import / partially initialized module**
+
+This is why `schemas/audnex.py` cannot safely import canonical types right now.
+
+---
+
+#### Important clarification: not fundamental, just a near-term limitation
+
+This duplication is **not** a conceptual necessity. It's a practical side-effect of:
+
+- eager imports in `metadata/__init__.py` (package initialization pulls in aggregator/providers)
+- "from canonical import …" being evaluated at import-time in a schema module
+- the Audnex client importing validators from the schema module
+
+With a refactor of import structure (or lazy import boundaries), this can be removed cleanly.
+
+---
+
+#### Current workaround (and why it's acceptable)
+
+**Workaround:** Keep lightweight Audnex boundary models inside `schemas/audnex.py`:
+
+- `AudnexAuthor`, `AudnexSeries`, `AudnexGenre` remain "API shapes"
+- Canonical `Person/Series/Genre` remain "internal truth"
+- Mapping happens after validation (provider boundary), not inside schema definitions
+
+**Why this is reasonable today:**
+
+- The duplication is tiny (a few small models)
+- It isolates API parsing from internal domain models (a good boundary anyway)
+- It avoids import-order landmines while the module layout is still in flux
+
+---
+
+#### Recommendation for new code
+
+**Use canonical `Person` / `Series` everywhere beyond the raw Audnex parsing boundary.**
+
+- ✅ Validation layer: `schemas/audnex.py` types (`AudnexAuthor`, `AudnexSeries`)
+- ✅ Provider layer: converts to canonical (`Person`, `Series`)
+- ✅ Everything else (exporters, cleaning, pipeline, aggregators): canonical only
+
+A simple conversion helper keeps the boundary explicit:
+
+```python
+def audnex_author_to_person(a: AudnexAuthor) -> Person:
+    return Person(name=a.name, asin=a.asin)
+
+def audnex_series_to_series(s: AudnexSeries) -> Series:
+    return Series(name=s.name, position=s.position, asin=s.asin)
+```
+
+This makes it impossible for the "API models" to leak into the rest of the codebase.
+
+---
+
+#### Possible future resolutions (ways to remove duplication)
+
+Any of these could unify the types later. The right choice depends on how much refactor we're willing to do.
+
+##### Option A) `TYPE_CHECKING` + forward references (low effort, partial win)
+
+Use canonical types only for typing without importing at runtime.
+
+```python
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from shelfr.metadata.schemas.canonical import Person
+```
+
+Then schemas reference `"Person"` as a string, or use `Annotated` + Pydantic forward refs.
+
+**Pros:**
+
+- Minimal disruption
+- Lets internal code type against canonical types without runtime import
+
+**Cons:**
+
+- Doesn't fully unify runtime models unless you redesign the schema layer
+- Pydantic forward refs can be finicky if not resolved in the right module order
+
+##### Option B) Lazy imports (move imports inside functions) (medium effort, reliable)
+
+Stop importing heavy subsystems at module import time; import them only when needed.
+
+Example: `metadata/__init__.py` should not import aggregator/providers eagerly. It can expose functions that import on demand.
+
+**Pros:**
+
+- Breaks cycle at the root (eager `__init__` behavior)
+- Improves startup time and reduces side effects
+
+**Cons:**
+
+- Requires discipline and consistent patterns across the package
+- Needs careful test coverage to avoid surprising import-time behavior changes
+
+##### Option C) Split "schemas/types" into a dependency-free module (cleanest long-term)
+
+Create a small `shelfr.metadata.types` (or `shelfr.domain.types`) module that contains only `Person/Series/Genre`, with **zero imports** from providers/clients.
+
+Then:
+
+- `schemas/audnex.py` can import from `types` safely
+- canonical metadata can import from `types` safely
+- providers/clients never imported from `types`
+
+**Pros:**
+
+- Canonical win: types become foundational and safe everywhere
+- Very common pattern in larger Python codebases
+
+**Cons:**
+
+- Requires moving files and updating imports (but it's a "one-and-done" change)
+
+##### Option D) Move `from_audnex()` factories out of canonical schemas (surgical fix)
+
+If `canonical.py` currently imports anything "provider-ish" (directly or indirectly), move those mapping factories into a separate module:
+
+- `canonical.py`: only models
+- `mappers/audnex_to_canonical.py`: conversion logic
+- `providers/audnex.py`: calls mapper
+
+**Pros:**
+
+- Preserves model purity
+- Removes import pressure from canonical types
+
+**Cons:**
+
+- Requires adjusting call sites
+- Needs clear ownership of mapping rules (provider vs mapper)
+
+##### Option E) Provider registration restructuring (bigger refactor)
+
+Decouple provider discovery/registration so `metadata/__init__.py` no longer imports providers at import time.
+
+This is the "architectural" solution if the system is growing into a plugin-like design.
+
+**Pros:**
+
+- Most scalable
+- Eliminates entire class of import-order problems
+
+**Cons:**
+
+- Bigger change, needs design time
+- Not worth it unless provider ecosystem expands significantly
+
+---
+
+#### When it's worth fixing (signals, not vibes)
+
+This duplication can remain until one of these becomes true:
+
+- People keep accidentally using `AudnexAuthor` outside validation/provider boundary
+- A change requires updating both models frequently (maintenance pain)
+- Pydantic serialization/deserialization starts diverging between the two
+- The metadata package's import-time side effects begin causing other cycles
+
+Until then, documenting the constraint + enforcing the boundary is the pragmatic move.
+
+---
+
+#### Bottom line
+
+- The duplication exists because **import-time side effects in `metadata/__init__.py`** pull in providers/clients which depend back on `schemas/audnex.py`.
+- This is a **near-term refactor limitation**, not a fundamental design constraint.
+- **New code should always prefer canonical `Person/Series`**; use `AudnexAuthor/AudnexSeries` only at the raw response validation boundary.
+- There are clear future refactor paths (TYPE_CHECKING, lazy loading, types module split) if/when it becomes worth it.
+
+### 2.3 Single Source of Truth (Target State)
+
+> **Status (Phase 7):** ✅ Canonical types now live in `metadata/schemas/canonical.py`.
+
+All shared types now live in ONE place:
 
 | Path | Contents |
 | --- | --- |
-| `metadata/schemas/canonical.py` | Types only: `Person`, `Series`, `Genre`, `CanonicalMetadata` |
-| `metadata/pipeline.py` | Builders/constructors: `CanonicalMetadata.from_audnex()`, merge orchestration |
+| `metadata/schemas/canonical.py` | Types: `Person`, `Series`, `Genre`, `CanonicalMetadata` |
+| `metadata/opf/schemas.py` | Re-exports canonical + OPF-specific: `OPFCreator`, `OPFMetadata`, etc. |
 
-Other schemas can COMPOSE with these shared types:
+Audnex schemas (`AudnexAuthor`, `AudnexSeries`, `AudnexGenre`) remain separate due to circular imports but are documented as structurally identical to canonical types.
 
-```python
-# schemas/audnex.py (validation-only, composes with shared types)
-from shelfr.metadata.schemas import Person, Series
-
-class AudnexBook(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Safe: ignores extra API fields
-    asin: str
-    authors: list[Person]  # Uses shared type!
-    series: list[Series]   # Uses shared type!
-```
-
-**Composition pattern:** Shared types (`Person`, `Series`) are minimal. Use `extra="ignore"` so validation schemas don't break when APIs add fields. This eliminates schema drift risk.
-
-### 2.5 Model Layers (Why Both Pydantic and Dataclasses Exist)
+### 2.4 Model Layers (Why Both Pydantic and Dataclasses Exist)
 
 | Layer | Type | Purpose | Examples |
 | --- | --- | --- | --- |
@@ -172,7 +415,7 @@ class AudnexBook(BaseModel):
 - Canonical = internal truth
 - Pipeline = operational state
 
-### 2.6 NormalizedBook vs CanonicalMetadata (Boundary)
+### 2.5 NormalizedBook vs CanonicalMetadata (Boundary)
 
 These two models solve the same problem (Audible's inconsistent metadata) but for different purposes:
 
@@ -341,20 +584,22 @@ When multiple providers have data, use deterministic precedence (prevents "whoev
 
 ## 6. Current Schema Locations
 
-> **Note:** `CanonicalMetadata` currently lives in the OPF module. Relocation to `metadata/schemas/canonical.py` is part of Phase 1 (see [Implementation Checklist](05-implementation-checklist.md)).
+> **Status (Phase 7 Complete):** Schema consolidation is done. `CanonicalMetadata` lives in `metadata/schemas/canonical.py`. OPF schemas re-export from canonical.
 
 | Schema | Location | Notes |
 | --- | --- | --- |
-| `CanonicalMetadata` | `opf/schemas.py` | ✅ Canonical (move to `metadata/schemas/` later) |
-| `OPFMetadata` | `opf/schemas.py` | ✅ OPF-specific export (move later) |
-| `Person` | `opf/schemas.py` | 🔄 Unify with `AudnexAuthor` (move to shared) |
-| `Series` | `opf/schemas.py` | 🔄 Unify with `AudnexSeries` (move to shared) |
-| `Genre` | `opf/schemas.py` | 🔄 Unify with `AudnexGenre` (move to shared) |
-| `AudnexBook` | `schemas/audnex.py` | ✅ Validation only (compose with shared types) |
-| `AudnexAuthor` | `schemas/audnex.py` | 🔄 Merge to shared `Person` |
-| `AudnexSeries` | `schemas/audnex.py` | 🔄 Merge to shared `Series` |
-| `AbsMetadataJson` | `schemas/abs_metadata.py` | ✅ ABS output schema |
-| `AbsMetadataSchema` | `abs/rename.py` | ❌ Remove, use `AbsMetadataJson` |
-| `AbsMetadata` | `abs/rename.py` | 🔄 Dataclass, keep separate |
-| `NormalizedBook` | `models.py` | ✅ Pipeline model (add `canonical` field later) |
+| `CanonicalMetadata` | `metadata/schemas/canonical.py` | ✅ Canonical (single source of truth) |
+| `Person` | `metadata/schemas/canonical.py` | ✅ Canonical |
+| `Series` | `metadata/schemas/canonical.py` | ✅ Canonical |
+| `Genre` | `metadata/schemas/canonical.py` | ✅ Canonical |
+| `OPFMetadata` | `opf/schemas.py` | ✅ OPF-specific export |
+| `OPFCreator` | `opf/schemas.py` | ✅ OPF-specific |
+| `AudnexBook` | `schemas/audnex.py` | ✅ Validation only |
+| `AudnexAuthor` | `schemas/audnex.py` | ⚠️ Identical to `Person` (circular import) |
+| `AudnexSeries` | `schemas/audnex.py` | ⚠️ Identical to `Series` (circular import) |
+| `AudnexGenre` | `schemas/audnex.py` | ⚠️ Identical to `Genre` (circular import) |
+| `AbsMetadataJson` | `schemas/abs_metadata.py` | ✅ ABS output schema (single source) |
+| ~~`AbsMetadataSchema`~~ | ~~`abs/rename.py`~~ | ❌ Removed in Phase 7 |
+| `AbsMetadata` | `abs/rename.py` | ✅ Dataclass for rename workflow |
+| `NormalizedBook` | `models.py` | ✅ Pipeline model |
 | `AudiobookRelease` | `models.py` | ✅ Pipeline model |
