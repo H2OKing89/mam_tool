@@ -134,7 +134,13 @@ class MetadataAggregator:
 
         # Get applicable providers
         if providers:
-            provider_list = [p for name in providers if (p := self.registry.get(name)) is not None]
+            provider_list = []
+            for name in providers:
+                provider = self.registry.get(name)
+                if provider is not None:
+                    provider_list.append(provider)
+                else:
+                    logger.warning("Requested provider '%s' not found in registry", name)
         else:
             provider_list = self.registry.get_for_context(ctx, id_type)
 
@@ -250,14 +256,11 @@ class MetadataAggregator:
                 aggregated.sources[field_name] = provider_name
             else:
                 # Conflict - resolve using strategy
-                resolved, reason = self._resolve_conflict(field_name, field_candidates)
+                resolved, reason, winner_provider = self._resolve_conflict(
+                    field_name, field_candidates
+                )
                 aggregated.fields[field_name] = resolved
-
-                # Find which provider provided the resolved value
-                for provider_name, value, _, _ in field_candidates:
-                    if value == resolved:
-                        aggregated.sources[field_name] = provider_name
-                        break
+                aggregated.sources[field_name] = winner_provider
 
                 # Record conflict
                 conflict = FieldConflict(
@@ -310,7 +313,7 @@ class MetadataAggregator:
         self,
         field_name: FieldName,
         candidates: list[tuple[str, Any, float, int]],
-    ) -> tuple[Any, str]:
+    ) -> tuple[Any, str, str]:
         """Resolve a field conflict using deterministic tie-breakers.
 
         Args:
@@ -318,12 +321,12 @@ class MetadataAggregator:
             candidates: List of (provider, value, confidence, priority)
 
         Returns:
-            (resolved_value, resolution_reason)
+            (resolved_value, resolution_reason, provider_name)
         """
         if self.merge_strategy == "priority":
-            # Lowest priority number wins
-            candidates.sort(key=lambda x: (x[3], x[0]))  # priority, then name
-            return candidates[0][1], "priority"
+            # Lowest priority number wins (use sorted() to avoid mutating input)
+            sorted_candidates = sorted(candidates, key=lambda x: (x[3], x[0]))
+            return sorted_candidates[0][1], "priority", sorted_candidates[0][0]
 
         # Confidence strategy with full tie-breaker chain
         # Sort by: max(confidence), min(priority), max(quality), name
@@ -348,17 +351,24 @@ class MetadataAggregator:
         else:
             reason = "confidence"
 
-        return winner[1], reason
+        return winner[1], reason, winner[0]
 
     def _value_quality(self, field_name: FieldName, value: Any) -> int:
         """Compute quality score for a value (higher = better).
 
         Used as tie-breaker when confidence and priority are equal.
+
+        Note: This heuristic is biased toward longer strings/larger lists,
+        which works well for fields like 'description' or 'summary' but may
+        not be ideal for fields like 'title'. Since quality is only used as
+        a final tie-breaker after confidence and priority, this bias has
+        minimal impact. Field-specific heuristics can be added here if needed.
         """
         if value is None:
             return 0
         if isinstance(value, str):
-            # Longer strings are generally better for descriptions
+            # Longer strings are generally better for descriptions/summaries
+            # TODO: Consider field-specific rules if title length becomes an issue
             return len(value)
         if isinstance(value, list):
             # More items = more data

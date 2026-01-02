@@ -589,6 +589,47 @@ class TestMetadataAggregator:
             assert result.fields["title"] == "Correct Title"
             assert len(result.conflicts) == 1
             assert result.conflicts[0].resolution_reason == "confidence"
+            # Verify source is correctly attributed to the winning provider
+            assert result.sources["title"] == "high_conf"
+
+        asyncio.run(run_test())
+
+    def test_source_attribution_with_identical_values(self) -> None:
+        """Test source correctly attributed when multiple providers have same value.
+
+        Regression test: ensures the winning provider (by confidence) is attributed
+        even when multiple providers have identical values.
+        """
+
+        async def run_test() -> None:
+            registry = ProviderRegistry()
+            # Both providers return the same value "Same Title"
+            registry.register(
+                MockProvider(
+                    name="provider_a",
+                    priority=10,  # Higher priority (lower number)
+                    responses={"A": {"title": "Same Title"}},
+                    confidences={"A": {"title": 0.5}},  # Lower confidence
+                )
+            )
+            registry.register(
+                MockProvider(
+                    name="provider_b",
+                    priority=20,  # Lower priority
+                    responses={"A": {"title": "Same Title"}},  # Same value!
+                    confidences={"A": {"title": 0.9}},  # Higher confidence
+                )
+            )
+
+            aggregator = MetadataAggregator(registry, merge_strategy="confidence")
+            ctx = LookupContext.from_asin(asin="A")
+            result = await aggregator.fetch_all(ctx, stop_on_complete=False)
+
+            assert result.fields["title"] == "Same Title"
+            # provider_b should win due to higher confidence, even though
+            # provider_a has higher priority and would be found first in a loop
+            assert result.sources["title"] == "provider_b"
+            assert result.conflicts[0].resolution_reason == "confidence"
 
         asyncio.run(run_test())
 
@@ -854,6 +895,29 @@ class TestMetadataAggregator:
             assert "publisher" not in result.fields
 
         asyncio.run(run_test())
+
+    def test_unknown_provider_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that unknown provider names in providers list log a warning."""
+        import logging
+
+        async def run_test() -> None:
+            registry = ProviderRegistry()
+            registry.register(MockProvider(name="known", responses={"A": {"title": "Known"}}))
+
+            aggregator = MetadataAggregator(registry)
+            ctx = LookupContext.from_asin(asin="A")
+
+            with caplog.at_level(logging.WARNING):
+                result = await aggregator.fetch_all(ctx, providers=["known", "typo_provider"])
+
+            # Should still work with the known provider
+            assert result.fields["title"] == "Known"
+
+        asyncio.run(run_test())
+
+        # Verify warning was logged for the unknown provider
+        assert any("typo_provider" in record.message for record in caplog.records)
+        assert any("not found" in record.message for record in caplog.records)
 
     def test_no_providers_returns_empty(self) -> None:
         """Test empty registry returns result with all fields missing."""
