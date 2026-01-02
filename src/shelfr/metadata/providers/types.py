@@ -171,7 +171,12 @@ class ProviderResult:
             name: Canonical field name
             value: Field value
             confidence: Confidence score (0.0 to 1.0, default 1.0)
+
+        Raises:
+            ValueError: If confidence is outside [0.0, 1.0] range
         """
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError(f"confidence must be in [0.0, 1.0], got {confidence}")
         self.fields[name] = value
         self.confidence[name] = confidence
 

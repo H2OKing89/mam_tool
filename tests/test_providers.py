@@ -15,6 +15,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from shelfr.metadata.aggregator import MetadataAggregator
 from shelfr.metadata.providers import (
     AudnexProvider,
@@ -87,6 +89,25 @@ class TestProviderResult:
         result.set_field("title", "Test Book")
 
         assert result.confidence["title"] == 1.0
+
+    def test_set_field_confidence_bounds_validation(self) -> None:
+        """Test that confidence outside [0.0, 1.0] raises ValueError."""
+        result = ProviderResult(provider="test", success=True)
+
+        # Test confidence > 1.0
+        with pytest.raises(ValueError, match=r"confidence must be in \[0\.0, 1\.0\], got 1\.5"):
+            result.set_field("title", "Test", confidence=1.5)
+
+        # Test confidence < 0.0
+        with pytest.raises(ValueError, match=r"confidence must be in \[0\.0, 1\.0\], got -0\.1"):
+            result.set_field("title", "Test", confidence=-0.1)
+
+        # Valid edge cases should work
+        result.set_field("title", "Test", confidence=0.0)
+        assert result.confidence["title"] == 0.0
+
+        result.set_field("authors", ["Author"], confidence=1.0)
+        assert result.confidence["authors"] == 1.0
 
     def test_failure_factory(self) -> None:
         """Test creating failure result."""
