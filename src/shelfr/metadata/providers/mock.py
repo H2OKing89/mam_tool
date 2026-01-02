@@ -132,8 +132,11 @@ class MockProvider:
 
     @property
     def fetch_history(self) -> list[tuple[LookupContext, IdType]]:
-        """History of (ctx, id_type) passed to fetch()."""
-        return self._fetch_history
+        """History of (ctx, id_type) passed to fetch().
+
+        Returns a copy to prevent external mutation.
+        """
+        return list(self._fetch_history)
 
     def reset(self) -> None:
         """Reset fetch count and history."""
@@ -160,8 +163,15 @@ class MockProvider:
     def set_error(self, identifier: str, error: str) -> None:
         """Set error response for an identifier.
 
+        Note:
+            Errors take precedence over responses in fetch().
+            This clears any existing success response for the identifier.
+
         Args:
             identifier: ASIN, ISBN, etc.
             error: Error message to return
         """
         self._errors[identifier] = error
+        # Clear any success response to avoid confusion
+        self._responses.pop(identifier, None)
+        self._confidences.pop(identifier, None)
