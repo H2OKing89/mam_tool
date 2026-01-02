@@ -55,74 +55,57 @@ def _fetch_audnex_book_region(
         timeout: Request timeout in seconds
 
     Returns:
-        Parsed JSON response or None if not found/error.
+        Parsed JSON response or None if not found (404/500).
 
     Raises:
         CircuitOpenError: If Audnex API circuit breaker is open.
+        httpx.TimeoutException: On timeout (will be retried by decorator).
+        httpx.ConnectError: On connection failure (will be retried by decorator).
     """
     url = f"{base_url}/books/{asin}"
     params = {"region": region}
 
     logger.debug(f"Fetching Audnex metadata: {url} (region={region})")
 
-    try:
-        # Circuit breaker protects against cascading failures
-        # Only network-level errors trip the breaker (not 404s which are normal)
-        with audnex_breaker, httpx.Client(timeout=timeout, http2=True) as client:
-            response = client.get(url, params=params)
+    # Circuit breaker protects against cascading failures
+    # Only network-level errors trip the breaker (not 404s which are normal)
+    with audnex_breaker, httpx.Client(timeout=timeout, http2=True) as client:
+        response = client.get(url, params=params)
 
-            if response.status_code == 404:
-                logger.debug(f"ASIN {asin} not found in region {region}")
-                return None
+        # 404/500 are authoritative "not found" - don't retry
+        if response.status_code == 404:
+            logger.debug(f"ASIN {asin} not found in region {region}")
+            return None
 
-            # 500 errors are common for region mismatches - treat as "not found"
-            if response.status_code == 500:
-                logger.debug(f"ASIN {asin} returned 500 for region {region} (likely not available)")
-                return None
+        if response.status_code == 500:
+            logger.debug(f"ASIN {asin} returned 500 for region {region} (likely not available)")
+            return None
 
-            response.raise_for_status()
-            data: dict[str, Any] = response.json()
-
-            # Validate response structure (warns but doesn't fail)
-            try:
-                from shelfr.schemas.audnex import validate_audnex_book
-
-                validate_audnex_book(data)
-            except Exception as validation_error:
-                logger.warning(
-                    f"Audnex book response validation warning for {asin}: {validation_error}"
-                )
-
-            return data
-
-    except CircuitOpenError:
-        # Re-raise circuit breaker errors - caller should handle
-        raise
-
-    except httpx.TimeoutException:
-        # Network issue - warn since this may indicate a problem
-        logger.warning(f"Timeout fetching Audnex metadata for {asin} (region={region})")
-        return None
-
-    except httpx.HTTPStatusError as e:
-        # Distinguish between "not found" type errors and actual issues
-        if e.response.status_code in (401, 403, 429):
+        # 401/403/429 are auth/rate limit - don't retry, return None
+        if response.status_code in (401, 403, 429):
             logger.warning(
                 "Auth/rate limit error fetching book %s (region=%s): %s",
                 asin,
                 region,
-                e.response.status_code,
+                response.status_code,
             )
-        else:
-            logger.debug(f"HTTP error from Audnex for {asin} (region={region}): {e}")
-        return None
+            return None
 
-    except Exception as e:
-        # Catch-all for JSON decode errors, connection issues, etc.
-        logger.warning(
-            f"Unexpected error fetching Audnex metadata for {asin} (region={region}): {e}"
-        )
-        return None
+        # Other HTTP errors - raise for retry
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+
+        # Validate response structure (warns but doesn't fail)
+        try:
+            from shelfr.schemas.audnex import validate_audnex_book
+
+            validate_audnex_book(data)
+        except Exception as validation_error:
+            logger.warning(
+                f"Audnex book response validation warning for {asin}: {validation_error}"
+            )
+
+        return data
 
 
 def fetch_audnex_book(
@@ -146,9 +129,15 @@ def fetch_audnex_book(
 
     # If specific region requested, only try that one
     if region:
-        data = _fetch_audnex_book_region(
-            asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
-        )
+        try:
+            data = _fetch_audnex_book_region(
+                asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
+            )
+        except (CircuitOpenError, Exception) as e:
+            # After retries exhausted, log and return None
+            logger.warning(f"Failed to fetch book {asin} (region={region}): {e}")
+            return None, None
+
         if data:
             logger.info(f"Fetched Audnex metadata for ASIN: {asin} (region={region})")
             return data, region
@@ -158,9 +147,19 @@ def fetch_audnex_book(
     # Try each configured region in order
     regions = settings.audnex.regions
     for r in regions:
-        data = _fetch_audnex_book_region(
-            asin, r, settings.audnex.base_url, settings.audnex.timeout_seconds
-        )
+        try:
+            data = _fetch_audnex_book_region(
+                asin, r, settings.audnex.base_url, settings.audnex.timeout_seconds
+            )
+        except CircuitOpenError:
+            # Circuit open - skip to next region
+            logger.debug(f"Circuit open for region {r}, trying next")
+            continue
+        except Exception as e:
+            # After retries exhausted, try next region
+            logger.debug(f"Failed to fetch book {asin} from region {r}: {e}")
+            continue
+
         if data:
             logger.info(f"Fetched Audnex metadata for ASIN: {asin} (region={r})")
             return data, r
@@ -286,70 +285,56 @@ def _fetch_audnex_chapters_region(
         timeout: Request timeout in seconds
 
     Returns:
-        Parsed JSON response or None if not found/error.
+        Parsed JSON response or None if not found (404/500).
+
+    Raises:
+        CircuitOpenError: If Audnex API circuit breaker is open.
+        httpx.TimeoutException: On timeout (will be retried by decorator).
+        httpx.ConnectError: On connection failure (will be retried by decorator).
     """
     url = f"{base_url}/books/{asin}/chapters"
     params = {"region": region}
 
     logger.debug(f"Fetching Audnex chapters: {url} (region={region})")
 
-    try:
-        # Circuit breaker protects against cascading failures
-        with audnex_breaker, httpx.Client(timeout=timeout, http2=True) as client:
-            response = client.get(url, params=params)
+    # Circuit breaker protects against cascading failures
+    with audnex_breaker, httpx.Client(timeout=timeout, http2=True) as client:
+        response = client.get(url, params=params)
 
-            if response.status_code == 404:
-                logger.debug(f"Chapters for {asin} not found in region {region}")
-                return None
+        # 404/500 are authoritative "not found" - don't retry
+        if response.status_code == 404:
+            logger.debug(f"Chapters for {asin} not found in region {region}")
+            return None
 
-            # 500 errors are common for region mismatches
-            if response.status_code == 500:
-                logger.debug(f"Chapters for {asin} returned 500 for region {region}")
-                return None
+        if response.status_code == 500:
+            logger.debug(f"Chapters for {asin} returned 500 for region {region}")
+            return None
 
-            response.raise_for_status()
-            data: dict[str, Any] = response.json()
-
-            # Validate response structure (warns but doesn't fail)
-            try:
-                from shelfr.schemas.audnex import validate_audnex_chapters
-
-                validate_audnex_chapters(data)
-            except Exception as validation_error:
-                logger.warning(
-                    f"Audnex chapters response validation warning for {asin}: {validation_error}"
-                )
-
-            return data
-
-    except CircuitOpenError:
-        # Re-raise circuit breaker errors - caller should handle
-        raise
-
-    except httpx.TimeoutException:
-        # Network issue - warn since this may indicate a problem
-        logger.warning(f"Timeout fetching Audnex chapters for {asin} (region={region})")
-        return None
-
-    except httpx.HTTPStatusError as e:
-        # Distinguish between "not found" type errors and actual issues
-        if e.response.status_code in (401, 403, 429):
+        # 401/403/429 are auth/rate limit - don't retry, return None
+        if response.status_code in (401, 403, 429):
             logger.warning(
                 "Auth/rate limit error fetching chapters %s (region=%s): %s",
                 asin,
                 region,
-                e.response.status_code,
+                response.status_code,
             )
-        else:
-            logger.debug(f"HTTP error from Audnex chapters for {asin} (region={region}): {e}")
-        return None
+            return None
 
-    except Exception as e:
-        # Catch-all for JSON decode errors, connection issues, etc.
-        logger.warning(
-            f"Unexpected error fetching Audnex chapters for {asin} (region={region}): {e}"
-        )
-        return None
+        # Other HTTP errors - raise for retry
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+
+        # Validate response structure (warns but doesn't fail)
+        try:
+            from shelfr.schemas.audnex import validate_audnex_chapters
+
+            validate_audnex_chapters(data)
+        except Exception as validation_error:
+            logger.warning(
+                f"Audnex chapters response validation warning for {asin}: {validation_error}"
+            )
+
+        return data
 
 
 def fetch_audnex_chapters(asin: str, region: str | None = None) -> dict[str, Any] | None:
@@ -370,9 +355,14 @@ def fetch_audnex_chapters(asin: str, region: str | None = None) -> dict[str, Any
 
     # If specific region requested, only try that one
     if region:
-        data = _fetch_audnex_chapters_region(
-            asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
-        )
+        try:
+            data = _fetch_audnex_chapters_region(
+                asin, region, settings.audnex.base_url, settings.audnex.timeout_seconds
+            )
+        except (CircuitOpenError, Exception) as e:
+            logger.warning(f"Failed to fetch chapters {asin} (region={region}): {e}")
+            return None
+
         if data:
             chapter_count = len(data.get("chapters", []))
             logger.info(
@@ -383,9 +373,17 @@ def fetch_audnex_chapters(asin: str, region: str | None = None) -> dict[str, Any
     # Try each configured region in order
     regions = settings.audnex.regions
     for r in regions:
-        data = _fetch_audnex_chapters_region(
-            asin, r, settings.audnex.base_url, settings.audnex.timeout_seconds
-        )
+        try:
+            data = _fetch_audnex_chapters_region(
+                asin, r, settings.audnex.base_url, settings.audnex.timeout_seconds
+            )
+        except CircuitOpenError:
+            logger.debug(f"Circuit open for region {r}, trying next")
+            continue
+        except Exception as e:
+            logger.debug(f"Failed to fetch chapters {asin} from region {r}: {e}")
+            continue
+
         if data:
             chapter_count = len(data.get("chapters", []))
             logger.info(
