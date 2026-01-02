@@ -194,8 +194,10 @@ class CanonicalMetadata(BaseModel):
             return None
         if isinstance(self.release_date, datetime):
             return self.release_date.strftime("%Y-%m-%d")
-        # Assume already ISO-like, extract date portion
-        return self.release_date[:10] if len(self.release_date) >= 10 else self.release_date
+        # Only return if we have a full ISO date (YYYY-MM-DD = 10 chars minimum)
+        if len(self.release_date) >= 10:
+            return self.release_date[:10]
+        return None
 
     def get_all_genres(self) -> list[str]:
         """Get deduplicated genre/tag names."""
