@@ -17,7 +17,7 @@ Exporters (OPF, ABS JSON, MAM JSON) map canonical → specific format.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -140,6 +140,31 @@ class CanonicalMetadata(BaseModel):
     rating: str = ""
 
     model_config = {"extra": "ignore", "populate_by_name": True}
+
+    @field_validator(
+        "description",
+        "summary",
+        "publisher_name",
+        "rating",
+        "format_type",
+        "language",
+        mode="before",
+    )
+    @classmethod
+    def coerce_null_to_empty_or_default(cls, v: str | None, info: Any) -> str:
+        """Coerce null values from Audnex API to empty string or field default.
+
+        Audnex API can return null for these fields, but we want non-optional
+        strings internally for easier downstream processing.
+        """
+        if v is None:
+            # Return field-specific defaults
+            defaults = {
+                "format_type": "unabridged",
+                "language": "english",
+            }
+            return defaults.get(info.field_name, "")
+        return v
 
     @classmethod
     def from_audnex(cls, data: dict[str, object]) -> CanonicalMetadata:

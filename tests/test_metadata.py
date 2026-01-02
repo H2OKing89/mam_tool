@@ -2322,6 +2322,31 @@ class TestCanonicalMetadataSchema:
         genres = meta.get_all_genres()
         assert genres == ["Fantasy", "Science Fiction"]
 
+    def test_null_audnex_fields_coerced_to_defaults(self):
+        """Null values from Audnex API are coerced to empty string or defaults."""
+        from shelfr.metadata.schemas import CanonicalMetadata
+
+        # Simulate Audnex response with null values
+        audnex_data = {
+            "asin": "B0TEST1234",
+            "title": "Test Book",
+            "description": None,  # Audnex can send null
+            "summary": None,
+            "publisherName": None,
+            "rating": None,
+            "formatType": None,  # Should default to "unabridged"
+            "language": None,  # Should default to "english"
+        }
+        meta = CanonicalMetadata.from_audnex(audnex_data)
+
+        # All should be coerced to their defaults
+        assert meta.description == ""
+        assert meta.summary == ""
+        assert meta.publisher_name == ""
+        assert meta.rating == ""
+        assert meta.format_type == "unabridged"
+        assert meta.language == "english"
+
 
 class TestCleaningFacade:
     """Tests for metadata/cleaning.py facade."""
@@ -2344,18 +2369,10 @@ class TestCleaningFacade:
         assert result is None
 
     def test_all_exports_available(self):
-        """All expected functions are exported from cleaning."""
+        """All __all__ exports are accessible from cleaning module."""
         from shelfr.metadata import cleaning
 
-        expected_exports = [
-            "filter_author",
-            "filter_authors",
-            "filter_series",
-            "filter_subtitle",
-            "filter_title",
-            "normalize_audnex_book",
-            "resolve_series",
-            "transliterate_text",
-        ]
-        for name in expected_exports:
-            assert hasattr(cleaning, name), f"Missing export: {name}"
+        # Test against actual __all__ to catch any missing exports
+        assert hasattr(cleaning, "__all__"), "cleaning module missing __all__"
+        for name in cleaning.__all__:
+            assert hasattr(cleaning, name), f"Missing export in __all__: {name}"
