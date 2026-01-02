@@ -146,9 +146,7 @@ def build_mam_json(
     # This uses seriesPrimary as the source of truth
     # Default to enabled if no config available
     normalized: NormalizedBook | None = None
-    should_normalize = (
-        naming_config.normalize_title_subtitle if naming_config is not None else True
-    )
+    should_normalize = naming_config.normalize_title_subtitle if naming_config is not None else True
     if audnex and should_normalize:
         normalized = normalize_audnex_book(audnex)
 
@@ -490,7 +488,7 @@ def generate_mam_json_for_release(
         output_dir = settings.paths.torrent_output
 
     # Ensure output directory exists (may be per-release subfolder)
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Build filename: same as torrent but .json extension
     # Format: "Author - Title.json"
@@ -499,7 +497,7 @@ def generate_mam_json_for_release(
     else:
         json_name = f"{release.display_name}.json"
 
-    output_path = Path(output_dir) / json_name
+    output_path = output_dir / json_name
 
     # Build and save (pass audnex_chapters from release if available)
     mam_data = build_mam_json(release, audnex_chapters=release.audnex_chapters)

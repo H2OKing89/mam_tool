@@ -7,10 +7,13 @@ classification.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 from shelfr.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 # Genre keywords that indicate Fiction (case-insensitive matching)
 FICTION_GENRE_KEYWORDS = frozenset(
@@ -155,6 +158,7 @@ def _get_audiobook_category(audnex_data: dict[str, Any], is_fiction: bool) -> st
         settings = get_settings()
         categories = settings.categories
     except Exception:
+        logger.debug("Failed to load category settings, using default: %s", default_category)
         return default_category
 
     # Select the appropriate map based on fiction/nonfiction
@@ -204,6 +208,7 @@ def _map_genres_to_categories(genres: list[dict[str, Any]]) -> list[int]:
         settings = get_settings()
         category_map = settings.categories.genre_map
     except Exception:
+        logger.debug("Failed to load genre map settings, returning empty categories")
         return []
 
     categories: set[int] = set()
