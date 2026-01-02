@@ -239,10 +239,13 @@ def _map_genres_to_categories(genres: list[dict[str, Any]]) -> list[int]:
                 categories.add(category_map[part])
                 matched = True
 
-        # Fallback: partial matching if no parts matched
+        # Fallback: word-boundary matching if no parts matched
+        # Use regex with word boundaries to avoid false positives
+        # (e.g., "art" matching "artificial intelligence")
+        # Only try keys with 4+ characters to reduce collision risk
         if not matched:
             for key, cat_id in category_map.items():
-                if key in name or name in key:
+                if len(key) >= 4 and re.search(rf"\b{re.escape(key)}\b", name):
                     categories.add(cat_id)
                     break
 

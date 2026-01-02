@@ -139,6 +139,7 @@ def build_mam_json(
         filters = settings.filters
         naming_config = settings.naming
     except Exception:
+        logger.debug("Failed to load settings for MAM JSON, using defaults")
         filters = None
         naming_config = None
 
@@ -171,7 +172,8 @@ def build_mam_json(
         mediainfo_translators = extract_translators_from_mediainfo(mediainfo)
         if mediainfo_translators:
             logger.debug(
-                f"Filtering translators from MediaInfo in MAM JSON: {mediainfo_translators}"
+                "Filtering translators from MediaInfo in MAM JSON: %s",
+                mediainfo_translators,
             )
             filtered_authors = [
                 a for a in filtered_authors if a.get("name", "") not in mediainfo_translators
@@ -458,10 +460,13 @@ def save_mam_json(
 
     # Fix ownership to target UID:GID (e.g., Unraid's nobody:users)
     # This ensures JSON files have same permissions as torrent files
-    settings = get_settings()
-    fix_ownership(output_path, settings.target_uid, settings.target_gid)
+    try:
+        settings = get_settings()
+        fix_ownership(output_path, settings.target_uid, settings.target_gid)
+    except Exception:
+        logger.debug("Failed to fix ownership for %s", output_path)
 
-    logger.info(f"Saved MAM JSON: {output_path}")
+    logger.info("Saved MAM JSON: %s", output_path)
 
 
 def generate_mam_json_for_release(
@@ -503,7 +508,7 @@ def generate_mam_json_for_release(
     mam_data = build_mam_json(release, audnex_chapters=release.audnex_chapters)
 
     if not mam_data.get("title"):
-        logger.warning(f"No title for MAM JSON: {release.display_name}")
+        logger.warning("No title for MAM JSON: %s", release.display_name)
         return None
 
     save_mam_json(mam_data, output_path)
