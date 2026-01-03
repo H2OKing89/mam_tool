@@ -171,25 +171,28 @@
 
 ## Phase 7: Cleanup & Hygiene
 
-> Post-migration cleanup — consolidate duplicates, update docs, remove dead code.
+> **Status:** In progress - schema consolidation complete, docs/hygiene remaining
 
 ### Schema Consolidation
 
-- [ ] Unify `AbsMetadataSchema` (`abs/rename.py`) with `AbsMetadataJson` (`schemas/abs_metadata.py`):
-  - Audit differences (optional fields, naming conventions)
-  - Migrate `abs/rename.py` to use `AbsMetadataJson`
-  - Update tests in `test_abs_rename.py`
-  - Remove duplicate `AbsMetadataSchema` class
-- [ ] Unify `AudnexAuthor` / `AudnexSeries` with `Person` / `Series` from canonical schemas:
-  - Update `schemas/audnex.py` to import from `metadata/schemas/canonical.py`
-  - Verify Audnex validation still works with shared types
+- [x] ✅ **COMPLETE** Unify `AbsMetadataSchema` (`abs/rename.py`) with `AbsMetadataJson` (`schemas/abs_metadata.py`):
+  - ✅ Audited differences (optional fields, naming conventions)
+  - ✅ Migrated `abs/rename.py` to use `AbsMetadataJson`
+  - ✅ Updated tests in `test_abs_rename.py`
+  - ✅ Removed duplicate `AbsMetadataSchema` class
+  - ✅ Tags field populated with Adult flag for consistency
+  - **Completed in:** PR #78 (Phase 7 - Schema Consolidation, validated by `test_abs_metadata_write_validation.py` — 22 tests)
+- [x] ✅ **DEFERRED** Unify `AudnexAuthor` / `AudnexSeries` with `Person` / `Series`:
+  - **Rationale:** Circular import constraint prevents unification (see 01-current-state-audit.md § 2.2)
+  - **Documentation:** Added detailed circular import explanation to audit doc
+  - **Future work:** Can be unified after metadata package initialization refactor (Phase 8+)
 
 ### Documentation Updates
 
-- [ ] Update `01-current-state-audit.md` to reflect completed migration:
-  - Mark duplicate schemas as resolved
-  - Update file inventory with new structure
-  - Add "Migration Complete" status
+- [x] Update `01-current-state-audit.md` to reflect completed migration:
+  - ✅ Marked duplicate schemas as resolved
+  - ✅ Updated status annotations
+  - [ ] Update file inventory with new structure (if changed)
 - [ ] Update `02-recommendations.md`:
   - Mark completed phases
   - Archive or annotate historical context
@@ -197,10 +200,18 @@
 
 ### Code Hygiene
 
-- [ ] Remove any unused imports in migrated files
-- [ ] Run `ruff check --fix` across metadata package
-- [ ] Verify all `__all__` exports are accurate
-- [ ] Check for any TODO/FIXME comments to address
+- [ ] Remove unused imports in migrated files:
+  - Target: `metadata/` and `abs/` packages (production code only)
+  - Exclude: `tests/` directory (test-specific imports are acceptable)
+- [ ] Run `ruff check --fix` across metadata package:
+  - Target: `src/shelfr/metadata/` and `src/shelfr/abs/`
+  - Check for formatting, unused variables, style issues
+- [ ] Verify all `__all__` exports are accurate in facade modules:
+  - Facade modules: `metadata/__init__.py`, `metadata/exporters/__init__.py`, `metadata/providers/__init__.py`
+  - Ensure re-exports match public API surface
+- [ ] Check for any TODO/FIXME comments in production code:
+  - Target: Production code only (`metadata/`, `abs/` packages)
+  - Document high-priority items; defer low-priority to Phase 8+
 
 ### Deprecation Tracking
 
@@ -245,7 +256,7 @@
 | Phase 5b | ✅ Complete | Provider system + Aggregator |
 | Phase 5c | ✅ Complete | Orchestration + JSON exporter (PR #75) |
 | Phase 6 | ✅ Complete | OPF move + deprecations + OpfExporter (PR #76) |
-| Phase 7 | ⏳ Not Started | Cleanup & Hygiene |
+| Phase 7 | ⏳ In Progress | Cleanup & Hygiene (schema consolidation done PR #78; docs in progress PR #79) |
 | Phase 8 | ⏳ Not Started | Infrastructure (optional) |
 | Future | ⏳ Not Started | As needed |
 
