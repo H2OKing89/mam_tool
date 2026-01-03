@@ -9,7 +9,7 @@
 ## Migration Progress Summary
 
 | Phase | Status | Completion |
-|-------|--------|------------|
+| ------- | -------- | ------------ |
 | Phase 0: Package Scaffolding | ✅ Complete | Merged to main |
 | Phase 1: Extract MediaInfo | ✅ Complete | Merged to main |
 | Phase 2: Extract Formatting | ✅ Complete | Merged to main |
@@ -17,7 +17,7 @@
 | Phase 4: Extract MAM | ✅ Complete | Merged to main |
 | Phase 5: Schemas + Providers + Exporters | ✅ Complete | Merged to main |
 | Phase 6: Move OPF + Deprecations | ✅ Complete | Merged to main |
-| Phase 7: Cleanup & Hygiene | ⏳ In Progress | Schema consolidation done (PR #78) |
+| Phase 7 | ⏳ In Progress | Cleanup & Hygiene (schema consolidation done in PR #78) |  
 | Phase 8: Infrastructure (future) | 📋 Planned | Cache, events, batch operations |
 
 ---
